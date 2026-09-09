@@ -23,12 +23,12 @@
 
 ## 2. 目標使用者
 
-| 類型 | 核心需求 | 主要使用型別 |
-| --- | --- | --- |
-| Everyday Developer | 快速取用片段、指令、連結 | snippet, command, link |
-| AI-first Developer | 保存 prompt、context、system message | prompt, file |
-| Content Creator / Educator | 存放程式碼區塊、說明、課程筆記 | snippet, note |
-| Full-stack Builder | 收集 pattern、boilerplate、API 範例 | snippet, file, link |
+| 類型                       | 核心需求                             | 主要使用型別           |
+| -------------------------- | ------------------------------------ | ---------------------- |
+| Everyday Developer         | 快速取用片段、指令、連結             | snippet, command, link |
+| AI-first Developer         | 保存 prompt、context、system message | prompt, file           |
+| Content Creator / Educator | 存放程式碼區塊、說明、課程筆記       | snippet, note          |
+| Full-stack Builder         | 收集 pattern、boilerplate、API 範例  | snippet, file, link    |
 
 四類人共通的動作是「**存下來，之後三秒內找回來**」。所有設計決策都以這條為準繩：搜尋速度與新增速度優先於功能豐富度。
 
@@ -168,9 +168,11 @@ R2 私有 bucket 的存取網址是簽名網址，有效期通常 15 分鐘到�
 布林值裝不下訂閱生命週期。真實情境：使用者 10/1 取消訂閱，但已付到 10/31。這段期間 `isPro` 該是 true 還是 false？還有 `past_due`（扣款失敗但寬限中）、`trialing`、`unpaid`。用 enum 記錄 Stripe 的實際狀態，`isPro` 變成應用層的衍生判斷：
 
 ```ts
-const isPro = user.plan === 'PRO'
-  && (user.subscriptionStatus === 'ACTIVE' || user.subscriptionStatus === 'TRIALING')
-  && (user.currentPeriodEnd ?? new Date(0)) > new Date();
+const isPro =
+  user.plan === "PRO" &&
+  (user.subscriptionStatus === "ACTIVE" ||
+    user.subscriptionStatus === "TRIALING") &&
+  (user.currentPeriodEnd ?? new Date(0)) > new Date();
 ```
 
 **`isPinned: Boolean` → `pinnedAt: DateTime?`**
@@ -315,17 +317,17 @@ Schema 中以 `Unsupported("tsvector")` 宣告，實際欄位由 migration 建�
 
 ## 6. 商業模式
 
-| | Free | Pro（$8/月・$72/年） |
-| --- | --- | --- |
-| 項目數 | 50 | 無限 |
-| 集合數 | 3 | 無限 |
-| 系統型別 | 除 file / image 外全部 | 全部 |
-| 檔案與圖片上傳 | ✗ | ✓ |
-| 自訂型別 | ✗ | ✓（延後實作） |
-| 搜尋 | 基本 | 基本（v1 無差異） |
-| AI 功能 | ✗ | ✓ |
-| 資料匯出 | ✗ | ✓（JSON / ZIP） |
-| 支援 | 社群 | 優先 |
+|                | Free                   | Pro（$8/月・$72/年） |
+| -------------- | ---------------------- | -------------------- |
+| 項目數         | 50                     | 無限                 |
+| 集合數         | 3                      | 無限                 |
+| 系統型別       | 除 file / image 外全部 | 全部                 |
+| 檔案與圖片上傳 | ✗                      | ✓                    |
+| 自訂型別       | ✗                      | ✓（延後實作）        |
+| 搜尋           | 基本                   | 基本（v1 無差異）    |
+| AI 功能        | ✗                      | ✓                    |
+| 資料匯出       | ✗                      | ✓（JSON / ZIP）      |
+| 支援           | 社群                   | 優先                 |
 
 **額度執行的位置**：在 API route 的 transaction 內檢查，不要只在 UI 擋。查詢須排除 `deletedAt` 不為 null 的資料列。
 
@@ -337,17 +339,17 @@ Schema 中以 `Unsupported("tsvector")` 宣告，實際欄位由 migration 建�
 
 ## 7. 技術棧
 
-| 層 | 選型 | 備註 |
-| --- | --- | --- |
-| Framework | Next.js 16 / React 19 | SSR 頁面 + 動態元件，單一 repo |
-| 語言 | TypeScript | |
-| 資料庫 | Neon PostgreSQL | |
-| ORM | Prisma 7.4+ | 見下方版本注意事項 |
-| 檔案儲存 | Cloudflare R2 | presigned URL 直傳 |
-| 認證 | Auth.js v5 (NextAuth) | Email/密碼 + GitHub OAuth |
-| AI | OpenAI gpt-5-nano | |
-| 樣式 | Tailwind CSS v4 + shadcn/ui | |
-| 快取 | 無（v1） | Redis 延後 |
+| 層        | 選型                        | 備註                           |
+| --------- | --------------------------- | ------------------------------ |
+| Framework | Next.js 16 / React 19       | SSR 頁面 + 動態元件，單一 repo |
+| 語言      | TypeScript                  |                                |
+| 資料庫    | Neon PostgreSQL             |                                |
+| ORM       | Prisma 7.4+                 | 見下方版本注意事項             |
+| 檔案儲存  | Cloudflare R2               | presigned URL 直傳             |
+| 認證      | Auth.js v5 (NextAuth)       | Email/密碼 + GitHub OAuth      |
+| AI        | OpenAI gpt-5-nano           |                                |
+| 樣式      | Tailwind CSS v4 + shadcn/ui |                                |
+| 快取      | 無（v1）                    | Redis 延後                     |
 
 ### Prisma 版本注意事項
 
@@ -360,8 +362,8 @@ v7 相對 v6 的三個破壞性變更會直接影響你的設定檔：
 3. `new PrismaClient()` 不能無參數呼叫，必須傳入 driver adapter：
 
 ```ts
-import { PrismaClient } from '../generated/prisma/client';
-import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaClient } from "../generated/prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 export const prisma = new PrismaClient({ adapter });
@@ -376,6 +378,13 @@ export const prisma = new PrismaClient({ adapter });
 - 部署：`prisma migrate deploy`，永不 `migrate dev`
 - 需要手寫 SQL（partial index、generated column、CHECK constraint）時：`prisma migrate dev --create-only`，編輯 SQL，再 apply
 
+### screenshots 截圖
+
+請參考下面的截圖，作為儀錶板UI的基礎，它不必完全精確。將其作為參考。
+
+@context/screenshots/dashboard-ui-drawer.png
+@context/screenshots/dashboard-ui-main.png
+
 ---
 
 ## 8. UI／UX
@@ -386,15 +395,15 @@ export const prisma = new PrismaClient({ adapter });
 
 **型別視覺對照**
 
-| 型別 | 色碼 | 圖示 | kind |
-| --- | --- | --- | --- |
-| Snippet | `#3b82f6` | Code | TEXT |
-| Prompt | `#8b5cf6` | Sparkles | TEXT |
-| Command | `#f97316` | Terminal | TEXT |
-| Note | `#fde047` | StickyNote | TEXT |
-| File | `#6b7280` | File | FILE |
-| Image | `#ec4899` | Image | FILE |
-| Link | `#10b981` | Link | URL |
+| 型別    | 色碼      | 圖示       | kind |
+| ------- | --------- | ---------- | ---- |
+| Snippet | `#3b82f6` | Code       | TEXT |
+| Prompt  | `#8b5cf6` | Sparkles   | TEXT |
+| Command | `#f97316` | Terminal   | TEXT |
+| Note    | `#fde047` | StickyNote | TEXT |
+| File    | `#6b7280` | File       | FILE |
+| Image   | `#ec4899` | Image      | FILE |
+| Link    | `#10b981` | Link       | URL  |
 
 `#fde047` 在深色背景上對比度很高、在淺色背景上則低於 WCAG AA 標準（約 1.5:1）。淺色模式下的 note 需要換一個較深的黃色（例如 `#a16207`），或只用於邊框而不用於文字。
 
@@ -437,6 +446,7 @@ flowchart TD
 ## 11. 參考連結
 
 **Prisma**
+
 - 升級到 Prisma 7 指南 — https://www.prisma.io/docs/guides/upgrade-prisma-orm/v7
 - Prisma 7 發布公告 — https://www.prisma.io/blog/announcing-prisma-orm-7-0-0
 - Indexes（含 partial index 的 `where` 語法） — https://www.prisma.io/docs/orm/prisma-schema/data-model/indexes
@@ -444,6 +454,7 @@ flowchart TD
 - Generators 參考 — https://www.prisma.io/docs/orm/v7/prisma-schema/overview/generators
 
 **其他**
+
 - Auth.js v5 — https://authjs.dev
 - Cloudflare R2 presigned URLs — https://developers.cloudflare.com/r2/api/s3/presigned-urls/
 - Neon — https://neon.tech/docs
