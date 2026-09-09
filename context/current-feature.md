@@ -2,19 +2,38 @@
 
 <!-- Feature Name -->
 
+Dashboard UI — Phase 1（基礎骨架）
+
+三階段中的第一階段。完整規格：@context/features/dashboard-phase-1-spec.md
+
 ## Status
 
 <!-- Not Started|In Progress|Completed -->
 
-Not Started
+In Progress
 
 ## Goals
 
 <!-- Goals & requirements -->
 
+- shadcn/ui 初始化，安裝本階段需要的元件
+- 新增 `/dashboard` 路由
+- 主要 dashboard layout 與全站樣式
+- 深色模式為預設
+- 頂部列：搜尋框 + New Item 按鈕（純顯示，無功能）
+- 側邊欄與主區先用 `<h2>Sidebar</h2>`、`<h2>Main</h2>` 佔位
+
+分支：`feature/dashboard-phase-1`
+
 ## Notes
 
 <!-- Any extra notes -->
+
+- **Tailwind 目前為停用狀態**（`f515e46` 移除了 `globals.css` 的 `@import "tailwindcss"`）。本階段的「全站樣式」實質包含把它裝回去。
+- Tailwind v4 用 CSS 設定：**不得**產生 `tailwind.config.ts`／`.js`，主題一律寫在 `src/app/globals.css` 的 `@theme`。shadcn init 完成後要確認它沒有建出 config 檔。
+- 型別色碼以 `project-overview.md`〈型別視覺對照〉為準，之後 phase 2/3 會用到。
+- 截圖上除了 New Item 還有 New Collection，兩顆都放，都是純顯示。
+- 本階段不接資料；phase 2、3 才會 import `src/lib/mock-data.ts`。
 
 ## History
 
