@@ -42,6 +42,7 @@ export interface Collection {
   itemCount: number;
   /** Types present in this collection. First one drives the card accent colour. */
   typeIds: string[];
+  createdAt: string;
 }
 
 export interface Item {
@@ -150,6 +151,7 @@ export const collections: Collection[] = [
     isFavorite: true,
     itemCount: 12,
     typeIds: ["type_snippet", "type_file", "type_link"],
+    createdAt: "2024-01-15T08:00:00.000Z",
   },
   {
     id: "col_python_snippets",
@@ -159,6 +161,7 @@ export const collections: Collection[] = [
     isFavorite: false,
     itemCount: 8,
     typeIds: ["type_snippet", "type_note"],
+    createdAt: "2024-01-13T10:30:00.000Z",
   },
   {
     id: "col_context_files",
@@ -168,6 +171,7 @@ export const collections: Collection[] = [
     isFavorite: true,
     itemCount: 5,
     typeIds: ["type_file", "type_note"],
+    createdAt: "2024-01-11T14:45:00.000Z",
   },
   {
     id: "col_interview_prep",
@@ -177,6 +181,7 @@ export const collections: Collection[] = [
     isFavorite: false,
     itemCount: 24,
     typeIds: ["type_note", "type_snippet", "type_link", "type_prompt"],
+    createdAt: "2024-01-09T09:15:00.000Z",
   },
   {
     id: "col_git_commands",
@@ -186,6 +191,7 @@ export const collections: Collection[] = [
     isFavorite: true,
     itemCount: 15,
     typeIds: ["type_command", "type_file"],
+    createdAt: "2024-01-07T17:00:00.000Z",
   },
   {
     id: "col_ai_prompts",
@@ -195,6 +201,7 @@ export const collections: Collection[] = [
     isFavorite: false,
     itemCount: 18,
     typeIds: ["type_prompt", "type_snippet", "type_note"],
+    createdAt: "2024-01-05T11:20:00.000Z",
   },
 ];
 
