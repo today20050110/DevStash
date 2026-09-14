@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:db": "tsx scripts/test-db.ts",
+    "db:studio": "prisma studio"
   },
   "dependencies": {
     "@neon/config": "^1.4.2",
