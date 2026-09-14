@@ -60,7 +60,9 @@ spec 寫「development 分支放在 `DATABASE_URL`，production 另開」，但�
 - **`prisma.config.ts` 手動載入 `.env.local`**：Prisma CLI 只讀 `.env`，Neon 把連線字串寫進 `.env.local`。migration 走 `DATABASE_URL_UNPOOLED` 直連（pooler 不保留 session 狀態，schema engine 需要 advisory lock）；執行期的 `src/lib/prisma.ts` 走 pooled 的 `DATABASE_URL`。
 - **generated client 產到 `src/generated/prisma`**（Prisma 7 起不放 `node_modules`），已加入 `.gitignore`。
 - **`npx prisma migrate dev` 在本機會「跑完卻不結束」**：migration 實際已套用成功（`_prisma_migrations` 有記錄、表與索引都在），但行程掛住不退出。驗證請改用 `npx prisma migrate status`，不要重跑 `migrate dev`。
-- **尚未寫 seed script**：7 種系統 ItemType 還沒寫進資料庫，目前 Development 分支是空的。那是建置順序的第 2 步，另開一個工作項。
+- **seed script 已完成並跑在 Development**：`prisma/seed.ts` 寫入 7 種系統 ItemType（`isSystem = true`、`userId = null`），色碼與圖示對齊 §8 的視覺對照表；Files 與 Images 依 §6 設 `isProOnly = true`，其餘 5 種為 false。mock 的 `itemCount` 未寫入 —— 真實數字來自 `count()`。
+- **seed 用 findFirst + create/update，不是 `upsert`**：系統型別的 `userId` 為 null，而 Prisma 的 `@@unique([userId, slug])` 複合唯一輸入不接受 null，無法作為 upsert 的 where。擋重複的仍是 migration 裡的 partial unique index。已實測連跑兩次：第一次 created 7、第二次 updated 7，無重複列。
+- **seed 以 `tsx` 執行**（`prisma.config.ts` 的 `migrations.seed`）：改用 `node prisma/seed.ts` 會因 Node 的 ESM 解析要求副檔名而失敗，而加上 `.ts` 需要為整個專案開 `allowImportingTsExtensions`，不划算。故加 `tsx` 為 devDependency。
 - **npm audit 有 4 個 high**（`deepmerge-ts`、`mysql2`），全部來自 `prisma` CLI 這個 devDependency 的傳遞相依，不進執行期 bundle，且 `mysql2` 我們根本用不到（走 Postgres）。`npm audit fix --force` 會降版到 prisma 6.19.3，更糟，故不處理。
 
 ## History
