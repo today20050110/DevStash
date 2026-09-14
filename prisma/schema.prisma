@@ -1,0 +1,343 @@
+// DevStash — 初始 schema
+// 設計理由見 context/project-overview.md §3。改動資料結構時請同步更新該文件。
+//
+// Prisma 7：generator 的 output 為必填且產生到原始碼目錄（已 gitignore），
+// 連線字串不在此宣告，改由 prisma.config.ts 提供。
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------- Enums
+
+/// 內容形態掛在 ItemType 上，不在 Item 上 —— 這樣資料庫無法表達
+/// 「kind = FILE 的 snippet」這種狀態。
+enum ItemKind {
+  TEXT
+  URL
+  FILE
+}
+
+enum Plan {
+  FREE
+  PRO
+}
+
+/// 對應 Stripe 的實際訂閱狀態。isPro 是應用層由 plan +
+/// subscriptionStatus + currentPeriodEnd 推導出來的衍生判斷，不存欄位。
+enum SubscriptionStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELED
+  UNPAID
+  INCOMPLETE
+  INCOMPLETE_EXPIRED
+  PAUSED
+}
+
+/// 區分使用者自己下的標籤與 AI 建議／已接受的標籤，
+/// 是 AI auto-tag 功能的前提。
+enum TagSource {
+  USER
+  AI_SUGGESTED
+  AI_ACCEPTED
+}
+
+enum AiFeature {
+  AUTO_TAG
+  TITLE_SUGGEST
+  SUMMARIZE
+}
+
+// ---------------------------------------------------------------- Auth
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  name          String?
+  image         String?
+
+  /// 只有 credentials 登入的使用者有值；OAuth 使用者為 null
+  passwordHash String?
+
+  plan               Plan                @default(FREE)
+  stripeCustomerId   String?             @unique
+  subscriptionStatus SubscriptionStatus?
+  currentPeriodEnd   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  accounts    Account[]
+  sessions    Session[]
+  items       Item[]
+  collections Collection[]
+  tags        Tag[]
+  itemTypes   ItemType[]
+  aiUsages    AiUsage[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+}
+
+// ---------------------------------------------------------------- Core
+
+model ItemType {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String
+  kind      ItemKind
+  icon      String
+  color     String
+  isSystem  Boolean  @default(false)
+  isProOnly Boolean  @default(false)
+
+  /// 系統型別為 null；自訂型別指向擁有者
+  userId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  items       Item[]
+  collections Collection[]
+
+  /// 注意：Postgres 視每個 NULL 為相異值，所以這個 unique 擋不住
+  /// 兩個 userId 皆為 NULL 的同名系統型別。真正的保護是 migration 裡
+  /// 手寫的 partial unique index（WHERE "userId" IS NULL）。
+  @@unique([userId, slug])
+  @@index([userId])
+}
+
+model Item {
+  id          String  @id @default(cuid())
+  title       String
+  description String?
+
+  /// kind = TEXT 時使用
+  content String?
+
+  /// kind = URL 時使用
+  url String?
+
+  /// kind = FILE 時使用。存 R2 object key，不存簽名網址 ——
+  /// 簽名網址有時效，存進資料庫幾小時後就全數失效。
+  storageKey String?
+
+  /// 決定圖片走預覽、其他走下載，同時是上傳白名單的依據。
+  /// 不靠副檔名判斷，因為副檔名是使用者可控的輸入。
+  mimeType String?
+  fileSize Int?
+
+  /// 程式碼片段的語法highlight用
+  language String?
+
+  isFavorite Boolean @default(false)
+
+  /// 用時間戳而非 boolean：boolean 無法排序，
+  /// 釘選多筆之後順序會是隨機的
+  pinnedAt DateTime?
+
+  /// updatedAt 記錄的是編輯，不是使用。「最近使用」需要獨立欄位。
+  lastUsedAt DateTime?
+  useCount   Int       @default(0)
+
+  /// 軟刪除。額度計算須排除 deletedAt 不為 null 的資料列。
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId     String
+  itemTypeId String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Restrict：刪除型別不應讓既有項目變成孤兒，
+  /// 必須先搬移或刪除該型別下的項目
+  itemType ItemType @relation(fields: [itemTypeId], references: [id], onDelete: Restrict)
+
+  collections ItemCollection[]
+  tags        ItemTag[]
+  aiUsages    AiUsage[]
+
+  /// 每個查詢都會帶 userId（見 project-overview §4.3），
+  /// 所以所有索引都以 userId 開頭
+  @@index([userId, deletedAt])
+  @@index([userId, itemTypeId, deletedAt])
+  @@index([userId, pinnedAt(sort: Desc)])
+  @@index([userId, lastUsedAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+model Collection {
+  id          String  @id @default(cuid())
+  name        String
+  slug        String
+  description String?
+  isFavorite  Boolean @default(false)
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  /// quick-add 時預設帶入的型別
+  defaultTypeId String?
+
+  userId String
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  defaultType ItemType? @relation(fields: [defaultTypeId], references: [id], onDelete: SetNull)
+
+  items ItemCollection[]
+
+  @@unique([userId, slug])
+  @@index([userId, deletedAt])
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+/// 顯式 join table：需要 position 做排序、addedAt 記錄加入時間
+model ItemCollection {
+  itemId       String
+  collectionId String
+  addedAt      DateTime @default(now())
+  position     Int      @default(0)
+
+  item       Item       @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@id([itemId, collectionId])
+  @@index([collectionId, position])
+}
+
+model Tag {
+  id   String @id @default(cuid())
+  name String
+
+  /// 正規化去重用：「React Hooks」與「react hooks」應是同一個標籤
+  slug String
+
+  /// 標籤必須綁使用者。全站共用命名空間會讓 A 的標籤
+  /// 出現在 B 的自動完成清單裡 —— 那是資料外洩，不是功能。
+  userId String
+
+  createdAt DateTime @default(now())
+
+  user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items ItemTag[]
+
+  @@unique([userId, slug])
+  @@index([userId])
+}
+
+/// 顯式 join table：需要 source 區分 AI 建議與使用者確認的標籤
+model ItemTag {
+  itemId String
+  tagId  String
+  source TagSource @default(USER)
+
+  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([itemId, tagId])
+  @@index([tagId])
+}
+
+// ---------------------------------------------------------------- Ops
+
+/// 提供每使用者、每功能、每時間窗的用量統計，用來設每日上限。
+/// 沒有上限等於把 API key 交給使用者。
+model AiUsage {
+  id           String    @id @default(cuid())
+  feature      AiFeature
+  inputTokens  Int       @default(0)
+  outputTokens Int       @default(0)
+  createdAt    DateTime  @default(now())
+
+  userId String
+  itemId String?
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 項目刪除後用量記錄仍需保留，供計費與額度稽核
+  item Item? @relation(fields: [itemId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([userId, feature, createdAt])
+  @@index([itemId])
+}
+
+/// Stripe webhook 冪等表。Stripe 保證 at-least-once 送達，重送是常態。
+/// 主鍵用 Stripe 的 event id，插入衝突即代表已處理過。
+model StripeEvent {
+  id          String   @id
+  type        String
+  processedAt DateTime @default(now())
+
+  @@index([processedAt])
+}
+
+/// 資料庫的 cascade 刪得掉資料列，刪不掉 R2 上的檔案。
+/// 沒有這張表，儲存費用會單調遞增且無從得知哪些物件是孤兒。
+model PendingDeletion {
+  id         String @id @default(cuid())
+  storageKey String
+
+  createdAt DateTime @default(now())
+
+  /// sweeper 實際刪除 R2 物件的時間；null 表示待處理
+  purgedAt  DateTime?
+  attempts  Int       @default(0)
+  lastError String?
+
+  @@index([purgedAt, createdAt])
+}

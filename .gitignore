@@ -41,3 +41,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .neon
+
+# prisma — generated client lives in src/ since Prisma 7, not node_modules
+/src/generated

@@ -2,41 +2,66 @@
 
 <!-- Feature Name -->
 
-Dashboard UI — Phase 3（主區內容）
+Prisma + Neon PostgreSQL 初始 schema
 
-三階段中的最後一階段。完整規格：@context/features/dashboard-phase-3-spec.md
+完整規格：@context/features/database-spec.md
 
 ## Status
 
 <!-- Not Started|In Progress|Completed -->
 
-Completed
+In Progress
 
 ## Goals
 
 <!-- Goals & requirements -->
 
-- 右側主區內容，取代 phase 1 的 `<h2>Main</h2>` 佔位
-- 頂部 4 張統計卡：項目數、集合數、favorite 項目數、favorite 集合數（截圖上沒有）
-- Recent collections 卡片網格
-- Pinned items
-- 10 筆 recent items
+- 以 `project-overview.md` §3 的資料模型建立初始 Prisma schema
+- 含 Auth.js v5 模型（Account / Session / VerificationToken）
+- 適當的索引與 cascade 刪除規則
+- 一律產生 migration，不用 `db push`
 
-資料直接 import `src/lib/mock-data.ts`，不接資料庫。
-
-分支：`feature/dashboard-phase-3`
+分支：`feature/database-schema`
 
 ## Notes
 
 <!-- Any extra notes -->
 
-- **統計卡的數字由陣列推導**（10 / 6 / 3 / 3），不讀顯示用的 `itemCount` 欄位，因為真實實作就是 `count()`。代價是側邊欄顯示 Snippets 24、統計卡卻說總共 10 筆 —— 這是 mock 資料先天的矛盾（`itemTypes[].itemCount` 加總 85 是為了對上截圖而寫死的），不是 bug，接上資料庫後自然消失。
-- **pinned items 沒有從 recent items 排除**：兩者是不同的軸，同一筆同時出現是正常的。這與 phase 2 側邊欄「最近的集合排除 favorites」不一致，但那裡是兩個相鄰的同類清單，重複會像 bug。
-- 集合卡片的強調色取 `collection.typeIds[0]` 的型別色，畫在**左側邊框**（`project-overview.md` 寫的是卡片背景色，以截圖為準）。沿用 phase 2 的 inline style 例外。
-- 日期以 `en-US` + UTC 固定格式化（`src/lib/format.ts`），避免 `toLocaleDateString()` 在 server 與 client 算出不同結果造成 hydration 不一致。
-- **新增 `TypeIcon` 元件**：`const Icon = getIcon(name)` 這種寫法會觸發 `react-hooks/static-components`（lint 直接失敗），改用 `createElement` 包裝。注意 `AppSidebar` 仍是舊寫法 —— 它在 `map` callback 內，該規則不會觸發，未一併改動。
-- `/items/[type]` 與 `/collections/[slug]` 仍未建立，卡片與 View all 連結會 404。沿用 phase 2 的決定，接受。
-- 已在 Playwright 實測桌面（1440 全頁）與手機（390），版面正確、無水平溢出、console 無錯誤。
+### 版本決策：Prisma 7.10.0（不是 8）
+
+spec 原本寫「IMPORTANT! Use Prisma 8」，但查證後 **Prisma 8 尚未 GA**（spec 隨後已更正為 Prisma 7，連結也換成 v7 升級指南）：
+
+| 套件                    | `latest` tag  | 說明                     |
+| ----------------------- | ------------- | ------------------------ |
+| `prisma` (CLI)          | `8.0.0-rc.15` | release candidate        |
+| `@prisma/client`        | `7.10.0`      | 沒有 8.x 穩定版          |
+| `@prisma/adapter-pg`    | `7.10.0`      | 沒有 8.x 穩定版          |
+| `@prisma/orm-toolchain` | `8.0.0-rc.11` | v8 CLI 的相依，同樣是 RC |
+
+只有 CLI 把 RC 掛上 `latest`；應用程式實際 import 的 client 與 adapter 都還在 7.10.0。
+Prisma 官方文件已切換為 v8（`contract.prisma`、`// use prisma-8` 指示詞、拿掉 `datasource`/`generator` 區塊、原生型別直接當欄位型別），但那是文件先行、套件未跟上。
+
+**決定：用 7.10.0 穩定版**（經使用者確認）。官方有 v7→v8 漸進式共存升級指南，日後升級是受支援的路徑，不必現在把地基押在 RC 上。
+
+> 附帶更正：`project-overview.md` §7 原寫「Prisma 8 已經發布」—— 這句不成立，已改為「尚未 GA、文件先行」並附上 npm 實況表。
+
+### Neon 分支決策
+
+spec 寫「development 分支放在 `DATABASE_URL`，production 另開」，但前一輪的 `neon link` 指向 production。
+已重新 link 到既有的 `Development` 分支（`br-broad-pine-b312blp9`），`.env.local` 的 `DATABASE_URL` / `NEON_BRANCH` 已更新。production（`br-calm-boat-b3wjd64b`）只會被 `prisma migrate deploy` 碰到。
+
+### 實作決策
+
+- **搜尋只做階段一（pg_trgm）**：migration 裡建了 `pg_trgm` extension 與三個 GIN trgm 索引（`Item.title`、`Item.content`、`Tag.name`）。ER 圖上的 `searchVector` tsvector 欄位**刻意未建** —— §5 寫明那是階段二，等項目數破萬或需要相關性排序再上。
+- **`Item.description` 有建**：ER 圖沒列，但 §5 的 tsvector 範例引用了 `coalesce(description, '')`，視為規格的一部分。
+- **partial unique index 手寫在 migration**：`ItemType_slug_system_key`（`WHERE "userId" IS NULL`）。已實測三種情況 —— 重複的系統 slug 被擋、使用者自訂型別可沿用系統 slug、同一使用者不可重複自己的 slug（後者由 `@@unique([userId, slug])` 擋）。
+- **onDelete 規則**：`User` → 全部 Cascade；`Item.itemTypeId` → **Restrict**（刪型別不該讓既有項目變孤兒）；`Collection.defaultTypeId` 與 `AiUsage.itemId` → SetNull（用量記錄須保留供計費稽核）。
+- **`PendingDeletion.purgedAt`** 而非 `deletedAt`，避免與軟刪除語意混淆。
+- **`prisma.config.ts` 手動載入 `.env.local`**：Prisma CLI 只讀 `.env`，Neon 把連線字串寫進 `.env.local`。migration 走 `DATABASE_URL_UNPOOLED` 直連（pooler 不保留 session 狀態，schema engine 需要 advisory lock）；執行期的 `src/lib/prisma.ts` 走 pooled 的 `DATABASE_URL`。
+- **generated client 產到 `src/generated/prisma`**（Prisma 7 起不放 `node_modules`），已加入 `.gitignore`。
+- **`npx prisma migrate dev` 在本機會「跑完卻不結束」**：migration 實際已套用成功（`_prisma_migrations` 有記錄、表與索引都在），但行程掛住不退出。驗證請改用 `npx prisma migrate status`，不要重跑 `migrate dev`。
+- **尚未寫 seed script**：7 種系統 ItemType 還沒寫進資料庫，目前 Development 分支是空的。那是建置順序的第 2 步，另開一個工作項。
+- **npm audit 有 4 個 high**（`deepmerge-ts`、`mysql2`），全部來自 `prisma` CLI 這個 devDependency 的傳遞相依，不進執行期 bundle，且 `mysql2` 我們根本用不到（走 Postgres）。`npm audit fix --force` 會降版到 prisma 6.19.3，更糟，故不處理。
 
 ## History
 
@@ -53,3 +78,4 @@ Completed
 - **Dashboard UI Phase 2 完成**（`004c04a`）：`AppSidebar` — 型別清單（連向 `/items/[slug]`，含色彩圖示與數量）、favorite collections、最近的 collections（排除 favorites 避免重複列出）、底部使用者區；可收合且手機自動切為 drawer；新增 `src/lib/icons.ts` 做圖示名稱對照。桌面／收合／手機三種狀態皆已實測，build 與 lint 通過。三個待處理事項：（1）`src/hooks/use-mobile.ts` 已改寫，日後執行 `shadcn add` 可能覆蓋而使 lint 再次失敗；（2）型別圖示顏色使用 inline style，是對 coding-standards「No inline styles」的有意識例外，因色碼為資料驅動；（3）`/items/[type]` 與 `/collections/[slug]` 路由尚未建立，側邊欄連結目前會 404
 - 主區用的 shadcn 元件（`455e317`）：新增 `card`、`badge`
 - **Dashboard UI Phase 3 完成**（`906561f`）：主區內容 —— `StatsCards`（4 張統計卡，數字由陣列推導）、`CollectionCard`（左邊框為主要型別色）、`ItemCard`（型別圖示方塊、pin/星號、tag badge、日期）；頁面組成為統計卡 → Collections 網格 → Pinned → 10 筆 Recent Items。新增 `src/lib/format.ts`（固定 en-US + UTC 避免 hydration 不一致）、`src/lib/item-types.ts`、`TypeIcon` 元件（以 `createElement` 規避 `react-hooks/static-components`）。桌面與手機皆已實測，build 與 lint 通過。**Dashboard UI 三階段至此全部完成**
+- Neon 專案設定（未提交）：`neon skills` / `neon mcp` / `neon link` / `neon config init`，`neon.ts` 設為空 policy；`neon deploy` 對 production 為 no-op。`.neon` 與 `.env.local` 均已 gitignore。**注意**：`neon mcp -y` 會鑄造帳號層級 API key 並寫進 8 個家目錄設定檔（id `3337195`，以 `neon api-keys revoke 3337195` 撤銷）

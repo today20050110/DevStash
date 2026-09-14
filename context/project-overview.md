@@ -353,7 +353,21 @@ Schema 中以 `Unsupported("tsvector")` 宣告，實際欄位由 migration 建�
 
 ### Prisma 版本注意事項
 
-**Prisma 8 已經發布，官方文件預設為 v8，v7 文件移至 `/orm/v7` 路徑。** 你的筆記寫 Prisma 7，可以繼續用（v7 仍在維護），但要知道現在的「latest」不是 7。
+**Prisma 8 尚未 GA，但官方文件已預設為 v8，v7 文件移至 `/orm/v7` 路徑。** 文件先行、套件未跟上，查文件時要特別注意版本。
+
+截至 2026-09-15 的 npm 實況：
+
+| 套件                    | `latest` tag  | 說明                        |
+| ----------------------- | ------------- | --------------------------- |
+| `prisma` (CLI)          | `8.0.0-rc.15` | release candidate           |
+| `@prisma/client`        | `7.10.0`      | 沒有 8.x 穩定版             |
+| `@prisma/adapter-pg`    | `7.10.0`      | 沒有 8.x 穩定版             |
+| `@prisma/orm-toolchain` | `8.0.0-rc.11` | v8 CLI 的相依，同樣是 RC    |
+
+只有 CLI 把 RC 掛上 `latest`；應用程式實際 import 的 client 與 adapter 都還在 7.10.0。
+v8 的 schema 格式也和 v7 不同（`contract.prisma`、`// use prisma-8` 指示詞、拿掉 `datasource`／`generator` 區塊、原生型別直接當欄位型別）。
+
+**本專案採用 7.10.0 穩定版。** 官方有 v7→v8 漸進式共存升級指南，日後升級是受支援的路徑。
 
 v7 相對 v6 的三個破壞性變更會直接影響你的設定檔：
 
