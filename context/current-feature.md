@@ -1,8 +1,8 @@
 # Current Feature
 
-Stats 與側邊欄接上資料庫
+側邊欄在沒有使用者時仍顯示系統型別
 
-完整規格：@context/features/stats-sidebar-spec.md
+來源：Vercel production 部署後側邊欄只剩 logo（使用者回報截圖）
 
 ## Status
 
@@ -10,70 +10,47 @@ Stats 與側邊欄接上資料庫
 
 ## Goals
 
-- 主區統計卡顯示資料庫資料，外觀與版面維持現狀
-- 側邊欄 **Types** 改讀資料庫的系統型別，含圖示、型別色與 item 數量，連向 `/items/[slug]`
-- 側邊欄 **Favorites** 與 **Recent Collections** 改讀資料庫的 collections
-- Favorites 保留星號圖示；Recent Collections 每個 collection 顯示彩色圓點，顏色為該 collection 中數量最多的型別
-- Collections 清單下方新增 **View all collections** 連結，指向 `/collections`
-- item 相關查詢函式放在 `src/lib/db/items.ts`，寫法參考 `src/lib/db/collections.ts`
-- **不做**：`/items/[type]` 與 `/collections` 路由本身（連結目前仍會 404）、item drawer
+- 找不到目前使用者時，側邊欄仍列出 7 種系統型別，數量皆為 0，連結維持 `/items/[slug]`
+- Collections（Favorites／Recent／View all collections）與底部使用者區仍只在有使用者時顯示
+- 對 production 資料庫執行 seed 補上系統型別（**不設** `SEED_DEMO`）
+- **不做**：把 demo 資料寫進 production（經使用者確認選擇不做）、主區內容調整
 
-分支：`feature/stats-sidebar`
+分支：`fix/sidebar-types-without-user`
 
 ## Notes
 
-### 與 spec 前提的差異
+### 原因
 
-- **統計卡已接資料庫**：Dashboard Collections 功能已將四格改查資料庫（`getItemCounts`、`getCollectionCounts`），本次只確認數字與側邊欄一致，不重做
-- **`src/lib/db/items.ts` 已存在**：spec 寫「建立」，實際是在既有檔案新增函式
-
-### 資料權限
-
-沿用既有做法：db 函式必填 `userId`、一律排除 `deletedAt`；經 join table 的關聯另限制 `item.userId`。側邊欄以 `getCurrentUserId()` 取得 demo 使用者，找不到時各區塊為空。
-
-系統型別本身不屬於任何使用者（`userId` 為 null），但型別旁的 **item 數量只能計算該使用者的 items**。
+- 尚無 Auth，`getCurrentUser()` 固定查 seed 的 demo 使用者；production 依先前決定不寫 demo 資料，因此查無使用者
+- 上一個功能的 `AppSidebar` 在查無使用者時把整個 `SidebarContent` 隱藏，連不屬於任何使用者的系統型別也一併消失
+- production 資料庫只跑過 `migrate deploy`（Vercel build 指令），尚未 seed，系統型別也不存在
 
 ### 實作方向
 
-- **AppSidebar 取資料**：目前是 layout 內的同步元件、直接 import mock。改為 async server component 查詢資料庫；完成後確認 build 輸出 `/dashboard` 仍為 `ƒ (Dynamic)`，必要時在側邊欄也呼叫 `connection()`
-- **型別數量**：以一次 `groupBy`（依 `itemTypeId`）計算，再與系統型別清單合併，不逐型別各查一次；數量為 0 的型別仍顯示
-- **型別排序**：`ItemType` 沒有排序欄位，以固定的 slug 順序常數排序（對齊 `project-overview.md` §8 表格），確保穩定
-- **Collections**：Favorites 列出全部收藏；Recent Collections 排除收藏、依 `createdAt` 由新到舊（`id` 為次要鍵）
-- **圓點顏色**：沿用 `collections.ts` 的 `summarizeTypes` 規則（數量最多、同數量依名稱排序），與主區 `CollectionCard` 邊框色一致；空 collection 使用中性色
-- 型別色與圓點色維持 inline style（資料驅動，Phase 2 已記錄的例外）
-- layout 與 page 各自查詢 collections，屬於不同區塊的兩次查詢，不是 N+1
+- `src/lib/db/items.ts` 抽出 `getSystemItemTypes()`：系統型別不含使用者資料，不需要 `userId`，排序邏輯移到這裡；`getSystemItemTypesWithCounts(userId)` 改為呼叫它再合併數量，`userId` 維持必填
+- `AppSidebar` 查無使用者時以 `getSystemItemTypes()` 取得型別、數量補 0；Types 區塊在型別清單為空時不渲染（例如尚未 seed）
 
-### 決定（經使用者確認）
+### Production seed
 
-- Recent Collections 最多 **10 筆**，其餘由 View all collections 連結進入
-- 圓點與 `Folder` 圖示**並列**，數量 badge **保留**
-- 底部使用者區**一併改讀** demo 使用者（名稱、email、縮寫），側邊欄不再 import `src/lib/mock-data.ts`
-
-### 決定：seed 補上收藏的 collections（經使用者確認）
-
-demo 資料原本沒有任何收藏的 collection，Favorites 區塊與星號路徑無法在瀏覽器驗證。比照上一個功能補 pinned 的做法改 seed：
-
-- `DemoCollection` 新增選填的 `isFavorite`；React Patterns 與 AI Workflows 設為收藏（最早建立的兩個），Recent Collections 仍剩 3 筆，兩個區塊皆有資料
-- seed 輸出補上 favorites 數量；`scripts/test-db.ts` 未檢查 `isFavorite`，不需調整
-- `src/lib/mock-data.ts` 已無任何引用，經使用者確認先保留
+- 連線字串先前曾貼進對話，**需先在 Neon 重設 `neondb_owner` 密碼**，並更新 Vercel 的 `DATABASE_URL`／`DATABASE_URL_UNPOOLED`
+- seed 讀 `DATABASE_URL_UNPOOLED`；dotenv 不覆寫已存在的環境變數，只在該次指令覆寫它指向 production 直連字串，不改 `.env.local`／`prisma.config.ts`
 
 ### 實作結果
 
-- `src/lib/db/items.ts` 新增 `getSystemItemTypesWithCounts`：系統型別（`isSystem` 且 `userId` 為 null）與一次 `groupBy` 的數量合併，依 `SYSTEM_TYPE_ORDER` 排序
-- `src/lib/db/collections.ts` 抽出私有的 `findCollectionSummaries`（沿用 items 的寫法，`userId`／`deletedAt` 無法被覆寫），新增 `getFavoriteCollections`、`getRecentNonFavoriteCollections`（上限 10）；排序補上 `id` 次要鍵，主區 Collections 同樣受益
-- `src/lib/current-user.ts` 新增 `getCurrentUser()`（id、name、email），以 React `cache()` 包起來，layout 與頁面同一請求只查一次；`getCurrentUserId()` 改為呼叫它，介面不變
-- 新增 `src/types/user.ts`（`CurrentUser`）；`src/types/items.ts` 新增 `ItemTypeWithCount`
-- `AppSidebar` 改為 async server component，呼叫 `connection()` 後以 `Promise.all` 平行查詢；拆成 `ItemTypeMenuItem`、`FavoriteCollectionMenuItem`、`RecentCollectionMenuItem`、`UserMenu`；圖示改用 `TypeIcon`。找不到使用者時只顯示 logo；沒有收藏時 Favorites 區塊不渲染
+- `src/lib/db/items.ts` 新增 `getSystemItemTypes()`（不含使用者資料，故不需要 `userId`），排序邏輯移入；`getSystemItemTypesWithCounts(userId)` 改為呼叫它再合併 `groupBy` 的數量，`userId` 維持必填
+- `AppSidebar`：`SidebarContent` 不再整塊綁在使用者存在與否，Types 改以 `itemTypes.length > 0` 判斷；分隔線、Favorites、Recent Collections、View all collections 與底部使用者區仍包在 `user &&` 內
+- 查無使用者時以 `getSystemItemTypes()` 取得型別，數量補 0
 
-### 驗證結果（Development，瀏覽器實測）
+### 驗證結果
 
-- Types：7 種依 §8 順序，數量 Snippets 4／Prompts 3／Commands 5／Notes 0／Files 0／Images 0／Links 6，加總 18 與統計卡一致；圖示色與型別色相符，連結為 `/items/[slug]`
-- Recent Collections：5 筆，每筆 Folder 圖示 + 圓點 + 數量 badge；圓點色與主區 `CollectionCard` 左邊框色逐一相符（Design Resources 綠、Terminal Commands 橘、DevOps 綠、AI Workflows 紫、React Patterns 藍）；下方為 View all collections → `/collections`
-- 底部使用者區顯示 Demo User／demo@devstash.io，縮寫 DU
-- Favorites：尚無收藏時區塊正確不渲染；seed 補上收藏後顯示 AI Workflows、React Patterns 兩筆，皆帶星號，Recent Collections 剩 Design Resources／Terminal Commands／DevOps 三筆；統計卡 Favorite Collections 為 2，主區兩張卡片同樣帶星號
-- seed（`SEED_DEMO=1`）連跑兩次結果相同（collections 5，其中 favorites 2／items 18／tags 26／pinned 3），`npm run test:db` 6/6 PASS
-- 桌面與 390px 手機寬度（drawer）皆無水平捲動；瀏覽器主控台無錯誤或警告
+- 本機（有 demo 使用者，回歸測試）：Types 7 種數量不變、Favorites 2 筆帶星號、Recent Collections 3 筆加 View all、使用者區與分隔線皆在；主控台無錯誤或警告
+- 「無使用者」路徑本機無法重現（開發資料庫有 demo 使用者），需於 production 部署後確認
+- production seed（**未設** `SEED_DEMO`）：`created: 7`，demo 資料依預期跳過；`test:db` 以 production 連線執行為 6/6（Demo 資料為 SKIP），資料列數 user 0 / item 0 / collection 0 / tag 0
 - `tsc --noEmit`、lint、build 皆通過，`/dashboard` 仍為 `ƒ (Dynamic)`
+
+### 已知情況
+
+- `scripts/test-db.ts` 開頭印出的「Neon 分支」讀 `.env.local` 的 `NEON_BRANCH`，不會跟著實際連線的資料庫變動：以 production 連線執行時仍顯示 Development，判斷實際連到哪個資料庫要看資料列數
 
 ## History
 
@@ -100,4 +77,6 @@ demo 資料原本沒有任何收藏的 collection，Favorites 區塊與星號路
 - 首頁導向 dashboard（`eaf4401`）：尚無 landing page，`src/app/page.tsx` 改為 `redirect("/dashboard")`，避免首頁只有一行 `devstash` 字樣而看似全黑。curl 驗證 307 → `/dashboard` 200
 - **Dashboard Items 接上資料庫完成**（`f8a6618`）：依 `context/features/dashboard-items-spec.md`，主區 Pinned 與 Recent Items 改讀 Neon。`src/lib/db/items.ts` 新增 `getPinnedItems`、`getRecentItems`，共用的查詢函式必填 `userId`、排除 `deletedAt`，tags 關聯另限制 `tag.userId`；排序以 `id` 為次要鍵，因 seed 巢狀建立的同一 collection 內 items `createdAt` 相同。新增 `src/types/items.ts`，`ItemCard` 改吃 `ItemSummary`（型別決定圖示與邊框色），`formatDate` 改收 `Date`。沒有 pinned items 時整個 Pinned 區塊不渲染。seed 為 18 筆 demo items 補上 tags（26 個）與 3 筆 pinned，重建時一併清除 demo 使用者的 tags（經使用者確認改 seed 而非手動改資料）。刪除不再使用的 `src/lib/item-types.ts`。seed 連跑兩次冪等、`test:db` 全數 PASS；瀏覽器實測桌面與 390px 手機寬度，build、lint、tsc 通過
 - **Stats 與側邊欄接上資料庫完成**（`b4ef0a0`）：依 `context/features/stats-sidebar-spec.md`，側邊欄改讀 Neon。`src/lib/db/items.ts` 新增 `getSystemItemTypesWithCounts`（系統型別 + 一次 `groupBy` 的數量，只計目前使用者的 items，依 §8 順序排序）；`src/lib/db/collections.ts` 抽出共用的 `findCollectionSummaries`，新增 `getFavoriteCollections`、`getRecentNonFavoriteCollections`（上限 10），排序補上 `id` 次要鍵。`AppSidebar` 改為 async server component 並呼叫 `connection()`：Favorites 保留星號，Recent Collections 以圓點標示主要型別色（與 `CollectionCard` 邊框色一致）並保留數量 badge，新增 View all collections 連結；底部使用者區改讀 demo 使用者，`getCurrentUser()` 以 React `cache()` 讓 layout 與頁面同一請求只查一次。統計卡已於先前接上資料庫，本次確認型別數量加總與之一致。seed 將 React Patterns、AI Workflows 設為收藏以實測 Favorites（經使用者確認）。seed 連跑兩次冪等、`test:db` 6/6 PASS；瀏覽器實測桌面與 390px 手機寬度，build、lint、tsc 通過
-- **待辦**：production 分支仍是空的（無表、無資料），需依序執行 `prisma migrate deploy` 與 `prisma db seed`（**不設** `SEED_DEMO`），並在該次呼叫覆寫 `DATABASE_URL_UNPOOLED`，勿改動 `prisma.config.ts`。`src/lib/mock-data.ts` 已無任何引用，經使用者確認暫時保留
+- **側邊欄在沒有使用者時仍顯示系統型別**（`39f5b05`）：Vercel production 部署後側邊欄只剩 logo —— 尚無 Auth，`getCurrentUser()` 查不到 demo 使用者（production 依設計不寫 demo 資料），而 `AppSidebar` 把整個 `SidebarContent` 綁在使用者存在與否。`src/lib/db/items.ts` 抽出 `getSystemItemTypes()`（系統型別不含使用者資料，不需要 `userId`），`getSystemItemTypesWithCounts(userId)` 改為呼叫它再合併 `groupBy` 數量；`AppSidebar` 查無使用者時仍列出型別、數量為 0，Collections 與底部使用者區維持只在有使用者時顯示。同時對 production 執行 seed（**未設** `SEED_DEMO`）補上 7 種系統型別，`test:db` 以 production 連線為 6/6（Demo 資料 SKIP、資料列數全 0）
+- **Vercel 部署**：build 指令在專案設定中被覆寫為 `prisma generate && prisma migrate deploy && next build`。兩次失敗皆為環境變數問題：先是缺 `DATABASE_URL_UNPOOLED`（`prisma.config.ts` 以 `env()` 讀取，缺值即 `PrismaConfigEnvError`），再來是連線字串格式錯誤（P1013）。production 環境變數需同時設定 pooled 的 `DATABASE_URL` 與直連的 `DATABASE_URL_UNPOOLED`，值不可加引號
+- **待辦**：Preview 部署同樣會跑 `prisma migrate deploy`，若 Preview 與 Production 共用資料庫，未合併的 migration 會直接套用到正式資料庫，建議改為 Preview 連另一個 Neon 分支。`src/lib/mock-data.ts` 已無任何引用，經使用者確認暫時保留。`scripts/test-db.ts` 印出的「Neon 分支」讀 `.env.local` 的 `NEON_BRANCH`，不隨實際連線變動
