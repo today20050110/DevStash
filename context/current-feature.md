@@ -10,7 +10,7 @@ Dashboard Collections 接上資料庫
 
 <!-- Not Started|In Progress|Completed -->
 
-In Progress
+Completed
 
 ## Goals
 
@@ -95,4 +95,6 @@ spec 只寫「更新 collection 統計」。若只換 collection 相關兩格，
 - 資料庫檢查腳本（`ad035fb`）：`scripts/test-db.ts` 唯讀檢查連線／migration／pg_trgm／系統型別／資料列數，`npm run test:db`，失敗回傳非零 exit code。已對 Development（5/5）與 production（1/5）實測
 - **Seed 範例資料完成**（`771398b`）：依 `context/features/seed-spec.md` 重寫 `prisma/seed.ts` —— demo 使用者 `demo@devstash.io`（bcryptjs 12 rounds、`plan = FREE`）、5 個 collections、18 筆 items，link 使用真實文件網址。spec 的 `isPro` 對應為 `plan`；系統型別維持複數命名以對齊 dashboard 路由與 mock 資料。**demo 資料只在 `SEED_DEMO=1` 時寫入**，避免 production 出現公開密碼的帳號（經使用者確認）。冪等做法：以 email upsert 使用者，再於同一 transaction 內刪除該使用者的 items／collections 後重建（demo 帳號內手動新增的內容會被清掉）。新增 `bcryptjs` 3.0.3 為 dependency。Development 上連跑兩次無重複；build、lint、tsc 通過
 - test-db 加入 demo 資料檢查（`c3455cf`）：第 6 項「Demo 資料」以單次 `findUnique` + include 驗證帳號（plan、emailVerified、密碼雜湊）、5 個 collection 的型別組成、TEXT/URL 欄位一致性與孤兒 item，通過後列出全部 collection 與 item；找不到 demo 使用者時為 SKIP 而非 FAIL。預期組成以常數 `EXPECTED_DEMO_COLLECTIONS` 與 seed 對照（seed 模組載入即執行，無法 import）。實測 PASS／SKIP／FAIL 三條路徑皆正確
-- **待辦**：production 分支仍是空的（無表、無資料），需依序執行 `prisma migrate deploy` 與 `prisma db seed`（**不設** `SEED_DEMO`），並在該次呼叫覆寫 `DATABASE_URL_UNPOOLED`，勿改動 `prisma.config.ts`。另外 dashboard 仍直接 import `src/lib/mock-data.ts`，尚未接上資料庫
+- **Dashboard Collections 接上資料庫完成**（`96e9d30`）：依 `context/features/dashboard-collections-spec.md`，主區 Collections 區塊與四張統計卡改讀 Neon。新增 `src/lib/db/collections.ts`（`getRecentCollections`、`getCollectionCounts`）、`src/lib/db/items.ts`（`getItemCounts`），函式皆必填 `userId` 並排除 `deletedAt`；items 關聯另限制 `item.userId`，因 join table 不帶擁有者。尚無 Auth，以 `src/lib/current-user.ts` 的 `getCurrentUserId()` 暫查 demo 使用者，找不到時顯示空狀態。`CollectionCard` 邊框色取數量最多的型別（同數量依名稱排序），底部列出全部型別圖示。統計卡四格皆改查資料庫（spec 只寫 collection 統計，經使用者確認擴及 items 兩格）。頁面呼叫 `await connection()` 避免 build 時預先渲染，`/dashboard` 為動態路由。瀏覽器實測桌面與 390px 手機寬度，build、lint、tsc 通過
+- 首頁導向 dashboard（`eaf4401`）：尚無 landing page，`src/app/page.tsx` 改為 `redirect("/dashboard")`，避免首頁只有一行 `devstash` 字樣而看似全黑。curl 驗證 307 → `/dashboard` 200
+- **待辦**：production 分支仍是空的（無表、無資料），需依序執行 `prisma migrate deploy` 與 `prisma db seed`（**不設** `SEED_DEMO`），並在該次呼叫覆寫 `DATABASE_URL_UNPOOLED`，勿改動 `prisma.config.ts`。Dashboard 的側邊欄、Pinned、Recent Items 仍直接 import `src/lib/mock-data.ts`，與主區的真實資料不一致
