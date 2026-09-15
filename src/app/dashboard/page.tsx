@@ -1,19 +1,28 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { connection } from "next/server";
 import { Pin } from "lucide-react";
 
 import { CollectionCard } from "@/components/dashboard/CollectionCard";
 import { ItemCard } from "@/components/dashboard/ItemCard";
 import { StatsCards } from "@/components/dashboard/StatsCards";
-import { collections, items } from "@/lib/mock-data";
+import { getCurrentUserId } from "@/lib/current-user";
+import { getCollectionCounts, getRecentCollections } from "@/lib/db/collections";
+import { getItemCounts } from "@/lib/db/items";
+import { items } from "@/lib/mock-data";
+import type { CollectionSummary } from "@/types/collections";
+import type { DashboardStats } from "@/types/dashboard";
 
 export const metadata: Metadata = {
   title: "Dashboard — DevStash",
 };
 
-const recentCollections = [...collections].sort((a, b) =>
-  b.createdAt.localeCompare(a.createdAt)
-);
+const EMPTY_STATS: DashboardStats = {
+  items: 0,
+  favoriteItems: 0,
+  collections: 0,
+  favoriteCollections: 0,
+};
 
 const pinnedItems = items
   .filter((item) => item.pinnedAt !== null)
@@ -25,7 +34,30 @@ const recentItems = [...items]
   .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   .slice(0, 10);
 
-export default function DashboardPage() {
+async function getDashboardData(): Promise<{
+  stats: DashboardStats;
+  collections: CollectionSummary[];
+}> {
+  // 查詢不經過 cookies/headers 等 request-time API，不呼叫的話 Next.js
+  // 會在 build 時預先渲染，資料就凍結在 build 當下
+  await connection();
+
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    return { stats: EMPTY_STATS, collections: [] };
+  }
+
+  const [collections, collectionCounts, itemCounts] = await Promise.all([
+    getRecentCollections(userId),
+    getCollectionCounts(userId),
+    getItemCounts(userId),
+  ]);
+  return { stats: { ...itemCounts, ...collectionCounts }, collections };
+}
+
+export default async function DashboardPage() {
+  const { stats, collections } = await getDashboardData();
+
   return (
     <div className="space-y-10">
       <div className="space-y-1">
@@ -33,7 +65,7 @@ export default function DashboardPage() {
         <p className="text-muted-foreground">Your developer knowledge hub</p>
       </div>
 
-      <StatsCards />
+      <StatsCards stats={stats} />
 
       <section className="space-y-4">
         <div className="flex items-center justify-between">
@@ -45,11 +77,15 @@ export default function DashboardPage() {
             View all
           </Link>
         </div>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {recentCollections.map((collection) => (
-            <CollectionCard key={collection.id} collection={collection} />
-          ))}
-        </div>
+        {collections.length > 0 ? (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {collections.map((collection) => (
+              <CollectionCard key={collection.id} collection={collection} />
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">No collections yet.</p>
+        )}
       </section>
 
       <section className="space-y-4">

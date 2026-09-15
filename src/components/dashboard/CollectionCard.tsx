@@ -3,16 +3,15 @@ import { Star } from "lucide-react";
 
 import { TypeIcon } from "@/components/dashboard/TypeIcon";
 import { Card, CardContent } from "@/components/ui/card";
-import { getItemType } from "@/lib/item-types";
-import type { Collection } from "@/lib/mock-data";
+import type { CollectionSummary } from "@/types/collections";
 
 interface CollectionCardProps {
-  collection: Collection;
+  collection: CollectionSummary;
 }
 
 export function CollectionCard({ collection }: CollectionCardProps) {
-  // First entry is the dominant type; it drives the card's accent colour.
-  const dominantType = getItemType(collection.typeIds[0]);
+  // types 已依數量排序，第一個即主要型別；空的 collection 沿用預設邊框色
+  const dominantType = collection.types[0];
 
   return (
     <Card
@@ -31,29 +30,29 @@ export function CollectionCard({ collection }: CollectionCardProps) {
             )}
           </Link>
           <p className="text-sm text-muted-foreground">
-            {collection.itemCount} items
+            {collection.itemCount} {collection.itemCount === 1 ? "item" : "items"}
           </p>
         </div>
 
-        <p className="text-sm text-muted-foreground">
-          {collection.description}
-        </p>
+        {collection.description && (
+          <p className="text-sm text-muted-foreground">
+            {collection.description}
+          </p>
+        )}
 
-        <div className="flex items-center gap-2">
-          {collection.typeIds.map((typeId) => {
-            const type = getItemType(typeId);
-            if (!type) return null;
-            return (
+        {collection.types.length > 0 && (
+          <div className="flex items-center gap-2">
+            {collection.types.map((type) => (
               <TypeIcon
-                key={typeId}
+                key={type.id}
                 name={type.icon}
                 className="size-4"
                 style={{ color: type.color }}
                 aria-label={type.name}
               />
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

@@ -10,7 +10,7 @@ Dashboard Collections 接上資料庫
 
 <!-- Not Started|In Progress|Completed -->
 
-Not Started
+In Progress
 
 ## Goals
 
@@ -55,7 +55,24 @@ spec 只寫「更新 collection 統計」。若只換 collection 相關兩格，
 
 ### 已知不一致
 
-**側邊欄**仍讀 mock 資料，會出現主區是 demo 的 5 個 collections、側邊欄卻是 mock 的 6 個；依 spec 本次不處理。
+**側邊欄**仍讀 mock 資料，會出現主區是 demo 的 5 個 collections、側邊欄卻是 mock 的 6 個；依 spec 本次不處理。Pinned／Recent Items 區塊同樣仍是 mock。
+
+### 實作結果
+
+- 新增 `src/lib/db/collections.ts`（`getRecentCollections`、`getCollectionCounts`）、`src/lib/db/items.ts`（`getItemCounts`）、`src/lib/current-user.ts`（`getCurrentUserId`，暫以 demo 使用者代替 session）、`src/types/collections.ts`、`src/types/dashboard.ts`
+- `CollectionCard` 改吃 `CollectionSummary`：邊框色取 `types[0]`，底部圖示依數量排序；description 為空時不渲染該段；數量為 1 時顯示 `item`
+- `StatsCards` 改為接收 `stats` prop，不再 import mock
+- 頁面在 `getDashboardData()` 開頭呼叫 `await connection()`（Next 16 取代 `unstable_noStore` 的做法），build 輸出確認 `/dashboard` 為 `ƒ (Dynamic)`
+- `getRecentCollections` 的 items 關聯同時限制 `item.userId` 與 `item.deletedAt`：join table 本身不帶擁有者
+
+### 驗證結果（Development，瀏覽器實測）
+
+- 統計卡：18 Items／5 Collections／0 Favorite Items／0 Favorite Collections（seed 未設 favorite，數字正確）
+- 卡片依 `createdAt` 由新到舊：Design Resources → Terminal Commands → DevOps → AI Workflows → React Patterns
+- 邊框色與主要型別一致：DevOps（links 2、commands 1、snippets 1）為綠色 `#10b981`，圖示順序 Links → Commands → Snippets（同數量依名稱）；其餘單一型別的 collection 各為該型別色
+- 手機寬度 390px：Collections 網格為單欄、無水平捲動
+- `tsc --noEmit`、lint、build 皆通過
+- 瀏覽器主控台與 Next dev overlay 的「1 Issue」皆為既有的 `pg` SSL mode 警告（伺服器端轉發），非本次改動造成
 
 ## History
 
