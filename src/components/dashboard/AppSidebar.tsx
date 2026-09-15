@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { connection } from "next/server";
 import { Folder, Layers, Settings, Star } from "lucide-react";
 
+import { TypeIcon } from "@/components/dashboard/TypeIcon";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Sidebar,
@@ -16,22 +18,146 @@ import {
   SidebarMenuItem,
   SidebarSeparator,
 } from "@/components/ui/sidebar";
-import { getIcon } from "@/lib/icons";
-import { collections, currentUser, itemTypes } from "@/lib/mock-data";
+import { getCurrentUser } from "@/lib/current-user";
+import {
+  getFavoriteCollections,
+  getRecentNonFavoriteCollections,
+} from "@/lib/db/collections";
+import { getSystemItemTypesWithCounts } from "@/lib/db/items";
+import type { CollectionSummary } from "@/types/collections";
+import type { ItemTypeWithCount } from "@/types/items";
+import type { CurrentUser } from "@/types/user";
 
-const favoriteCollections = collections.filter((c) => c.isFavorite);
+interface SidebarData {
+  user: CurrentUser | null;
+  itemTypes: ItemTypeWithCount[];
+  favoriteCollections: CollectionSummary[];
+  recentCollections: CollectionSummary[];
+}
 
-// Favourites already have their own section, so keep them out of this one.
-const recentCollections = collections
-  .filter((c) => !c.isFavorite)
-  .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+async function getSidebarData(): Promise<SidebarData> {
+  // 與頁面相同：不呼叫 connection() 的話，layout 可能在 build 時被預先渲染
+  await connection();
 
-const userInitials = currentUser.name
-  .split(" ")
-  .map((part) => part[0])
-  .join("");
+  const user = await getCurrentUser();
+  if (!user) {
+    return {
+      user: null,
+      itemTypes: [],
+      favoriteCollections: [],
+      recentCollections: [],
+    };
+  }
 
-export function AppSidebar() {
+  const [itemTypes, favoriteCollections, recentCollections] =
+    await Promise.all([
+      getSystemItemTypesWithCounts(user.id),
+      getFavoriteCollections(user.id),
+      getRecentNonFavoriteCollections(user.id),
+    ]);
+  return { user, itemTypes, favoriteCollections, recentCollections };
+}
+
+function getInitials(user: CurrentUser): string {
+  const source = user.name?.trim() || user.email;
+  return source
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+function ItemTypeMenuItem({ type }: { type: ItemTypeWithCount }) {
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton asChild>
+        <Link href={`/items/${type.slug}`}>
+          {/* Colour comes from the data, so it cannot be a static utility class. */}
+          <TypeIcon name={type.icon} style={{ color: type.color }} />
+          <span>{type.name}</span>
+        </Link>
+      </SidebarMenuButton>
+      <SidebarMenuBadge>{type.itemCount}</SidebarMenuBadge>
+    </SidebarMenuItem>
+  );
+}
+
+function FavoriteCollectionMenuItem({
+  collection,
+}: {
+  collection: CollectionSummary;
+}) {
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton asChild>
+        <Link href={`/collections/${collection.slug}`}>
+          <Folder />
+          <span>{collection.name}</span>
+        </Link>
+      </SidebarMenuButton>
+      <SidebarMenuBadge>
+        <Star className="size-3.5 fill-yellow-400 text-yellow-400" />
+      </SidebarMenuBadge>
+    </SidebarMenuItem>
+  );
+}
+
+function RecentCollectionMenuItem({
+  collection,
+}: {
+  collection: CollectionSummary;
+}) {
+  // types 已依數量排序，第一個即主要型別；空的 collection 維持中性色
+  const dominantType = collection.types[0];
+
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton asChild>
+        <Link href={`/collections/${collection.slug}`}>
+          <Folder />
+          <span
+            aria-hidden
+            className="size-2 shrink-0 rounded-full bg-muted-foreground"
+            style={{ backgroundColor: dominantType?.color }}
+          />
+          <span>{collection.name}</span>
+        </Link>
+      </SidebarMenuButton>
+      <SidebarMenuBadge>{collection.itemCount}</SidebarMenuBadge>
+    </SidebarMenuItem>
+  );
+}
+
+function UserMenu({ user }: { user: CurrentUser }) {
+  return (
+    <SidebarMenu>
+      <SidebarMenuItem>
+        <SidebarMenuButton size="lg">
+          <Avatar className="size-8 rounded-full">
+            <AvatarFallback className="rounded-full">
+              {getInitials(user)}
+            </AvatarFallback>
+          </Avatar>
+          <div className="grid flex-1 text-left leading-tight">
+            <span className="truncate text-sm font-medium">
+              {user.name ?? user.email}
+            </span>
+            <span className="truncate text-xs text-sidebar-foreground/70">
+              {user.email}
+            </span>
+          </div>
+          <Settings className="ml-auto size-4 text-sidebar-foreground/70" />
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    </SidebarMenu>
+  );
+}
+
+export async function AppSidebar() {
+  const { user, itemTypes, favoriteCollections, recentCollections } =
+    await getSidebarData();
+
   return (
     <Sidebar>
       <SidebarHeader>
@@ -49,95 +175,70 @@ export function AppSidebar() {
         </SidebarMenu>
       </SidebarHeader>
 
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Types</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {itemTypes.map((type) => {
-                const Icon = getIcon(type.icon);
-                return (
-                  <SidebarMenuItem key={type.id}>
-                    <SidebarMenuButton asChild>
-                      <Link href={`/items/${type.slug}`}>
-                        {/* Colour comes from the data, so it cannot be a static utility class. */}
-                        <Icon style={{ color: type.color }} />
-                        <span>{type.name}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                    <SidebarMenuBadge>{type.itemCount}</SidebarMenuBadge>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+      {user && (
+        <SidebarContent>
+          <SidebarGroup>
+            <SidebarGroupLabel>Types</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {itemTypes.map((type) => (
+                  <ItemTypeMenuItem key={type.id} type={type} />
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
 
-        <SidebarSeparator />
+          <SidebarSeparator />
 
-        <SidebarGroup>
-          <SidebarGroupLabel>Favorites</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {favoriteCollections.map((collection) => (
-                <SidebarMenuItem key={collection.id}>
-                  <SidebarMenuButton asChild>
-                    <Link href={`/collections/${collection.slug}`}>
-                      <Folder />
-                      <span>{collection.name}</span>
+          {favoriteCollections.length > 0 && (
+            <SidebarGroup>
+              <SidebarGroupLabel>Favorites</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {favoriteCollections.map((collection) => (
+                    <FavoriteCollectionMenuItem
+                      key={collection.id}
+                      collection={collection}
+                    />
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          )}
+
+          <SidebarGroup>
+            {recentCollections.length > 0 && (
+              <SidebarGroupLabel>Recent Collections</SidebarGroupLabel>
+            )}
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {recentCollections.map((collection) => (
+                  <RecentCollectionMenuItem
+                    key={collection.id}
+                    collection={collection}
+                  />
+                ))}
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    className="text-sidebar-foreground/70"
+                  >
+                    <Link href="/collections">
+                      <span>View all collections</span>
                     </Link>
                   </SidebarMenuButton>
-                  <SidebarMenuBadge>
-                    <Star className="size-3.5 fill-yellow-400 text-yellow-400" />
-                  </SidebarMenuBadge>
                 </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SidebarContent>
+      )}
 
-        <SidebarGroup>
-          <SidebarGroupLabel>Recent Collections</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {recentCollections.map((collection) => (
-                <SidebarMenuItem key={collection.id}>
-                  <SidebarMenuButton asChild>
-                    <Link href={`/collections/${collection.slug}`}>
-                      <Folder />
-                      <span>{collection.name}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                  <SidebarMenuBadge>{collection.itemCount}</SidebarMenuBadge>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      </SidebarContent>
-
-      <SidebarFooter>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton size="lg">
-              <Avatar className="size-8 rounded-full">
-                <AvatarFallback className="rounded-full">
-                  {userInitials}
-                </AvatarFallback>
-              </Avatar>
-              <div className="grid flex-1 text-left leading-tight">
-                <span className="truncate text-sm font-medium">
-                  {currentUser.name}
-                </span>
-                <span className="truncate text-xs text-sidebar-foreground/70">
-                  {currentUser.email}
-                </span>
-              </div>
-              <Settings className="ml-auto size-4 text-sidebar-foreground/70" />
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarFooter>
+      {user && (
+        <SidebarFooter>
+          <UserMenu user={user} />
+        </SidebarFooter>
+      )}
     </Sidebar>
   );
 }

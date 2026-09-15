@@ -1,8 +1,54 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import type { ItemSummary } from "@/types/items";
+import type { ItemSummary, ItemTypeWithCount } from "@/types/items";
 
 const RECENT_ITEMS_LIMIT = 10;
+
+/** ItemType 沒有排序欄位，依 project-overview.md §8 的型別順序；不在清單中的排最後 */
+const SYSTEM_TYPE_ORDER = [
+  "snippets",
+  "prompts",
+  "commands",
+  "notes",
+  "files",
+  "images",
+  "links",
+];
+
+function typeOrder(slug: string): number {
+  const index = SYSTEM_TYPE_ORDER.indexOf(slug);
+  return index === -1 ? SYSTEM_TYPE_ORDER.length : index;
+}
+
+/**
+ * 系統型別與該使用者在各型別下的 item 數量。
+ * 數量以一次 groupBy 計算，不是每個型別各查一次；沒有 item 的型別數量為 0。
+ */
+export async function getSystemItemTypesWithCounts(
+  userId: string,
+): Promise<ItemTypeWithCount[]> {
+  const [types, counts] = await Promise.all([
+    prisma.itemType.findMany({
+      where: { isSystem: true, userId: null },
+      select: { id: true, name: true, slug: true, icon: true, color: true },
+    }),
+    prisma.item.groupBy({
+      by: ["itemTypeId"],
+      where: { userId, deletedAt: null },
+      _count: { _all: true },
+    }),
+  ]);
+
+  const countByTypeId = new Map(
+    counts.map((row) => [row.itemTypeId, row._count._all]),
+  );
+  return types
+    .map((type) => ({ ...type, itemCount: countByTypeId.get(type.id) ?? 0 }))
+    .sort(
+      (a, b) =>
+        typeOrder(a.slug) - typeOrder(b.slug) || a.name.localeCompare(b.name),
+    );
+}
 
 export async function getItemCounts(
   userId: string,

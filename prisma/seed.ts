@@ -123,6 +123,7 @@ interface DemoCollection {
   name: string;
   slug: string;
   description: string;
+  isFavorite?: boolean;
   items: DemoItem[];
 }
 
@@ -130,6 +131,7 @@ const DEMO_COLLECTIONS: DemoCollection[] = [
   {
     name: "React Patterns",
     slug: "react-patterns",
+    isFavorite: true,
     description: "Reusable React patterns and hooks",
     items: [
       {
@@ -233,6 +235,7 @@ export const sleep = (ms: number) =>
   {
     name: "AI Workflows",
     slug: "ai-workflows",
+    isFavorite: true,
     description: "AI prompts and workflow automations",
     items: [
       {
@@ -614,8 +617,9 @@ async function seedDemoCollections(
   );
 
   const itemCount = DEMO_COLLECTIONS.reduce((sum, c) => sum + c.items.length, 0);
+  const favoriteCount = DEMO_COLLECTIONS.filter((c) => c.isFavorite).length;
   console.log(
-    `demo content — collections: ${DEMO_COLLECTIONS.length}, items: ${itemCount}, tags: ${tagCount}, pinned: ${pinnedAt.size}`,
+    `demo content — collections: ${DEMO_COLLECTIONS.length} (favorites: ${favoriteCount}), items: ${itemCount}, tags: ${tagCount}, pinned: ${pinnedAt.size}`,
   );
 }
 

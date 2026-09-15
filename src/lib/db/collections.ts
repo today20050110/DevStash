@@ -1,3 +1,4 @@
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import type {
   CollectionSummary,
@@ -5,6 +6,7 @@ import type {
 } from "@/types/collections";
 
 const RECENT_COLLECTIONS_LIMIT = 6;
+const SIDEBAR_RECENT_COLLECTIONS_LIMIT = 10;
 
 type TypeFields = Omit<CollectionTypeSummary, "count">;
 
@@ -21,18 +23,24 @@ function summarizeTypes(types: TypeFields[]): CollectionTypeSummary[] {
   );
 }
 
+interface CollectionSummaryQuery {
+  where?: Prisma.CollectionWhereInput;
+  take?: number;
+}
+
 /**
- * 最近建立的 collections，附 item 數量與型別組成。
+ * collections 依建立時間由新到舊，附 item 數量與型別組成。
  * items 以關聯一次載入（不是每個 collection 各查一次），再在記憶體中彙總。
+ * userId 與 deletedAt 放在最後，呼叫端傳入的條件無法覆寫。
  */
-export async function getRecentCollections(
+async function findCollectionSummaries(
   userId: string,
-  limit = RECENT_COLLECTIONS_LIMIT,
+  { where, take }: CollectionSummaryQuery,
 ): Promise<CollectionSummary[]> {
   const collections = await prisma.collection.findMany({
-    where: { userId, deletedAt: null },
-    orderBy: { createdAt: "desc" },
-    take: limit,
+    where: { ...where, userId, deletedAt: null },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take,
     select: {
       id: true,
       name: true,
@@ -60,6 +68,30 @@ export async function getRecentCollections(
     itemCount: items.length,
     types: summarizeTypes(items.map(({ item }) => item.itemType)),
   }));
+}
+
+export function getRecentCollections(
+  userId: string,
+  limit = RECENT_COLLECTIONS_LIMIT,
+): Promise<CollectionSummary[]> {
+  return findCollectionSummaries(userId, { take: limit });
+}
+
+export function getFavoriteCollections(
+  userId: string,
+): Promise<CollectionSummary[]> {
+  return findCollectionSummaries(userId, { where: { isFavorite: true } });
+}
+
+/** 側邊欄用：收藏已有自己的區塊，這裡排除以免重複列出 */
+export function getRecentNonFavoriteCollections(
+  userId: string,
+  limit = SIDEBAR_RECENT_COLLECTIONS_LIMIT,
+): Promise<CollectionSummary[]> {
+  return findCollectionSummaries(userId, {
+    where: { isFavorite: false },
+    take: limit,
+  });
 }
 
 export async function getCollectionCounts(
