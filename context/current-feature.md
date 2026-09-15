@@ -1,78 +1,70 @@
 # Current Feature
 
-<!-- Feature Name -->
+Dashboard Items 接上資料庫
 
-Dashboard Collections 接上資料庫
-
-完整規格：@context/features/dashboard-collections-spec.md
+完整規格：@context/features/dashboard-items-spec.md
 
 ## Status
 
-<!-- Not Started|In Progress|Completed -->
-
-Completed
+進行中
 
 ## Goals
 
-<!-- Goals & requirements -->
+- 主區的 **Pinned** 與 **Recent Items** 區塊改用 Neon + Prisma 的真實資料，取代 `src/lib/mock-data.ts`；外觀維持現狀（參考 `context/screenshots/dashboard-ui-main.png`）
+- 在既有的 `src/lib/db/items.ts` 新增 item 查詢函式，在 server component（`src/app/dashboard/page.tsx`）直接呼叫
+- **ItemCard 的圖示與左邊框色** 由該 item 的型別（`itemType`）決定
+- 卡片保留現有內容：標題、pin／星號、description、tag badge、日期
+- **沒有 pinned items 時整個 Pinned 區塊不顯示**（含標題）
+- 統計卡：spec 要求「更新 collection 統計」，上一個功能已將四格全部改查資料庫，本次確認數字與 items 查詢一致即可
+- **不做**：側邊欄（仍讀 mock）、item drawer、`/items/[type]` 路由
 
-- 主區的 Collections 區塊改用 Neon + Prisma 的真實資料，取代 `src/lib/mock-data.ts`；外觀維持現狀（參考 `context/screenshots/dashboard-ui-main.png`）
-- 新增 `src/lib/db/collections.ts` 放資料查詢函式，在 server component（`src/app/dashboard/page.tsx`）直接呼叫
-- 顯示最近的 collections（最多 6 張卡片），依 `createdAt` 由新到舊
-- **卡片左邊框色** = 該 collection 中數量最多的型別色
-- **卡片底部小圖示** = 該 collection 內出現的所有型別
-- 卡片上的 item 數量改為真實數字
-- **統計卡四格**（Items、Collections、Favorite Items、Favorite Collections）全部改由資料庫 `count()` 取得（經使用者確認，見 Notes）
-- **不做**：collection 底下的 items 列表（spec 明確延後）、Pinned／Recent Items 區塊、側邊欄
-
-分支：`feature/dashboard-collections`
+分支：`feature/dashboard-items`
 
 ## Notes
 
-<!-- Any extra notes -->
+### 資料權限
 
-### 資料權限：尚無登入，暫以 demo 使用者代替
-
-Auth.js（建置順序第 3 步）還沒做，沒有 `session.user.id`。但 §4.3 要求每個 Item／Collection 查詢都帶 `userId`，而且要從 repository 函式層強制。做法：
-
-- `src/lib/db/collections.ts` 的每個函式都**必填 `userId` 參數**，函式內一律 `where: { userId, deletedAt: null }`
-- 頁面暫時以 email 查出 `demo@devstash.io` 的 id 再傳入；這段集中在一個函式，接上 Auth 後只換這一處
-- 找不到 demo 使用者時（例如 production 刻意沒有 demo 資料）顯示空狀態，不拋錯
+沿用上一個功能的做法：`src/lib/db/items.ts` 的函式**必填 `userId`**，一律 `where: { userId, deletedAt: null }`；頁面以 `getCurrentUserId()` 取得 demo 使用者 id，找不到時兩個區塊皆為空。
 
 ### 實作方向
 
-- **型別**：新增 `src/types/collections.ts` 定義卡片用的資料形狀（含 item 數量、主要型別、型別清單）；`CollectionCard` 改吃這個型別，不再依賴 mock 的 `Collection` 與 `getItemType`
-- **主要型別的計算不能有 N+1**（§3.4）：一次查出 6 個 collection 與其 items 的 `itemType`（Prisma 以一個關聯一次查詢的方式載入，不是每張卡片各查一次），在 JS 端彙總各型別數量。同數量時以型別名稱排序，確保結果穩定
-- 排除軟刪除：collection 與 item 的 `deletedAt` 皆須為 null
-- 空的 collection：沒有主要型別，左邊框退回預設邊框色、不顯示圖示
-- **動態渲染**：頁面若沒有使用任何動態 API，Next.js 會在 build 時預先渲染，資料就凍結在 build 當下，而且 build 需要連得到資料庫。需明確設為動態渲染
+- **型別**：新增 `src/types/items.ts` 定義卡片用的資料形狀（含型別的 icon／color、tag 名稱陣列）；`ItemCard` 改吃這個型別，不再依賴 mock 的 `Item` 與 `getItemType`
+- **Pinned**：`pinnedAt` 不為 null，依 `pinnedAt` 由新到舊
+- **Recent Items**：依 `createdAt` 由新到舊，取 10 筆；pinned 與 recent 是不同維度，同一筆可同時出現在兩區（維持現行行為）
+- **避免 N+1**：`itemType` 與 tags 以 `include`／`select` 隨 item 一次載入，不在卡片層各自查詢
+- **Tags**：經由 `ItemTag` join table 取得；tag 本身帶 `userId`，查詢時一併限制 `tag.userId`，避免 join table 不帶擁有者造成跨使用者資料混入
+- 日期序列化：Prisma 回傳 `Date`，傳給元件前確認與 `formatDate`（en-US + UTC）的輸入型別相符
 - 型別圖示顏色維持 inline style（色碼由資料決定，Phase 2 已記錄的例外）
-- 已確認 seed 寫入的 5 個 collection 的 `createdAt` 各不相同（Prisma 在用戶端產生時間戳），依 `createdAt` 排序結果穩定
+- 頁面已呼叫 `await connection()`，維持動態渲染
 
-### 決定：統計卡四格都查資料庫（經使用者確認）
+### 決定：調整 seed 補上 pinned 與 tags（經使用者確認）
 
-spec 只寫「更新 collection 統計」。若只換 collection 相關兩格，Items／Favorite Items 仍是 mock 的 10 筆，同一排數字來源不一致。四格都是單純的 `count()`（同樣帶 `userId`、排除 `deletedAt`），故一併改掉。
+demo 資料原本沒有任何 `pinnedAt` 與 tag，Pinned 區塊與 tag badge 兩條路徑無法在瀏覽器驗證。選擇改 seed 而非手動改資料，讓 demo 資料固定涵蓋這兩種情況：
 
-### 已知不一致
+- `DemoItem` 新增 `tags`（必填）與 `pinned`；18 筆 items 皆有 tag，3 筆釘選（useDebounce & useLocalStorage、Code review、Deploy to Vercel with migrations），`pinnedAt` 依出現順序遞減，排序穩定
+- 重建時一併刪除 demo 使用者的 tags；tags 先以 `createManyAndReturn` 建立，item 再以 `tagId` 連結（seed 的 item 用 unchecked input，無法巢狀 `connectOrCreate`）
 
-**側邊欄**仍讀 mock 資料，會出現主區是 demo 的 5 個 collections、側邊欄卻是 mock 的 6 個；依 spec 本次不處理。Pinned／Recent Items 區塊同樣仍是 mock。
+### 已知情況
+
+- 側邊欄仍讀 mock 資料，依 spec 本次不處理
+- 刪除 `src/lib/item-types.ts`：`ItemCard` 改吃 `ItemSummary` 後不再有任何引用（經使用者確認）
 
 ### 實作結果
 
-- 新增 `src/lib/db/collections.ts`（`getRecentCollections`、`getCollectionCounts`）、`src/lib/db/items.ts`（`getItemCounts`）、`src/lib/current-user.ts`（`getCurrentUserId`，暫以 demo 使用者代替 session）、`src/types/collections.ts`、`src/types/dashboard.ts`
-- `CollectionCard` 改吃 `CollectionSummary`：邊框色取 `types[0]`，底部圖示依數量排序；description 為空時不渲染該段；數量為 1 時顯示 `item`
-- `StatsCards` 改為接收 `stats` prop，不再 import mock
-- 頁面在 `getDashboardData()` 開頭呼叫 `await connection()`（Next 16 取代 `unstable_noStore` 的做法），build 輸出確認 `/dashboard` 為 `ƒ (Dynamic)`
-- `getRecentCollections` 的 items 關聯同時限制 `item.userId` 與 `item.deletedAt`：join table 本身不帶擁有者
+- `src/lib/db/items.ts` 新增 `getPinnedItems`、`getRecentItems`，共用私有的 `findItemSummaries`：`userId`／`deletedAt` 放在呼叫端條件之後無法覆寫，tags 關聯另限制 `tag.userId` 並依名稱排序
+- 排序加上 `id` 作為同值時的次要鍵：seed 以巢狀 create 建立的同一 collection 內 items 的 `createdAt` 完全相同，不加的話列表順序不穩定（瀏覽器實測時發現）
+- 新增 `src/types/items.ts`（`ItemSummary`、`ItemTypeSummary`）；`ItemCard` 改吃 `ItemSummary`，description 為空時不渲染
+- `formatDate` 參數由 ISO 字串改為 `Date`（唯一呼叫端是 `ItemCard`）
+- 頁面五個查詢以 `Promise.all` 平行執行；Pinned 為空時整個 section 不渲染，Recent Items 為空時顯示 `No items yet.`
 
 ### 驗證結果（Development，瀏覽器實測）
 
-- 統計卡：18 Items／5 Collections／0 Favorite Items／0 Favorite Collections（seed 未設 favorite，數字正確）
-- 卡片依 `createdAt` 由新到舊：Design Resources → Terminal Commands → DevOps → AI Workflows → React Patterns
-- 邊框色與主要型別一致：DevOps（links 2、commands 1、snippets 1）為綠色 `#10b981`，圖示順序 Links → Commands → Snippets（同數量依名稱）；其餘單一型別的 collection 各為該型別色
-- 手機寬度 390px：Collections 網格為單欄、無水平捲動
-- `tsc --noEmit`、lint、build 皆通過
-- 瀏覽器主控台與 Next dev overlay 的「1 Issue」皆為既有的 `pg` SSL mode 警告（伺服器端轉發），非本次改動造成
+- seed 連跑兩次結果相同（collections 5／items 18／tags 26／pinned 3），`npm run test:db` 全數 PASS，tag 總數 26 無重複
+- Pinned：3 張，依釘選順序 useDebounce & useLocalStorage → Code review → Deploy to Vercel with migrations，皆有 pin 圖示，邊框色分別為 snippets 藍、prompts 紫、commands 橘
+- Recent Items：10 張，依 `createdAt` 由新到舊，重新整理後順序不變；已釘選的 Deploy to Vercel 同時出現在兩區
+- Tag badge 依名稱排序顯示；統計卡維持 18 Items／5 Collections／0／0
+- 桌面與 390px 手機寬度皆無水平捲動；瀏覽器主控台無錯誤或警告
+- `tsc --noEmit`、lint、build 皆通過，`/dashboard` 為 `ƒ (Dynamic)`
 
 ## History
 

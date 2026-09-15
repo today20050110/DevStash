@@ -8,10 +8,10 @@ import { ItemCard } from "@/components/dashboard/ItemCard";
 import { StatsCards } from "@/components/dashboard/StatsCards";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCollectionCounts, getRecentCollections } from "@/lib/db/collections";
-import { getItemCounts } from "@/lib/db/items";
-import { items } from "@/lib/mock-data";
+import { getItemCounts, getPinnedItems, getRecentItems } from "@/lib/db/items";
 import type { CollectionSummary } from "@/types/collections";
 import type { DashboardStats } from "@/types/dashboard";
+import type { ItemSummary } from "@/types/items";
 
 export const metadata: Metadata = {
   title: "Dashboard — DevStash",
@@ -24,39 +24,47 @@ const EMPTY_STATS: DashboardStats = {
   favoriteCollections: 0,
 };
 
-const pinnedItems = items
-  .filter((item) => item.pinnedAt !== null)
-  .sort((a, b) => (b.pinnedAt ?? "").localeCompare(a.pinnedAt ?? ""));
-
-// Pinned items are not excluded here — pinned and recent are different axes,
-// so an item legitimately shows up in both.
-const recentItems = [...items]
-  .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-  .slice(0, 10);
-
-async function getDashboardData(): Promise<{
+interface DashboardData {
   stats: DashboardStats;
   collections: CollectionSummary[];
-}> {
+  pinnedItems: ItemSummary[];
+  recentItems: ItemSummary[];
+}
+
+async function getDashboardData(): Promise<DashboardData> {
   // 查詢不經過 cookies/headers 等 request-time API，不呼叫的話 Next.js
   // 會在 build 時預先渲染，資料就凍結在 build 當下
   await connection();
 
   const userId = await getCurrentUserId();
   if (!userId) {
-    return { stats: EMPTY_STATS, collections: [] };
+    return {
+      stats: EMPTY_STATS,
+      collections: [],
+      pinnedItems: [],
+      recentItems: [],
+    };
   }
 
-  const [collections, collectionCounts, itemCounts] = await Promise.all([
-    getRecentCollections(userId),
-    getCollectionCounts(userId),
-    getItemCounts(userId),
-  ]);
-  return { stats: { ...itemCounts, ...collectionCounts }, collections };
+  const [collections, collectionCounts, itemCounts, pinnedItems, recentItems] =
+    await Promise.all([
+      getRecentCollections(userId),
+      getCollectionCounts(userId),
+      getItemCounts(userId),
+      getPinnedItems(userId),
+      getRecentItems(userId),
+    ]);
+  return {
+    stats: { ...itemCounts, ...collectionCounts },
+    collections,
+    pinnedItems,
+    recentItems,
+  };
 }
 
 export default async function DashboardPage() {
-  const { stats, collections } = await getDashboardData();
+  const { stats, collections, pinnedItems, recentItems } =
+    await getDashboardData();
 
   return (
     <div className="space-y-10">
@@ -88,25 +96,31 @@ export default async function DashboardPage() {
         )}
       </section>
 
-      <section className="space-y-4">
-        <h2 className="flex items-center gap-2 text-xl font-semibold">
-          <Pin className="size-4 text-muted-foreground" />
-          Pinned
-        </h2>
-        <div className="space-y-3">
-          {pinnedItems.map((item) => (
-            <ItemCard key={item.id} item={item} />
-          ))}
-        </div>
-      </section>
+      {pinnedItems.length > 0 && (
+        <section className="space-y-4">
+          <h2 className="flex items-center gap-2 text-xl font-semibold">
+            <Pin className="size-4 text-muted-foreground" />
+            Pinned
+          </h2>
+          <div className="space-y-3">
+            {pinnedItems.map((item) => (
+              <ItemCard key={item.id} item={item} />
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="space-y-4">
         <h2 className="text-xl font-semibold">Recent Items</h2>
-        <div className="space-y-3">
-          {recentItems.map((item) => (
-            <ItemCard key={item.id} item={item} />
-          ))}
-        </div>
+        {recentItems.length > 0 ? (
+          <div className="space-y-3">
+            {recentItems.map((item) => (
+              <ItemCard key={item.id} item={item} />
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">No items yet.</p>
+        )}
       </section>
     </div>
   );

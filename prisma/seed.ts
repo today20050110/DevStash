@@ -2,7 +2,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { hash } from "bcryptjs";
 import { config } from "dotenv";
 
-import { PrismaClient } from "../src/generated/prisma/client";
+import { PrismaClient, type Prisma } from "../src/generated/prisma/client";
 import type { ItemKind } from "../src/generated/prisma/enums";
 
 // 與 prisma.config.ts 一致：CLI 只讀 .env，Neon 的連線字串在 .env.local
@@ -113,6 +113,10 @@ interface DemoItem {
   /** URL kind */
   url?: string;
   language?: string;
+  /** 標籤名稱，slug 由名稱正規化而來 */
+  tags: string[];
+  /** 釘選時間依在 DEMO_COLLECTIONS 中出現的順序遞減 */
+  pinned?: boolean;
 }
 
 interface DemoCollection {
@@ -130,6 +134,8 @@ const DEMO_COLLECTIONS: DemoCollection[] = [
     items: [
       {
         title: "useDebounce & useLocalStorage",
+        tags: ["react", "hooks"],
+        pinned: true,
         description: "Debounce a fast-changing value and persist state to localStorage",
         typeSlug: "snippets",
         language: "typescript",
@@ -165,6 +171,7 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
       },
       {
         title: "Context provider with guarded hook",
+        tags: ["react", "context", "typescript"],
         description: "Typed context that throws when used outside its provider",
         typeSlug: "snippets",
         language: "typescript",
@@ -200,6 +207,7 @@ export function useTheme(): ThemeContextValue {
       },
       {
         title: "cn, formatBytes & sleep",
+        tags: ["utils", "typescript"],
         description: "Small utility functions used across most projects",
         typeSlug: "snippets",
         language: "typescript",
@@ -229,6 +237,8 @@ export const sleep = (ms: number) =>
     items: [
       {
         title: "Code review",
+        tags: ["ai", "code-review"],
+        pinned: true,
         description: "Structured review focused on bugs, security and readability",
         typeSlug: "prompts",
         content: `You are a senior software engineer reviewing a pull request.
@@ -248,6 +258,7 @@ Code:
       },
       {
         title: "Documentation generation",
+        tags: ["ai", "docs"],
         description: "Generate README-style docs for a module",
         typeSlug: "prompts",
         content: `Write developer documentation for the module below.
@@ -267,6 +278,7 @@ Module:
       },
       {
         title: "Refactoring assistant",
+        tags: ["ai", "refactoring"],
         description: "Refactor for clarity without changing behaviour",
         typeSlug: "prompts",
         content: `Refactor the code below to improve readability and maintainability.
@@ -293,6 +305,7 @@ Code:
     items: [
       {
         title: "Next.js multi-stage Dockerfile",
+        tags: ["docker", "nextjs"],
         description: "Small production image using Next.js standalone output",
         typeSlug: "snippets",
         language: "dockerfile",
@@ -318,6 +331,8 @@ CMD ["node", "server.js"]`,
       },
       {
         title: "Deploy to Vercel with migrations",
+        tags: ["vercel", "prisma", "deploy"],
+        pinned: true,
         description: "Apply pending Prisma migrations, then ship a prebuilt deployment",
         typeSlug: "commands",
         language: "bash",
@@ -331,12 +346,14 @@ vercel deploy --prebuilt --prod`,
       },
       {
         title: "Docker documentation",
+        tags: ["docker", "docs"],
         description: "Official Docker docs: Dockerfile reference, Compose and more",
         typeSlug: "links",
         url: "https://docs.docker.com/",
       },
       {
         title: "GitHub Actions documentation",
+        tags: ["ci", "github-actions"],
         description: "Workflow syntax, runners and CI/CD guides",
         typeSlug: "links",
         url: "https://docs.github.com/en/actions",
@@ -350,6 +367,7 @@ vercel deploy --prebuilt --prod`,
     items: [
       {
         title: "Git: undo and inspect",
+        tags: ["git"],
         description: "Undo the last commit safely and view branch history",
         typeSlug: "commands",
         language: "bash",
@@ -364,6 +382,7 @@ git branch --merged | grep -v '\\*' | xargs -n 1 git branch -d`,
       },
       {
         title: "Docker: logs, shell and cleanup",
+        tags: ["docker", "debugging"],
         description: "Everyday container debugging and disk cleanup",
         typeSlug: "commands",
         language: "bash",
@@ -378,6 +397,7 @@ docker system prune -af`,
       },
       {
         title: "Free up a port",
+        tags: ["shell", "networking"],
         description: "Find and kill the process listening on a port",
         typeSlug: "commands",
         language: "bash",
@@ -389,6 +409,7 @@ npx kill-port 3000`,
       },
       {
         title: "npm: dependencies",
+        tags: ["npm"],
         description: "Explain, update and reinstall packages",
         typeSlug: "commands",
         language: "bash",
@@ -410,24 +431,28 @@ rm -rf node_modules && npm ci`,
     items: [
       {
         title: "Tailwind CSS documentation",
+        tags: ["css", "tailwind"],
         description: "Utility class reference and v4 theme configuration",
         typeSlug: "links",
         url: "https://tailwindcss.com/docs",
       },
       {
         title: "shadcn/ui",
+        tags: ["react", "ui"],
         description: "Accessible, copy-paste components built on Radix and Tailwind",
         typeSlug: "links",
         url: "https://ui.shadcn.com",
       },
       {
         title: "Material Design 3",
+        tags: ["design-system"],
         description: "Google's design system: foundations, styles and components",
         typeSlug: "links",
         url: "https://m3.material.io",
       },
       {
         title: "Lucide icons",
+        tags: ["icons", "ui"],
         description: "Open-source icon library used by DevStash",
         typeSlug: "links",
         url: "https://lucide.dev/icons",
@@ -498,16 +523,64 @@ function resolveTypeId(typeIds: Map<string, string>, slug: string): string {
   return id;
 }
 
+/** 標籤名稱正規化為 slug：「React Hooks」與「react hooks」視為同一個標籤 */
+function toTagSlug(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, "-");
+}
+
+function resolveTagId(tagIds: Map<string, string>, name: string): string {
+  const id = tagIds.get(toTagSlug(name));
+  if (!id) {
+    throw new Error(`Unknown demo tag: ${name}`);
+  }
+  return id;
+}
+
+/** 依在 DEMO_COLLECTIONS 中出現的順序給釘選時間，越前面越新，排序結果穩定 */
+function buildPinnedAt(now: Date): Map<string, Date> {
+  const pinned = DEMO_COLLECTIONS.flatMap((c) => c.items).filter(
+    (item) => item.pinned,
+  );
+  return new Map(
+    pinned.map((item, index) => [
+      item.title,
+      new Date(now.getTime() - index * 60_000),
+    ]),
+  );
+}
+
+async function createDemoTags(
+  tx: Prisma.TransactionClient,
+  userId: string,
+): Promise<Map<string, string>> {
+  const bySlug = new Map<string, string>();
+  for (const item of DEMO_COLLECTIONS.flatMap((c) => c.items)) {
+    for (const name of item.tags) bySlug.set(toTagSlug(name), name);
+  }
+
+  const tags = await tx.tag.createManyAndReturn({
+    data: [...bySlug].map(([slug, name]) => ({ userId, name, slug })),
+    select: { id: true, slug: true },
+  });
+  return new Map(tags.map((tag) => [tag.slug, tag.id]));
+}
+
 async function seedDemoCollections(
   userId: string,
   typeIds: Map<string, string>,
 ): Promise<void> {
+  const pinnedAt = buildPinnedAt(new Date());
+
   // Item 沒有自然唯一鍵可 upsert：清掉 demo 使用者名下的內容後重建，
   // 包在同一個 transaction 裡，失敗時不會留下半套資料
-  await prisma.$transaction(
+  const tagCount = await prisma.$transaction(
     async (tx) => {
       await tx.item.deleteMany({ where: { userId } });
       await tx.collection.deleteMany({ where: { userId } });
+      await tx.tag.deleteMany({ where: { userId } });
+      // item 以 unchecked input（userId / itemTypeId 純量）建立，
+      // 無法巢狀 connectOrCreate tag —— 先建好 tags 再以 tagId 連結
+      const tagIds = await createDemoTags(tx, userId);
 
       for (const { items, ...collection } of DEMO_COLLECTIONS) {
         await tx.collection.create({
@@ -515,13 +588,19 @@ async function seedDemoCollections(
             ...collection,
             userId,
             items: {
-              create: items.map(({ typeSlug, ...item }, position) => ({
+              create: items.map(({ typeSlug, tags, pinned, ...item }, position) => ({
                 position,
                 item: {
                   create: {
                     ...item,
                     userId,
                     itemTypeId: resolveTypeId(typeIds, typeSlug),
+                    pinnedAt: pinned ? pinnedAt.get(item.title) : undefined,
+                    tags: {
+                      create: tags.map((name) => ({
+                        tagId: resolveTagId(tagIds, name),
+                      })),
+                    },
                   },
                 },
               })),
@@ -529,13 +608,14 @@ async function seedDemoCollections(
           },
         });
       }
+      return tagIds.size;
     },
     { timeout: 30_000 },
   );
 
   const itemCount = DEMO_COLLECTIONS.reduce((sum, c) => sum + c.items.length, 0);
   console.log(
-    `demo content — collections: ${DEMO_COLLECTIONS.length}, items: ${itemCount}`,
+    `demo content — collections: ${DEMO_COLLECTIONS.length}, items: ${itemCount}, tags: ${tagCount}, pinned: ${pinnedAt.size}`,
   );
 }
 
