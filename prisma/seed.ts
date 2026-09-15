@@ -1,4 +1,5 @@
 import { PrismaPg } from "@prisma/adapter-pg";
+import { hash } from "bcryptjs";
 import { config } from "dotenv";
 
 import { PrismaClient } from "../src/generated/prisma/client";
@@ -17,6 +18,11 @@ if (!connectionString) {
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString }),
 });
+
+// demo 使用者的密碼是公開的，絕不能出現在 production —— 必須明確開啟
+const SEED_DEMO = process.env.SEED_DEMO === "1";
+
+const BCRYPT_ROUNDS = 12;
 
 interface SystemItemType {
   name: string;
@@ -91,10 +97,350 @@ const SYSTEM_ITEM_TYPES: SystemItemType[] = [
   },
 ];
 
-async function seedSystemItemTypes(): Promise<void> {
+const DEMO_USER = {
+  email: "demo@devstash.io",
+  name: "Demo User",
+  password: "12345678",
+};
+
+interface DemoItem {
+  title: string;
+  description: string;
+  /** 對應 SYSTEM_ITEM_TYPES 的 slug */
+  typeSlug: string;
+  /** TEXT kind */
+  content?: string;
+  /** URL kind */
+  url?: string;
+  language?: string;
+}
+
+interface DemoCollection {
+  name: string;
+  slug: string;
+  description: string;
+  items: DemoItem[];
+}
+
+const DEMO_COLLECTIONS: DemoCollection[] = [
+  {
+    name: "React Patterns",
+    slug: "react-patterns",
+    description: "Reusable React patterns and hooks",
+    items: [
+      {
+        title: "useDebounce & useLocalStorage",
+        description: "Debounce a fast-changing value and persist state to localStorage",
+        typeSlug: "snippets",
+        language: "typescript",
+        content: `import { useEffect, useState } from "react";
+
+export function useDebounce<T>(value: T, delay = 300): T {
+  const [debounced, setDebounced] = useState(value);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+
+  return debounced;
+}
+
+export function useLocalStorage<T>(key: string, initialValue: T) {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const stored = window.localStorage.getItem(key);
+      return stored !== null ? (JSON.parse(stored) as T) : initialValue;
+    } catch {
+      return initialValue;
+    }
+  });
+
+  useEffect(() => {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  }, [key, value]);
+
+  return [value, setValue] as const;
+}`,
+      },
+      {
+        title: "Context provider with guarded hook",
+        description: "Typed context that throws when used outside its provider",
+        typeSlug: "snippets",
+        language: "typescript",
+        content: `import { createContext, useContext, useState, type ReactNode } from "react";
+
+type Theme = "light" | "dark";
+
+interface ThemeContextValue {
+  theme: Theme;
+  toggleTheme: () => void;
+}
+
+const ThemeContext = createContext<ThemeContextValue | null>(null);
+
+export function ThemeProvider({ children }: { children: ReactNode }) {
+  const [theme, setTheme] = useState<Theme>("dark");
+  const toggleTheme = () => setTheme((t) => (t === "dark" ? "light" : "dark"));
+
+  return (
+    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+}
+
+export function useTheme(): ThemeContextValue {
+  const context = useContext(ThemeContext);
+  if (!context) {
+    throw new Error("useTheme must be used within a ThemeProvider");
+  }
+  return context;
+}`,
+      },
+      {
+        title: "cn, formatBytes & sleep",
+        description: "Small utility functions used across most projects",
+        typeSlug: "snippets",
+        language: "typescript",
+        content: `import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+export function cn(...inputs: ClassValue[]): string {
+  return twMerge(clsx(inputs));
+}
+
+export function formatBytes(bytes: number, decimals = 1): string {
+  if (bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return \`\${(bytes / 1024 ** i).toFixed(decimals)} \${units[i]}\`;
+}
+
+export const sleep = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));`,
+      },
+    ],
+  },
+  {
+    name: "AI Workflows",
+    slug: "ai-workflows",
+    description: "AI prompts and workflow automations",
+    items: [
+      {
+        title: "Code review",
+        description: "Structured review focused on bugs, security and readability",
+        typeSlug: "prompts",
+        content: `You are a senior software engineer reviewing a pull request.
+
+Review the code below and report findings grouped by severity (critical, major, minor).
+For each finding include:
+- the file and line
+- what is wrong and why it matters
+- a concrete suggested fix
+
+Focus on correctness, security (auth checks, input validation), performance
+(N+1 queries, unnecessary re-renders) and readability. Do not comment on
+formatting that a linter would catch. If the code looks good, say so briefly.
+
+Code:
+{{code}}`,
+      },
+      {
+        title: "Documentation generation",
+        description: "Generate README-style docs for a module",
+        typeSlug: "prompts",
+        content: `Write developer documentation for the module below.
+
+Include:
+1. A one-paragraph overview of what the module does and when to use it
+2. Installation or setup steps, if any
+3. The public API: every exported function, its parameters, return value and errors
+4. Two or three short usage examples covering the common cases
+5. Known limitations or gotchas
+
+Write for a developer who has never seen this codebase. Be concise and use
+Markdown headings. Do not invent behaviour that is not in the code.
+
+Module:
+{{code}}`,
+      },
+      {
+        title: "Refactoring assistant",
+        description: "Refactor for clarity without changing behaviour",
+        typeSlug: "prompts",
+        content: `Refactor the code below to improve readability and maintainability.
+
+Constraints:
+- Preserve the existing behaviour and public API exactly
+- Keep functions under 50 lines where possible
+- Remove duplication and dead code
+- Prefer descriptive names over comments
+- Do not add new dependencies
+
+First list the problems you found, then show the refactored code, then explain
+each change in one sentence. If a change carries risk, call it out explicitly.
+
+Code:
+{{code}}`,
+      },
+    ],
+  },
+  {
+    name: "DevOps",
+    slug: "devops",
+    description: "Infrastructure and deployment resources",
+    items: [
+      {
+        title: "Next.js multi-stage Dockerfile",
+        description: "Small production image using Next.js standalone output",
+        typeSlug: "snippets",
+        language: "dockerfile",
+        content: `FROM node:22-alpine AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+
+FROM node:22-alpine AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN npm run build
+
+FROM node:22-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
+EXPOSE 3000
+CMD ["node", "server.js"]`,
+      },
+      {
+        title: "Deploy to Vercel with migrations",
+        description: "Apply pending Prisma migrations, then ship a prebuilt deployment",
+        typeSlug: "commands",
+        language: "bash",
+        content: `#!/usr/bin/env bash
+set -euo pipefail
+
+npm ci
+npx prisma migrate deploy
+vercel build --prod
+vercel deploy --prebuilt --prod`,
+      },
+      {
+        title: "Docker documentation",
+        description: "Official Docker docs: Dockerfile reference, Compose and more",
+        typeSlug: "links",
+        url: "https://docs.docker.com/",
+      },
+      {
+        title: "GitHub Actions documentation",
+        description: "Workflow syntax, runners and CI/CD guides",
+        typeSlug: "links",
+        url: "https://docs.github.com/en/actions",
+      },
+    ],
+  },
+  {
+    name: "Terminal Commands",
+    slug: "terminal-commands",
+    description: "Useful shell commands for everyday development",
+    items: [
+      {
+        title: "Git: undo and inspect",
+        description: "Undo the last commit safely and view branch history",
+        typeSlug: "commands",
+        language: "bash",
+        content: `# Undo the last commit but keep the changes staged
+git reset --soft HEAD~1
+
+# Compact history graph of all branches
+git log --oneline --graph --decorate --all
+
+# Delete local branches already merged into the current branch
+git branch --merged | grep -v '\\*' | xargs -n 1 git branch -d`,
+      },
+      {
+        title: "Docker: logs, shell and cleanup",
+        description: "Everyday container debugging and disk cleanup",
+        typeSlug: "commands",
+        language: "bash",
+        content: `# Follow the last 100 log lines of a compose service
+docker compose logs -f --tail=100 web
+
+# Open a shell inside a running container
+docker exec -it <container> sh
+
+# Remove stopped containers, unused images and build cache
+docker system prune -af`,
+      },
+      {
+        title: "Free up a port",
+        description: "Find and kill the process listening on a port",
+        typeSlug: "commands",
+        language: "bash",
+        content: `# macOS / Linux
+lsof -ti :3000 | xargs kill -9
+
+# Any OS with Node installed
+npx kill-port 3000`,
+      },
+      {
+        title: "npm: dependencies",
+        description: "Explain, update and reinstall packages",
+        typeSlug: "commands",
+        language: "bash",
+        content: `# Why is this package installed?
+npm explain <package>
+
+# Interactively pick dependency upgrades
+npx npm-check-updates -i
+
+# Clean reinstall from the lockfile
+rm -rf node_modules && npm ci`,
+      },
+    ],
+  },
+  {
+    name: "Design Resources",
+    slug: "design-resources",
+    description: "UI/UX resources and references",
+    items: [
+      {
+        title: "Tailwind CSS documentation",
+        description: "Utility class reference and v4 theme configuration",
+        typeSlug: "links",
+        url: "https://tailwindcss.com/docs",
+      },
+      {
+        title: "shadcn/ui",
+        description: "Accessible, copy-paste components built on Radix and Tailwind",
+        typeSlug: "links",
+        url: "https://ui.shadcn.com",
+      },
+      {
+        title: "Material Design 3",
+        description: "Google's design system: foundations, styles and components",
+        typeSlug: "links",
+        url: "https://m3.material.io",
+      },
+      {
+        title: "Lucide icons",
+        description: "Open-source icon library used by DevStash",
+        typeSlug: "links",
+        url: "https://lucide.dev/icons",
+      },
+    ],
+  },
+];
+
+async function seedSystemItemTypes(): Promise<Map<string, string>> {
   // 系統型別的 userId 為 null，而 Prisma 的 @@unique([userId, slug]) 複合唯一
   // 輸入不接受 null，所以無法用 upsert —— 改以 findFirst 判斷後 create/update。
   // 真正擋重複的是 migration 裡的 partial unique index ItemType_slug_system_key。
+  const typeIds = new Map<string, string>();
   let created = 0;
   let updated = 0;
 
@@ -104,25 +450,105 @@ async function seedSystemItemTypes(): Promise<void> {
       select: { id: true },
     });
 
-    if (existing) {
-      await prisma.itemType.update({
-        where: { id: existing.id },
-        data: { ...type, isSystem: true },
-      });
-      updated += 1;
-    } else {
-      await prisma.itemType.create({
-        data: { ...type, isSystem: true, userId: null },
-      });
-      created += 1;
-    }
+    const saved = existing
+      ? await prisma.itemType.update({
+          where: { id: existing.id },
+          data: { ...type, isSystem: true },
+          select: { id: true },
+        })
+      : await prisma.itemType.create({
+          data: { ...type, isSystem: true, userId: null },
+          select: { id: true },
+        });
+
+    typeIds.set(type.slug, saved.id);
+    if (existing) updated += 1;
+    else created += 1;
   }
 
   console.log(`system item types — created: ${created}, updated: ${updated}`);
+  return typeIds;
+}
+
+async function seedDemoUser(): Promise<string> {
+  const passwordHash = await hash(DEMO_USER.password, BCRYPT_ROUNDS);
+  const profile = {
+    name: DEMO_USER.name,
+    passwordHash,
+    emailVerified: new Date(),
+    plan: "FREE" as const,
+  };
+
+  const user = await prisma.user.upsert({
+    where: { email: DEMO_USER.email },
+    update: profile,
+    create: { email: DEMO_USER.email, ...profile },
+    select: { id: true },
+  });
+
+  console.log(`demo user — ${DEMO_USER.email}`);
+  return user.id;
+}
+
+function resolveTypeId(typeIds: Map<string, string>, slug: string): string {
+  const id = typeIds.get(slug);
+  if (!id) {
+    throw new Error(`Unknown system item type: ${slug}`);
+  }
+  return id;
+}
+
+async function seedDemoCollections(
+  userId: string,
+  typeIds: Map<string, string>,
+): Promise<void> {
+  // Item 沒有自然唯一鍵可 upsert：清掉 demo 使用者名下的內容後重建，
+  // 包在同一個 transaction 裡，失敗時不會留下半套資料
+  await prisma.$transaction(
+    async (tx) => {
+      await tx.item.deleteMany({ where: { userId } });
+      await tx.collection.deleteMany({ where: { userId } });
+
+      for (const { items, ...collection } of DEMO_COLLECTIONS) {
+        await tx.collection.create({
+          data: {
+            ...collection,
+            userId,
+            items: {
+              create: items.map(({ typeSlug, ...item }, position) => ({
+                position,
+                item: {
+                  create: {
+                    ...item,
+                    userId,
+                    itemTypeId: resolveTypeId(typeIds, typeSlug),
+                  },
+                },
+              })),
+            },
+          },
+        });
+      }
+    },
+    { timeout: 30_000 },
+  );
+
+  const itemCount = DEMO_COLLECTIONS.reduce((sum, c) => sum + c.items.length, 0);
+  console.log(
+    `demo content — collections: ${DEMO_COLLECTIONS.length}, items: ${itemCount}`,
+  );
 }
 
 async function main(): Promise<void> {
-  await seedSystemItemTypes();
+  const typeIds = await seedSystemItemTypes();
+
+  if (!SEED_DEMO) {
+    console.log("demo data skipped — set SEED_DEMO=1 to seed it");
+    return;
+  }
+
+  const userId = await seedDemoUser();
+  await seedDemoCollections(userId, typeIds);
 }
 
 main()
