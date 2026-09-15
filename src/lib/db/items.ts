@@ -20,6 +20,20 @@ function typeOrder(slug: string): number {
   return index === -1 ? SYSTEM_TYPE_ORDER.length : index;
 }
 
+type SystemItemType = Omit<ItemTypeWithCount, "itemCount">;
+
+/** 系統型別不屬於任何使用者、不含使用者資料，沒有目前使用者時也能查詢 */
+export async function getSystemItemTypes(): Promise<SystemItemType[]> {
+  const types = await prisma.itemType.findMany({
+    where: { isSystem: true, userId: null },
+    select: { id: true, name: true, slug: true, icon: true, color: true },
+  });
+  return types.sort(
+    (a, b) =>
+      typeOrder(a.slug) - typeOrder(b.slug) || a.name.localeCompare(b.name),
+  );
+}
+
 /**
  * 系統型別與該使用者在各型別下的 item 數量。
  * 數量以一次 groupBy 計算，不是每個型別各查一次；沒有 item 的型別數量為 0。
@@ -28,10 +42,7 @@ export async function getSystemItemTypesWithCounts(
   userId: string,
 ): Promise<ItemTypeWithCount[]> {
   const [types, counts] = await Promise.all([
-    prisma.itemType.findMany({
-      where: { isSystem: true, userId: null },
-      select: { id: true, name: true, slug: true, icon: true, color: true },
-    }),
+    getSystemItemTypes(),
     prisma.item.groupBy({
       by: ["itemTypeId"],
       where: { userId, deletedAt: null },
@@ -42,12 +53,10 @@ export async function getSystemItemTypesWithCounts(
   const countByTypeId = new Map(
     counts.map((row) => [row.itemTypeId, row._count._all]),
   );
-  return types
-    .map((type) => ({ ...type, itemCount: countByTypeId.get(type.id) ?? 0 }))
-    .sort(
-      (a, b) =>
-        typeOrder(a.slug) - typeOrder(b.slug) || a.name.localeCompare(b.name),
-    );
+  return types.map((type) => ({
+    ...type,
+    itemCount: countByTypeId.get(type.id) ?? 0,
+  }));
 }
 
 export async function getItemCounts(

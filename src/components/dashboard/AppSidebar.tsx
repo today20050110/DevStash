@@ -23,7 +23,10 @@ import {
   getFavoriteCollections,
   getRecentNonFavoriteCollections,
 } from "@/lib/db/collections";
-import { getSystemItemTypesWithCounts } from "@/lib/db/items";
+import {
+  getSystemItemTypes,
+  getSystemItemTypesWithCounts,
+} from "@/lib/db/items";
 import type { CollectionSummary } from "@/types/collections";
 import type { ItemTypeWithCount } from "@/types/items";
 import type { CurrentUser } from "@/types/user";
@@ -41,9 +44,11 @@ async function getSidebarData(): Promise<SidebarData> {
 
   const user = await getCurrentUser();
   if (!user) {
+    // 系統型別不屬於任何使用者，沒有目前使用者時仍列出，數量為 0
+    const systemTypes = await getSystemItemTypes();
     return {
       user: null,
-      itemTypes: [],
+      itemTypes: systemTypes.map((type) => ({ ...type, itemCount: 0 })),
       favoriteCollections: [],
       recentCollections: [],
     };
@@ -175,8 +180,8 @@ export async function AppSidebar() {
         </SidebarMenu>
       </SidebarHeader>
 
-      {user && (
-        <SidebarContent>
+      <SidebarContent>
+        {itemTypes.length > 0 && (
           <SidebarGroup>
             <SidebarGroupLabel>Types</SidebarGroupLabel>
             <SidebarGroupContent>
@@ -187,52 +192,56 @@ export async function AppSidebar() {
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
+        )}
 
-          <SidebarSeparator />
+        {user && (
+          <>
+            <SidebarSeparator />
 
-          {favoriteCollections.length > 0 && (
+            {favoriteCollections.length > 0 && (
+              <SidebarGroup>
+                <SidebarGroupLabel>Favorites</SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {favoriteCollections.map((collection) => (
+                      <FavoriteCollectionMenuItem
+                        key={collection.id}
+                        collection={collection}
+                      />
+                    ))}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            )}
+
             <SidebarGroup>
-              <SidebarGroupLabel>Favorites</SidebarGroupLabel>
+              {recentCollections.length > 0 && (
+                <SidebarGroupLabel>Recent Collections</SidebarGroupLabel>
+              )}
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {favoriteCollections.map((collection) => (
-                    <FavoriteCollectionMenuItem
+                  {recentCollections.map((collection) => (
+                    <RecentCollectionMenuItem
                       key={collection.id}
                       collection={collection}
                     />
                   ))}
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      className="text-sidebar-foreground/70"
+                    >
+                      <Link href="/collections">
+                        <span>View all collections</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
-          )}
-
-          <SidebarGroup>
-            {recentCollections.length > 0 && (
-              <SidebarGroupLabel>Recent Collections</SidebarGroupLabel>
-            )}
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {recentCollections.map((collection) => (
-                  <RecentCollectionMenuItem
-                    key={collection.id}
-                    collection={collection}
-                  />
-                ))}
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    className="text-sidebar-foreground/70"
-                  >
-                    <Link href="/collections">
-                      <span>View all collections</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        </SidebarContent>
-      )}
+          </>
+        )}
+      </SidebarContent>
 
       {user && (
         <SidebarFooter>
