@@ -1,8 +1,8 @@
 # Current Feature
 
-Dashboard Items 接上資料庫
+Stats 與側邊欄接上資料庫
 
-完整規格：@context/features/dashboard-items-spec.md
+完整規格：@context/features/stats-sidebar-spec.md
 
 ## Status
 
@@ -10,61 +10,70 @@ Dashboard Items 接上資料庫
 
 ## Goals
 
-- 主區的 **Pinned** 與 **Recent Items** 區塊改用 Neon + Prisma 的真實資料，取代 `src/lib/mock-data.ts`；外觀維持現狀（參考 `context/screenshots/dashboard-ui-main.png`）
-- 在既有的 `src/lib/db/items.ts` 新增 item 查詢函式，在 server component（`src/app/dashboard/page.tsx`）直接呼叫
-- **ItemCard 的圖示與左邊框色** 由該 item 的型別（`itemType`）決定
-- 卡片保留現有內容：標題、pin／星號、description、tag badge、日期
-- **沒有 pinned items 時整個 Pinned 區塊不顯示**（含標題）
-- 統計卡：spec 要求「更新 collection 統計」，上一個功能已將四格全部改查資料庫，本次確認數字與 items 查詢一致即可
-- **不做**：側邊欄（仍讀 mock）、item drawer、`/items/[type]` 路由
+- 主區統計卡顯示資料庫資料，外觀與版面維持現狀
+- 側邊欄 **Types** 改讀資料庫的系統型別，含圖示、型別色與 item 數量，連向 `/items/[slug]`
+- 側邊欄 **Favorites** 與 **Recent Collections** 改讀資料庫的 collections
+- Favorites 保留星號圖示；Recent Collections 每個 collection 顯示彩色圓點，顏色為該 collection 中數量最多的型別
+- Collections 清單下方新增 **View all collections** 連結，指向 `/collections`
+- item 相關查詢函式放在 `src/lib/db/items.ts`，寫法參考 `src/lib/db/collections.ts`
+- **不做**：`/items/[type]` 與 `/collections` 路由本身（連結目前仍會 404）、item drawer
 
-分支：`feature/dashboard-items`
+分支：`feature/stats-sidebar`
 
 ## Notes
 
+### 與 spec 前提的差異
+
+- **統計卡已接資料庫**：Dashboard Collections 功能已將四格改查資料庫（`getItemCounts`、`getCollectionCounts`），本次只確認數字與側邊欄一致，不重做
+- **`src/lib/db/items.ts` 已存在**：spec 寫「建立」，實際是在既有檔案新增函式
+
 ### 資料權限
 
-沿用上一個功能的做法：`src/lib/db/items.ts` 的函式**必填 `userId`**，一律 `where: { userId, deletedAt: null }`；頁面以 `getCurrentUserId()` 取得 demo 使用者 id，找不到時兩個區塊皆為空。
+沿用既有做法：db 函式必填 `userId`、一律排除 `deletedAt`；經 join table 的關聯另限制 `item.userId`。側邊欄以 `getCurrentUserId()` 取得 demo 使用者，找不到時各區塊為空。
+
+系統型別本身不屬於任何使用者（`userId` 為 null），但型別旁的 **item 數量只能計算該使用者的 items**。
 
 ### 實作方向
 
-- **型別**：新增 `src/types/items.ts` 定義卡片用的資料形狀（含型別的 icon／color、tag 名稱陣列）；`ItemCard` 改吃這個型別，不再依賴 mock 的 `Item` 與 `getItemType`
-- **Pinned**：`pinnedAt` 不為 null，依 `pinnedAt` 由新到舊
-- **Recent Items**：依 `createdAt` 由新到舊，取 10 筆；pinned 與 recent 是不同維度，同一筆可同時出現在兩區（維持現行行為）
-- **避免 N+1**：`itemType` 與 tags 以 `include`／`select` 隨 item 一次載入，不在卡片層各自查詢
-- **Tags**：經由 `ItemTag` join table 取得；tag 本身帶 `userId`，查詢時一併限制 `tag.userId`，避免 join table 不帶擁有者造成跨使用者資料混入
-- 日期序列化：Prisma 回傳 `Date`，傳給元件前確認與 `formatDate`（en-US + UTC）的輸入型別相符
-- 型別圖示顏色維持 inline style（色碼由資料決定，Phase 2 已記錄的例外）
-- 頁面已呼叫 `await connection()`，維持動態渲染
+- **AppSidebar 取資料**：目前是 layout 內的同步元件、直接 import mock。改為 async server component 查詢資料庫；完成後確認 build 輸出 `/dashboard` 仍為 `ƒ (Dynamic)`，必要時在側邊欄也呼叫 `connection()`
+- **型別數量**：以一次 `groupBy`（依 `itemTypeId`）計算，再與系統型別清單合併，不逐型別各查一次；數量為 0 的型別仍顯示
+- **型別排序**：`ItemType` 沒有排序欄位，以固定的 slug 順序常數排序（對齊 `project-overview.md` §8 表格），確保穩定
+- **Collections**：Favorites 列出全部收藏；Recent Collections 排除收藏、依 `createdAt` 由新到舊（`id` 為次要鍵）
+- **圓點顏色**：沿用 `collections.ts` 的 `summarizeTypes` 規則（數量最多、同數量依名稱排序），與主區 `CollectionCard` 邊框色一致；空 collection 使用中性色
+- 型別色與圓點色維持 inline style（資料驅動，Phase 2 已記錄的例外）
+- layout 與 page 各自查詢 collections，屬於不同區塊的兩次查詢，不是 N+1
 
-### 決定：調整 seed 補上 pinned 與 tags（經使用者確認）
+### 決定（經使用者確認）
 
-demo 資料原本沒有任何 `pinnedAt` 與 tag，Pinned 區塊與 tag badge 兩條路徑無法在瀏覽器驗證。選擇改 seed 而非手動改資料，讓 demo 資料固定涵蓋這兩種情況：
+- Recent Collections 最多 **10 筆**，其餘由 View all collections 連結進入
+- 圓點與 `Folder` 圖示**並列**，數量 badge **保留**
+- 底部使用者區**一併改讀** demo 使用者（名稱、email、縮寫），側邊欄不再 import `src/lib/mock-data.ts`
 
-- `DemoItem` 新增 `tags`（必填）與 `pinned`；18 筆 items 皆有 tag，3 筆釘選（useDebounce & useLocalStorage、Code review、Deploy to Vercel with migrations），`pinnedAt` 依出現順序遞減，排序穩定
-- 重建時一併刪除 demo 使用者的 tags；tags 先以 `createManyAndReturn` 建立，item 再以 `tagId` 連結（seed 的 item 用 unchecked input，無法巢狀 `connectOrCreate`）
+### 決定：seed 補上收藏的 collections（經使用者確認）
 
-### 已知情況
+demo 資料原本沒有任何收藏的 collection，Favorites 區塊與星號路徑無法在瀏覽器驗證。比照上一個功能補 pinned 的做法改 seed：
 
-- 側邊欄仍讀 mock 資料，依 spec 本次不處理
-- 刪除 `src/lib/item-types.ts`：`ItemCard` 改吃 `ItemSummary` 後不再有任何引用（經使用者確認）
+- `DemoCollection` 新增選填的 `isFavorite`；React Patterns 與 AI Workflows 設為收藏（最早建立的兩個），Recent Collections 仍剩 3 筆，兩個區塊皆有資料
+- seed 輸出補上 favorites 數量；`scripts/test-db.ts` 未檢查 `isFavorite`，不需調整
+- `src/lib/mock-data.ts` 已無任何引用，經使用者確認先保留
 
 ### 實作結果
 
-- `src/lib/db/items.ts` 新增 `getPinnedItems`、`getRecentItems`，共用私有的 `findItemSummaries`：`userId`／`deletedAt` 放在呼叫端條件之後無法覆寫，tags 關聯另限制 `tag.userId` 並依名稱排序
-- 排序加上 `id` 作為同值時的次要鍵：seed 以巢狀 create 建立的同一 collection 內 items 的 `createdAt` 完全相同，不加的話列表順序不穩定（瀏覽器實測時發現）
-- 新增 `src/types/items.ts`（`ItemSummary`、`ItemTypeSummary`）；`ItemCard` 改吃 `ItemSummary`，description 為空時不渲染
-- `formatDate` 參數由 ISO 字串改為 `Date`（唯一呼叫端是 `ItemCard`）
-- 頁面五個查詢以 `Promise.all` 平行執行；Pinned 為空時整個 section 不渲染，Recent Items 為空時顯示 `No items yet.`
+- `src/lib/db/items.ts` 新增 `getSystemItemTypesWithCounts`：系統型別（`isSystem` 且 `userId` 為 null）與一次 `groupBy` 的數量合併，依 `SYSTEM_TYPE_ORDER` 排序
+- `src/lib/db/collections.ts` 抽出私有的 `findCollectionSummaries`（沿用 items 的寫法，`userId`／`deletedAt` 無法被覆寫），新增 `getFavoriteCollections`、`getRecentNonFavoriteCollections`（上限 10）；排序補上 `id` 次要鍵，主區 Collections 同樣受益
+- `src/lib/current-user.ts` 新增 `getCurrentUser()`（id、name、email），以 React `cache()` 包起來，layout 與頁面同一請求只查一次；`getCurrentUserId()` 改為呼叫它，介面不變
+- 新增 `src/types/user.ts`（`CurrentUser`）；`src/types/items.ts` 新增 `ItemTypeWithCount`
+- `AppSidebar` 改為 async server component，呼叫 `connection()` 後以 `Promise.all` 平行查詢；拆成 `ItemTypeMenuItem`、`FavoriteCollectionMenuItem`、`RecentCollectionMenuItem`、`UserMenu`；圖示改用 `TypeIcon`。找不到使用者時只顯示 logo；沒有收藏時 Favorites 區塊不渲染
 
 ### 驗證結果（Development，瀏覽器實測）
 
-- seed 連跑兩次結果相同（collections 5／items 18／tags 26／pinned 3），`npm run test:db` 全數 PASS，tag 總數 26 無重複
-- Pinned：3 張，依釘選順序 useDebounce & useLocalStorage → Code review → Deploy to Vercel with migrations，皆有 pin 圖示，邊框色分別為 snippets 藍、prompts 紫、commands 橘
-- Recent Items：10 張，依 `createdAt` 由新到舊，重新整理後順序不變；已釘選的 Deploy to Vercel 同時出現在兩區
-- Tag badge 依名稱排序顯示；統計卡維持 18 Items／5 Collections／0／0
-- 桌面與 390px 手機寬度皆無水平捲動；瀏覽器主控台無錯誤或警告
-- `tsc --noEmit`、lint、build 皆通過，`/dashboard` 為 `ƒ (Dynamic)`
+- Types：7 種依 §8 順序，數量 Snippets 4／Prompts 3／Commands 5／Notes 0／Files 0／Images 0／Links 6，加總 18 與統計卡一致；圖示色與型別色相符，連結為 `/items/[slug]`
+- Recent Collections：5 筆，每筆 Folder 圖示 + 圓點 + 數量 badge；圓點色與主區 `CollectionCard` 左邊框色逐一相符（Design Resources 綠、Terminal Commands 橘、DevOps 綠、AI Workflows 紫、React Patterns 藍）；下方為 View all collections → `/collections`
+- 底部使用者區顯示 Demo User／demo@devstash.io，縮寫 DU
+- Favorites：尚無收藏時區塊正確不渲染；seed 補上收藏後顯示 AI Workflows、React Patterns 兩筆，皆帶星號，Recent Collections 剩 Design Resources／Terminal Commands／DevOps 三筆；統計卡 Favorite Collections 為 2，主區兩張卡片同樣帶星號
+- seed（`SEED_DEMO=1`）連跑兩次結果相同（collections 5，其中 favorites 2／items 18／tags 26／pinned 3），`npm run test:db` 6/6 PASS
+- 桌面與 390px 手機寬度（drawer）皆無水平捲動；瀏覽器主控台無錯誤或警告
+- `tsc --noEmit`、lint、build 皆通過，`/dashboard` 仍為 `ƒ (Dynamic)`
 
 ## History
 
@@ -90,4 +99,5 @@ demo 資料原本沒有任何 `pinnedAt` 與 tag，Pinned 區塊與 tag badge �
 - **Dashboard Collections 接上資料庫完成**（`96e9d30`）：依 `context/features/dashboard-collections-spec.md`，主區 Collections 區塊與四張統計卡改讀 Neon。新增 `src/lib/db/collections.ts`（`getRecentCollections`、`getCollectionCounts`）、`src/lib/db/items.ts`（`getItemCounts`），函式皆必填 `userId` 並排除 `deletedAt`；items 關聯另限制 `item.userId`，因 join table 不帶擁有者。尚無 Auth，以 `src/lib/current-user.ts` 的 `getCurrentUserId()` 暫查 demo 使用者，找不到時顯示空狀態。`CollectionCard` 邊框色取數量最多的型別（同數量依名稱排序），底部列出全部型別圖示。統計卡四格皆改查資料庫（spec 只寫 collection 統計，經使用者確認擴及 items 兩格）。頁面呼叫 `await connection()` 避免 build 時預先渲染，`/dashboard` 為動態路由。瀏覽器實測桌面與 390px 手機寬度，build、lint、tsc 通過
 - 首頁導向 dashboard（`eaf4401`）：尚無 landing page，`src/app/page.tsx` 改為 `redirect("/dashboard")`，避免首頁只有一行 `devstash` 字樣而看似全黑。curl 驗證 307 → `/dashboard` 200
 - **Dashboard Items 接上資料庫完成**（`f8a6618`）：依 `context/features/dashboard-items-spec.md`，主區 Pinned 與 Recent Items 改讀 Neon。`src/lib/db/items.ts` 新增 `getPinnedItems`、`getRecentItems`，共用的查詢函式必填 `userId`、排除 `deletedAt`，tags 關聯另限制 `tag.userId`；排序以 `id` 為次要鍵，因 seed 巢狀建立的同一 collection 內 items `createdAt` 相同。新增 `src/types/items.ts`，`ItemCard` 改吃 `ItemSummary`（型別決定圖示與邊框色），`formatDate` 改收 `Date`。沒有 pinned items 時整個 Pinned 區塊不渲染。seed 為 18 筆 demo items 補上 tags（26 個）與 3 筆 pinned，重建時一併清除 demo 使用者的 tags（經使用者確認改 seed 而非手動改資料）。刪除不再使用的 `src/lib/item-types.ts`。seed 連跑兩次冪等、`test:db` 全數 PASS；瀏覽器實測桌面與 390px 手機寬度，build、lint、tsc 通過
-- **待辦**：production 分支仍是空的（無表、無資料），需依序執行 `prisma migrate deploy` 與 `prisma db seed`（**不設** `SEED_DEMO`），並在該次呼叫覆寫 `DATABASE_URL_UNPOOLED`，勿改動 `prisma.config.ts`。Dashboard 側邊欄仍直接 import `src/lib/mock-data.ts`，與主區的真實資料不一致
+- **Stats 與側邊欄接上資料庫完成**（`b4ef0a0`）：依 `context/features/stats-sidebar-spec.md`，側邊欄改讀 Neon。`src/lib/db/items.ts` 新增 `getSystemItemTypesWithCounts`（系統型別 + 一次 `groupBy` 的數量，只計目前使用者的 items，依 §8 順序排序）；`src/lib/db/collections.ts` 抽出共用的 `findCollectionSummaries`，新增 `getFavoriteCollections`、`getRecentNonFavoriteCollections`（上限 10），排序補上 `id` 次要鍵。`AppSidebar` 改為 async server component 並呼叫 `connection()`：Favorites 保留星號，Recent Collections 以圓點標示主要型別色（與 `CollectionCard` 邊框色一致）並保留數量 badge，新增 View all collections 連結；底部使用者區改讀 demo 使用者，`getCurrentUser()` 以 React `cache()` 讓 layout 與頁面同一請求只查一次。統計卡已於先前接上資料庫，本次確認型別數量加總與之一致。seed 將 React Patterns、AI Workflows 設為收藏以實測 Favorites（經使用者確認）。seed 連跑兩次冪等、`test:db` 6/6 PASS；瀏覽器實測桌面與 390px 手機寬度，build、lint、tsc 通過
+- **待辦**：production 分支仍是空的（無表、無資料），需依序執行 `prisma migrate deploy` 與 `prisma db seed`（**不設** `SEED_DEMO`），並在該次呼叫覆寫 `DATABASE_URL_UNPOOLED`，勿改動 `prisma.config.ts`。`src/lib/mock-data.ts` 已無任何引用，經使用者確認暫時保留
