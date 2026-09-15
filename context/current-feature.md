@@ -2,68 +2,60 @@
 
 <!-- Feature Name -->
 
-Prisma + Neon PostgreSQL 初始 schema
+Dashboard Collections 接上資料庫
 
-完整規格：@context/features/database-spec.md
+完整規格：@context/features/dashboard-collections-spec.md
 
 ## Status
 
 <!-- Not Started|In Progress|Completed -->
 
-Completed
+Not Started
 
 ## Goals
 
 <!-- Goals & requirements -->
 
-- 以 `project-overview.md` §3 的資料模型建立初始 Prisma schema
-- 含 Auth.js v5 模型（Account / Session / VerificationToken）
-- 適當的索引與 cascade 刪除規則
-- 一律產生 migration，不用 `db push`
+- 主區的 Collections 區塊改用 Neon + Prisma 的真實資料，取代 `src/lib/mock-data.ts`；外觀維持現狀（參考 `context/screenshots/dashboard-ui-main.png`）
+- 新增 `src/lib/db/collections.ts` 放資料查詢函式，在 server component（`src/app/dashboard/page.tsx`）直接呼叫
+- 顯示最近的 collections（最多 6 張卡片），依 `createdAt` 由新到舊
+- **卡片左邊框色** = 該 collection 中數量最多的型別色
+- **卡片底部小圖示** = 該 collection 內出現的所有型別
+- 卡片上的 item 數量改為真實數字
+- **統計卡四格**（Items、Collections、Favorite Items、Favorite Collections）全部改由資料庫 `count()` 取得（經使用者確認，見 Notes）
+- **不做**：collection 底下的 items 列表（spec 明確延後）、Pinned／Recent Items 區塊、側邊欄
 
-分支：`feature/database-schema`
+分支：`feature/dashboard-collections`
 
 ## Notes
 
 <!-- Any extra notes -->
 
-### 版本決策：Prisma 7.10.0（不是 8）
+### 資料權限：尚無登入，暫以 demo 使用者代替
 
-spec 原本寫「IMPORTANT! Use Prisma 8」，但查證後 **Prisma 8 尚未 GA**（spec 隨後已更正為 Prisma 7，連結也換成 v7 升級指南）：
+Auth.js（建置順序第 3 步）還沒做，沒有 `session.user.id`。但 §4.3 要求每個 Item／Collection 查詢都帶 `userId`，而且要從 repository 函式層強制。做法：
 
-| 套件                    | `latest` tag  | 說明                     |
-| ----------------------- | ------------- | ------------------------ |
-| `prisma` (CLI)          | `8.0.0-rc.15` | release candidate        |
-| `@prisma/client`        | `7.10.0`      | 沒有 8.x 穩定版          |
-| `@prisma/adapter-pg`    | `7.10.0`      | 沒有 8.x 穩定版          |
-| `@prisma/orm-toolchain` | `8.0.0-rc.11` | v8 CLI 的相依，同樣是 RC |
+- `src/lib/db/collections.ts` 的每個函式都**必填 `userId` 參數**，函式內一律 `where: { userId, deletedAt: null }`
+- 頁面暫時以 email 查出 `demo@devstash.io` 的 id 再傳入；這段集中在一個函式，接上 Auth 後只換這一處
+- 找不到 demo 使用者時（例如 production 刻意沒有 demo 資料）顯示空狀態，不拋錯
 
-只有 CLI 把 RC 掛上 `latest`；應用程式實際 import 的 client 與 adapter 都還在 7.10.0。
-Prisma 官方文件已切換為 v8（`contract.prisma`、`// use prisma-8` 指示詞、拿掉 `datasource`/`generator` 區塊、原生型別直接當欄位型別），但那是文件先行、套件未跟上。
+### 實作方向
 
-**決定：用 7.10.0 穩定版**（經使用者確認）。官方有 v7→v8 漸進式共存升級指南，日後升級是受支援的路徑，不必現在把地基押在 RC 上。
+- **型別**：新增 `src/types/collections.ts` 定義卡片用的資料形狀（含 item 數量、主要型別、型別清單）；`CollectionCard` 改吃這個型別，不再依賴 mock 的 `Collection` 與 `getItemType`
+- **主要型別的計算不能有 N+1**（§3.4）：一次查出 6 個 collection 與其 items 的 `itemType`（Prisma 以一個關聯一次查詢的方式載入，不是每張卡片各查一次），在 JS 端彙總各型別數量。同數量時以型別名稱排序，確保結果穩定
+- 排除軟刪除：collection 與 item 的 `deletedAt` 皆須為 null
+- 空的 collection：沒有主要型別，左邊框退回預設邊框色、不顯示圖示
+- **動態渲染**：頁面若沒有使用任何動態 API，Next.js 會在 build 時預先渲染，資料就凍結在 build 當下，而且 build 需要連得到資料庫。需明確設為動態渲染
+- 型別圖示顏色維持 inline style（色碼由資料決定，Phase 2 已記錄的例外）
+- 已確認 seed 寫入的 5 個 collection 的 `createdAt` 各不相同（Prisma 在用戶端產生時間戳），依 `createdAt` 排序結果穩定
 
-> 附帶更正：`project-overview.md` §7 原寫「Prisma 8 已經發布」—— 這句不成立，已改為「尚未 GA、文件先行」並附上 npm 實況表。
+### 決定：統計卡四格都查資料庫（經使用者確認）
 
-### Neon 分支決策
+spec 只寫「更新 collection 統計」。若只換 collection 相關兩格，Items／Favorite Items 仍是 mock 的 10 筆，同一排數字來源不一致。四格都是單純的 `count()`（同樣帶 `userId`、排除 `deletedAt`），故一併改掉。
 
-spec 寫「development 分支放在 `DATABASE_URL`，production 另開」，但前一輪的 `neon link` 指向 production。
-已重新 link 到既有的 `Development` 分支（`br-broad-pine-b312blp9`），`.env.local` 的 `DATABASE_URL` / `NEON_BRANCH` 已更新。production（`br-calm-boat-b3wjd64b`）只會被 `prisma migrate deploy` 碰到。
+### 已知不一致
 
-### 實作決策
-
-- **搜尋只做階段一（pg_trgm）**：migration 裡建了 `pg_trgm` extension 與三個 GIN trgm 索引（`Item.title`、`Item.content`、`Tag.name`）。ER 圖上的 `searchVector` tsvector 欄位**刻意未建** —— §5 寫明那是階段二，等項目數破萬或需要相關性排序再上。
-- **`Item.description` 有建**：ER 圖沒列，但 §5 的 tsvector 範例引用了 `coalesce(description, '')`，視為規格的一部分。
-- **partial unique index 手寫在 migration**：`ItemType_slug_system_key`（`WHERE "userId" IS NULL`）。已實測三種情況 —— 重複的系統 slug 被擋、使用者自訂型別可沿用系統 slug、同一使用者不可重複自己的 slug（後者由 `@@unique([userId, slug])` 擋）。
-- **onDelete 規則**：`User` → 全部 Cascade；`Item.itemTypeId` → **Restrict**（刪型別不該讓既有項目變孤兒）；`Collection.defaultTypeId` 與 `AiUsage.itemId` → SetNull（用量記錄須保留供計費稽核）。
-- **`PendingDeletion.purgedAt`** 而非 `deletedAt`，避免與軟刪除語意混淆。
-- **`prisma.config.ts` 手動載入 `.env.local`**：Prisma CLI 只讀 `.env`，Neon 把連線字串寫進 `.env.local`。migration 走 `DATABASE_URL_UNPOOLED` 直連（pooler 不保留 session 狀態，schema engine 需要 advisory lock）；執行期的 `src/lib/prisma.ts` 走 pooled 的 `DATABASE_URL`。
-- **generated client 產到 `src/generated/prisma`**（Prisma 7 起不放 `node_modules`），已加入 `.gitignore`。
-- **`npx prisma migrate dev` 在本機會「跑完卻不結束」**：migration 實際已套用成功（`_prisma_migrations` 有記錄、表與索引都在），但行程掛住不退出。驗證請改用 `npx prisma migrate status`，不要重跑 `migrate dev`。
-- **seed script 已完成並跑在 Development**：`prisma/seed.ts` 寫入 7 種系統 ItemType（`isSystem = true`、`userId = null`），色碼與圖示對齊 §8 的視覺對照表；Files 與 Images 依 §6 設 `isProOnly = true`，其餘 5 種為 false。mock 的 `itemCount` 未寫入 —— 真實數字來自 `count()`。
-- **seed 用 findFirst + create/update，不是 `upsert`**：系統型別的 `userId` 為 null，而 Prisma 的 `@@unique([userId, slug])` 複合唯一輸入不接受 null，無法作為 upsert 的 where。擋重複的仍是 migration 裡的 partial unique index。已實測連跑兩次：第一次 created 7、第二次 updated 7，無重複列。
-- **seed 以 `tsx` 執行**（`prisma.config.ts` 的 `migrations.seed`）：改用 `node prisma/seed.ts` 會因 Node 的 ESM 解析要求副檔名而失敗，而加上 `.ts` 需要為整個專案開 `allowImportingTsExtensions`，不划算。故加 `tsx` 為 devDependency。
-- **npm audit 有 4 個 high**（`deepmerge-ts`、`mysql2`），全部來自 `prisma` CLI 這個 devDependency 的傳遞相依，不進執行期 bundle，且 `mysql2` 我們根本用不到（走 Postgres）。`npm audit fix --force` 會降版到 prisma 6.19.3，更糟，故不處理。
+**側邊欄**仍讀 mock 資料，會出現主區是 demo 的 5 個 collections、側邊欄卻是 mock 的 6 個；依 spec 本次不處理。
 
 ## History
 
@@ -81,7 +73,9 @@ spec 寫「development 分支放在 `DATABASE_URL`，production 另開」，但�
 - 主區用的 shadcn 元件（`455e317`）：新增 `card`、`badge`
 - **Dashboard UI Phase 3 完成**（`906561f`）：主區內容 —— `StatsCards`（4 張統計卡，數字由陣列推導）、`CollectionCard`（左邊框為主要型別色）、`ItemCard`（型別圖示方塊、pin/星號、tag badge、日期）；頁面組成為統計卡 → Collections 網格 → Pinned → 10 筆 Recent Items。新增 `src/lib/format.ts`（固定 en-US + UTC 避免 hydration 不一致）、`src/lib/item-types.ts`、`TypeIcon` 元件（以 `createElement` 規避 `react-hooks/static-components`）。桌面與手機皆已實測，build 與 lint 通過。**Dashboard UI 三階段至此全部完成**
 - Neon 專案設定（`c975143`）：`neon skills` / `neon mcp` / `neon link` / `neon config init`，`neon.ts` 設為空 policy；`neon deploy` 對 production 為 no-op。`.neon` 與 `.env.local` 均已 gitignore。**注意**：`neon mcp -y` 會鑄造帳號層級 API key 並寫進 8 個家目錄設定檔（id `3337195`，以 `neon api-keys revoke 3337195` 撤銷）
-- **Prisma + Neon 初始 schema 完成**（`f9d2f61`）：13 個 model（Auth 4 / Core 6 / Ops 3）與 5 個 enum，依 `project-overview.md` §3 的資料模型與 §3.3 的修正（`storageKey`、`kind` 掛 ItemType、`Tag.userId`、`pinnedAt` 時間戳、軟刪除）。migration 以 `--create-only` 產生後手寫補上 Prisma 無法表達的部分：`ItemType` 的 partial unique index（`WHERE "userId" IS NULL`）與 `pg_trgm` extension 及三個 GIN 索引。**採 Prisma 7.10.0 穩定版**（8.x 當時僅有 RC 且 client/adapter 無穩定版），並據此更正 `project-overview.md` §7 的版本說明。`prisma.config.ts` 手動載入 `.env.local` 且 migration 走 unpooled 直連；`src/lib/prisma.ts` 為執行期 singleton，走 pooled 連線。全程未使用 `db push`
+- **Prisma + Neon 初始 schema 完成**（`f9d2f61`）：13 個 model（Auth 4 / Core 6 / Ops 3）與 5 個 enum，依 `project-overview.md` §3 的資料模型與 §3.3 的修正（`storageKey`、`kind` 掛 ItemType、`Tag.userId`、`pinnedAt` 時間戳、軟刪除）。migration 以 `--create-only` 產生後手寫補上 Prisma 無法表達的部分：`ItemType` 的 partial unique index（`WHERE "userId" IS NULL`）與 `pg_trgm` extension 及三個 GIN 索引。**採 Prisma 7.10.0 穩定版**（8.x 當時僅有 RC 且 client/adapter 無穩定版），並據此更正 `project-overview.md` §7 的版本說明。`prisma.config.ts` 手動載入 `.env.local` 且 migration 走 unpooled 直連；`src/lib/prisma.ts` 為執行期 singleton，走 pooled 連線。全程未使用 `db push`。已知問題：`npx prisma migrate dev` 在本機套用成功後行程不退出，驗證改用 `prisma migrate status`；npm audit 的 4 個 high 皆來自 prisma CLI 的傳遞相依，不進執行期 bundle，`audit fix --force` 會降版故不處理
 - 系統型別 seed（`8851455`）：`prisma/seed.ts` 寫入 7 種系統 ItemType，色碼與圖示對齊 §8，Files／Images 依 §6 設 `isProOnly = true`。因系統型別的 `userId` 為 null 而 Prisma 複合唯一輸入不接受 null，改用 `findFirst` + `create`/`update` 而非 `upsert`；連跑兩次驗證冪等。seed 以 `tsx` 執行（新增 devDependency）
 - 資料庫檢查腳本（`ad035fb`）：`scripts/test-db.ts` 唯讀檢查連線／migration／pg_trgm／系統型別／資料列數，`npm run test:db`，失敗回傳非零 exit code。已對 Development（5/5）與 production（1/5）實測
-- **待辦**：production 分支仍是空的（無表、無資料），需依序執行 `prisma migrate deploy` 與 `prisma db seed`，並在該次呼叫覆寫 `DATABASE_URL_UNPOOLED`，勿改動 `prisma.config.ts`。另外 dashboard 仍直接 import `src/lib/mock-data.ts`，尚未接上資料庫
+- **Seed 範例資料完成**（`771398b`）：依 `context/features/seed-spec.md` 重寫 `prisma/seed.ts` —— demo 使用者 `demo@devstash.io`（bcryptjs 12 rounds、`plan = FREE`）、5 個 collections、18 筆 items，link 使用真實文件網址。spec 的 `isPro` 對應為 `plan`；系統型別維持複數命名以對齊 dashboard 路由與 mock 資料。**demo 資料只在 `SEED_DEMO=1` 時寫入**，避免 production 出現公開密碼的帳號（經使用者確認）。冪等做法：以 email upsert 使用者，再於同一 transaction 內刪除該使用者的 items／collections 後重建（demo 帳號內手動新增的內容會被清掉）。新增 `bcryptjs` 3.0.3 為 dependency。Development 上連跑兩次無重複；build、lint、tsc 通過
+- test-db 加入 demo 資料檢查（`c3455cf`）：第 6 項「Demo 資料」以單次 `findUnique` + include 驗證帳號（plan、emailVerified、密碼雜湊）、5 個 collection 的型別組成、TEXT/URL 欄位一致性與孤兒 item，通過後列出全部 collection 與 item；找不到 demo 使用者時為 SKIP 而非 FAIL。預期組成以常數 `EXPECTED_DEMO_COLLECTIONS` 與 seed 對照（seed 模組載入即執行，無法 import）。實測 PASS／SKIP／FAIL 三條路徑皆正確
+- **待辦**：production 分支仍是空的（無表、無資料），需依序執行 `prisma migrate deploy` 與 `prisma db seed`（**不設** `SEED_DEMO`），並在該次呼叫覆寫 `DATABASE_URL_UNPOOLED`，勿改動 `prisma.config.ts`。另外 dashboard 仍直接 import `src/lib/mock-data.ts`，尚未接上資料庫
