@@ -1,56 +1,76 @@
-# Current Feature
+# Current Feature: Add Pro Badge to Sidebar
 
-側邊欄在沒有使用者時仍顯示系統型別
+在側邊欄的 Files 與 Images 型別加上 PRO 標示
 
-來源：Vercel production 部署後側邊欄只剩 logo（使用者回報截圖）
+來源：`context/features/add-pro-badge-sidebar.md`
 
 ## Status
 
-Complete
+In Progress
 
 ## Goals
 
-- 找不到目前使用者時，側邊欄仍列出 7 種系統型別，數量皆為 0，連結維持 `/items/[slug]`
-- Collections（Favorites／Recent／View all collections）與底部使用者區仍只在有使用者時顯示
-- 對 production 資料庫執行 seed 補上系統型別（**不設** `SEED_DEMO`）
-- **不做**：把 demo 資料寫進 production（經使用者確認選擇不做）、主區內容調整
+- 側邊欄 Types 區塊中，`isProOnly` 為 true 的型別（Files、Images）在名稱後方顯示 PRO badge
+- 使用 shadcn/ui 的 `Badge` 元件，樣式乾淨低調（clean and subtle），文字為全大寫 `PRO`
+- 右側既有的 item 數量 badge 維持原樣，不被 PRO 遮住
+- 其餘 5 種型別（Snippets／Prompts／Commands／Notes／Links）外觀完全不變
+- 收合成 icon 模式時 PRO 不顯示，與右側數量 badge 的行為一致
+- **不做**：Pro 權限的實際擋用（本次僅視覺標示）、Free／Pro 方案判斷、主區與其他頁面的 PRO 標示
 
-分支：`fix/sidebar-types-without-user`
+分支：`feature/add-pro-badge-sidebar`
 
 ## Notes
 
-### 原因
+### 資料來源
 
-- 尚無 Auth，`getCurrentUser()` 固定查 seed 的 demo 使用者；production 依先前決定不寫 demo 資料，因此查無使用者
-- 上一個功能的 `AppSidebar` 在查無使用者時把整個 `SidebarContent` 隱藏，連不屬於任何使用者的系統型別也一併消失
-- production 資料庫只跑過 `migrate deploy`（Vercel build 指令），尚未 seed，系統型別也不存在
+- `ItemType.isProOnly` 已存在於 schema，seed 只對 Files／Images 設為 true（依 §6，Free 方案不含檔案與圖片上傳）。badge 因此由 `isProOnly` 驅動，**不寫死 slug**
+- `src/types/items.ts` 的 `ItemTypeWithCount` 與 `src/lib/db/items.ts` 中 `getSystemItemTypes()` 的 `select` 都要補上 `isProOnly`。`SystemItemType` 是 `Omit<ItemTypeWithCount, "itemCount">`，補在後者即一併帶到前者
+- 無使用者的路徑（`AppSidebar` 走 `getSystemItemTypes()` 的分支）同樣會取得 `isProOnly`，PRO 照樣顯示、數量為 0
 
-### 實作方向
+### 版面決策（經使用者確認）
 
-- `src/lib/db/items.ts` 抽出 `getSystemItemTypes()`：系統型別不含使用者資料，不需要 `userId`，排序邏輯移到這裡；`getSystemItemTypesWithCounts(userId)` 改為呼叫它再合併數量，`userId` 維持必填
-- `AppSidebar` 查無使用者時以 `getSystemItemTypes()` 取得型別、數量補 0；Types 區塊在型別清單為空時不渲染（例如尚未 seed）
+- PRO 放在型別名稱後方 inline，右側的 item 數量保留：
 
-### Production seed
+  ```
+  ▢  Files   PRO                 0
+  ▨  Images  PRO                 0
+  ```
 
-- 連線字串先前曾貼進對話，**需先在 Neon 重設 `neondb_owner` 密碼**，並更新 Vercel 的 `DATABASE_URL`／`DATABASE_URL_UNPOOLED`
-- seed 讀 `DATABASE_URL_UNPOOLED`；dotenv 不覆寫已存在的環境變數，只在該次指令覆寫它指向 production 直連字串，不改 `.env.local`／`prisma.config.ts`
+- `SidebarMenuBadge` 是 `absolute right-1`，不占版面寬度，所以名稱加 PRO 之後必須留出右邊距，否則 PRO 會被數量壓在底下
+- `SidebarMenuBadge` 自帶 `group-data-[collapsible=icon]:hidden`；PRO 需要同樣在 icon 模式隱藏，否則側邊欄只剩圖示時會溢出
+
+### 樣式
+
+- `Badge` 的 `variant="outline"` 最接近 spec 要的「乾淨低調」；預設 `h-5`／`text-xs` 在側邊欄單列中偏大，需縮小字級與 padding
+- 文字直接寫 `PRO`，不靠 CSS `uppercase` 轉換
+- PRO 三個字母對螢幕閱讀器語意不足，需補無障礙說明（例如 `sr-only` 或 `title`）
+
+### 驗證方式
+
+- 桌面、收合（icon）、390px 手機三種側邊欄狀態
+- 有使用者（demo）與無使用者兩條路徑；無使用者路徑本機無法重現（開發資料庫有 demo 使用者），沿用上一個功能的做法記錄下來
+- `tsc --noEmit`、`npm run lint`、`npm run build`
 
 ### 實作結果
 
-- `src/lib/db/items.ts` 新增 `getSystemItemTypes()`（不含使用者資料，故不需要 `userId`），排序邏輯移入；`getSystemItemTypesWithCounts(userId)` 改為呼叫它再合併 `groupBy` 的數量，`userId` 維持必填
-- `AppSidebar`：`SidebarContent` 不再整塊綁在使用者存在與否，Types 改以 `itemTypes.length > 0` 判斷；分隔線、Favorites、Recent Collections、View all collections 與底部使用者區仍包在 `user &&` 內
-- 查無使用者時以 `getSystemItemTypes()` 取得型別，數量補 0
+- `src/types/items.ts`：`ItemTypeWithCount` 補上 `isProOnly: boolean`，`SystemItemType`（`Omit<…, "itemCount">`）一併帶到
+- `src/lib/db/items.ts`：`getSystemItemTypes()` 的 `select` 補 `isProOnly`；有／無使用者兩條路徑都拿得到
+- `src/components/dashboard/AppSidebar.tsx`：新增 `ProBadge`（`Badge variant="outline"`、`h-4 px-1 text-[10px]`、`text-sidebar-foreground/60`），以 `type.isProOnly &&` 渲染在名稱後方；`mr-8` 讓出右側數量 badge 的位置（量測結果見下），`group-data-[collapsible=icon]:hidden` 與 `SidebarMenuBadge` 行為一致
+- 視覺文字為 `aria-hidden` 的 `PRO`，另附 `sr-only` 的「Pro plan only」供螢幕閱讀器
+- 型別名稱的 `<span>` 明確加上 `truncate`：badge 成為最後一個 span 後會吃掉 `SidebarMenuButton` 的 `[&>span:last-child]:truncate`，不補的話長名稱不再截斷
+- 右邊距以 DOM 量測決定：PRO 右緣與數量 badge 左緣的間距，現況（短名稱 + 1 位數）為 114px；最壞情況（名稱長到把 PRO 推向右側、數量又是 3 位數）`mr-6` 為 −2px 會重疊，`mr-8` 為 +6px。現有 7 種系統型別名稱都短，觸發不到，但改為 `mr-8` 後徹底排除
 
 ### 驗證結果
 
-- 本機（有 demo 使用者，回歸測試）：Types 7 種數量不變、Favorites 2 筆帶星號、Recent Collections 3 筆加 View all、使用者區與分隔線皆在；主控台無錯誤或警告
-- 「無使用者」路徑本機無法重現（開發資料庫有 demo 使用者），需於 production 部署後確認
-- production seed（**未設** `SEED_DEMO`）：`created: 7`，demo 資料依預期跳過；`test:db` 以 production 連線執行為 6/6（Demo 資料為 SKIP），資料列數 user 0 / item 0 / collection 0 / tag 0
-- `tsc --noEmit`、lint、build 皆通過，`/dashboard` 仍為 `ƒ (Dynamic)`
+- 桌面（1568px）：Files／Images 顯示 PRO，右側數量 0 未被遮住；其餘 5 種型別外觀不變
+- 手機（Playwright 390px，側邊欄為 Sheet drawer）：同上，主控台 0 errors / 0 warnings
+- `tsc --noEmit`、`npm run lint`、`npm run build` 皆通過，`/dashboard` 仍為 `ƒ (Dynamic)`
+- 「無使用者」路徑本機無法重現（開發資料庫有 demo 使用者），沿用上一個功能的處理：`isProOnly` 由同一個 `getSystemItemTypes()` 提供，該路徑同樣會顯示 PRO
 
 ### 已知情況
 
-- `scripts/test-db.ts` 開頭印出的「Neon 分支」讀 `.env.local` 的 `NEON_BRANCH`，不會跟著實際連線的資料庫變動：以 production 連線執行時仍顯示 Development，判斷實際連到哪個資料庫要看資料列數
+- 本專案的 `Sidebar` 用預設的 `collapsible="offcanvas"`，桌面收合時整個側邊欄滑出畫面，**沒有 icon 模式**。`group-data-[collapsible=icon]:hidden` 目前不會觸發，是與 `SidebarMenuBadge` 對齊的預防性寫法；Goal 寫的「收合成 icon 模式時 PRO 不顯示」在現況下無從驗證
+- 驗證時 Chrome 的網頁翻譯會在每個名稱後插入中文，那不是本專案的輸出；390px 截圖以 Playwright 取得，未受影響
 
 ## History
 

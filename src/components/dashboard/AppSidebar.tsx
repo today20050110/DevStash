@@ -4,6 +4,7 @@ import { Folder, Layers, Settings, Star } from "lucide-react";
 
 import { TypeIcon } from "@/components/dashboard/TypeIcon";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import {
   Sidebar,
   SidebarContent,
@@ -73,6 +74,24 @@ function getInitials(user: CurrentUser): string {
     .toUpperCase();
 }
 
+/**
+ * 型別名稱後方的 PRO 標示。
+ * 右側的數量 badge 是 absolute right-1，不占版面寬度，故留出右邊距避免被蓋住
+ * （mr-8 是量過的：長名稱把 PRO 推到右側、數量又是 3 位數時，mr-6 會差 2px）；
+ * 收合成 icon 模式時一併隱藏，與 SidebarMenuBadge 的行為一致。
+ */
+function ProBadge() {
+  return (
+    <Badge
+      variant="outline"
+      className="mr-8 h-4 px-1 text-[10px] leading-none font-semibold tracking-wide text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden"
+    >
+      <span aria-hidden>PRO</span>
+      <span className="sr-only">Pro plan only</span>
+    </Badge>
+  );
+}
+
 function ItemTypeMenuItem({ type }: { type: ItemTypeWithCount }) {
   return (
     <SidebarMenuItem>
@@ -80,7 +99,9 @@ function ItemTypeMenuItem({ type }: { type: ItemTypeWithCount }) {
         <Link href={`/items/${type.slug}`}>
           {/* Colour comes from the data, so it cannot be a static utility class. */}
           <TypeIcon name={type.icon} style={{ color: type.color }} />
-          <span>{type.name}</span>
+          {/* 名稱明確 truncate：badge 會成為最後一個 span，蓋掉按鈕的 span:last-child 規則 */}
+          <span className="truncate">{type.name}</span>
+          {type.isProOnly && <ProBadge />}
         </Link>
       </SidebarMenuButton>
       <SidebarMenuBadge>{type.itemCount}</SidebarMenuBadge>
