@@ -1,74 +1,16 @@
-# Current Feature: Quick Wins
-
-一批風險極低的清理：連線池 fail-fast、pinned 上限、色彩相容、matchMedia、移除未用相依、README
-
-來源：`context/features/quick-wins.md`（2026-09-20 兩次程式碼掃描）
+# Current Feature
 
 ## Status
 
-In Progress
+Not Started
 
 ## Goals
 
-- **Q1** `src/lib/prisma.ts`：`PrismaPg` 補 `max: 5` 與 `connectionTimeoutMillis: 10_000`，消除「取連線無限期等待」
-- **Q2** `src/lib/db/items.ts`：`getPinnedItems` 補 `PINNED_ITEMS_LIMIT = 10` 與 `take`，與同檔案的 `getRecentItems` 一致
-- **Q3** `src/components/dashboard/ItemCard.tsx`：`${color}1a` 改為 `color-mix(in srgb, ${color} 10%, transparent)`，不再假設色碼是 6 碼 hex
-- **Q4** `src/hooks/use-mobile.ts`：`MediaQueryList` 模組層建一次並共用，`subscribe` 與 `getSnapshot` 不再各建一個
-- **Q5** 移除未被引用的相依 `@neon/env`
-- **Q6** `README.md` 換掉 create-next-app 樣板，改成這個專案真正的啟動步驟
-- 六項皆不動資料模型、不需 migration、不改任何元件的 props 介面
-- **不做**：collection 查詢重構（另有 spec）、重複常數抽取、`AppSidebar` 拆檔、`seed.ts` 的 `buildPinnedAt`、`cn` 入口統一、`.env.production` 的處理
-
-分支：`feature/quick-wins`
+<!-- 以 /feature load 載入 spec 後填入；成功長什麼樣子 -->
 
 ## Notes
 
-### 關於「N+1」
-
-兩次掃描都明確查過，**這個專案目前沒有 N+1**。所有元件（`CollectionCard`、`ItemCard`、`StatsCards`、`TypeIcon`）都只吃預先彙總好的 props，沒有任何元件自己查資料庫；型別數量是一次 `groupBy`。
-
-最接近的是 `src/lib/db/collections.ts:50-63` 的**關聯過度載入** —— 它是「單一查詢取回過多列」，不是「每列各發一次查詢」。那件事已寫成 `context/features/collection-query-perf.md`，牽涉 `$queryRaw` 與三個 export 的重構，不屬於低風險，故不併入本批。該 spec 保留在 `context/features/`，隨時可以 `/feature load collection-query-perf` 接續。
-
-### 各項的依據
-
-- **Q1**：已讀 `node_modules/pg-pool/index.js` 確認預設值 —— `max = 10`、`idleTimeoutMillis = 10000`，而第 206 行 `if (!this.options.connectionTimeoutMillis)` 在未設時直接不掛計時器。這是本批唯一一項「在 production 會以難以診斷的方式失效」的問題
-- **Q2**：`findItemSummaries` 只在收到 `take` 時才加上限。demo 只有 3 筆釘選，畫面不會變
-- **Q3**：`ItemType.color` 在 schema 裡只是 `String`，沒有格式約束。改完視覺應與現況無法區分
-- **Q4**：回傳值是 boolean、識別性穩定，**沒有正確性問題**，純粹是多餘的分配。檔案開頭「Rewritten from the shadcn default…」的註解要保留（History 記過日後 `shadcn add` 可能覆蓋此檔）
-- **Q5**：全專案 grep 零引用；`neon.ts` 用的是 `@neon/config/v1`，不受影響
-- **Q6**：現有 README 指向 `app/page.tsx`（本專案是 `src/app/`）、列出 yarn/pnpm/bun（本專案是 npm）
-
-### 驗證方式
-
-- Q1：`build` 與 `dev` 正常連線；另以不存在的 host 確認 10 秒內失敗而非無限等待
-- Q2：Pinned 區塊仍是 3 筆、順序不變
-- Q3：型別圖示方塊背景色以截圖與改動前比對，應無法區分
-- Q4：桌面、390px、以及跨越 768px 斷點拖曳視窗，側邊欄行為不變
-- Q6：README 中每一條指令實際跑過
-- 全部：`tsc --noEmit`、`npm run lint`、`npm run build`、`npm run test:db`
-
-### 實作結果
-
-- **Q1** `src/lib/prisma.ts:11-22`：`PrismaPg` 改為多行設定，補 `max: 5` 與 `connectionTimeoutMillis: 10_000`，兩行註解說明為何不用 pg 預設
-- **Q2** `src/lib/db/items.ts:6,124-135`：新增 `PINNED_ITEMS_LIMIT = 10`，`getPinnedItems` 補 `limit` 參數與 `take`，形狀與同檔案的 `getRecentItems` 一致
-- **Q3** `src/components/dashboard/ItemCard.tsx:24-29`：改用 `color-mix(in srgb, ${color} 10%, transparent)`，註解改寫為「`ItemType.color` 是未受約束的 String，不保證 6 碼形式」
-- **Q4** `src/hooks/use-mobile.ts:9-22`：`MediaQueryList` 以模組層 `let mql` + `getMql()` lazy 建一次，`subscribe` 與 `getSnapshot` 共用；原本說明改寫來由的註解保留
-- **Q5** `npm uninstall @neon/env`；`@neon/config` 仍在（`neon.ts` 有用）
-- **Q6** `README.md` 重寫：前置需求、`.env.local` 的三個鍵（只列鍵名）、啟動四步、指令表、migration 紀律、`context/` 導覽
-
-### 驗證結果
-
-- **Q1**：以無法路由的位址（`10.255.255.1`）實跑本專案的 `prisma` 模組，**10.1s 後**得到 `Connection terminated due to connection timeout`。改動前依 `pg-pool/index.js:206` 的 `if (!this.options.connectionTimeoutMillis)` 不會掛計時器，即無限期等待
-- **Q2**：Pinned 仍 3 張卡、Recent Items 仍 10 張，順序不變
-- **Q3**：色彩**數值相同、序列化表示不同** —— 舊寫法計算後為 `rgba(59, 130, 246, 0.1)`，新寫法為 `color(srgb 0.231373 0.509804 0.964706 / 0.1)`，通道值一一對應（59/255 = 0.231373…）。唯一實質差異是 alpha：`0x1a/255 = 0.10196` 對上 `10% = 0.1`，差 0.2%，合成到深色背景上不足 1/255，肉眼與截圖皆無法區分
-- **Q4**：1440 → 760 → 1440 實際改變 viewport，桌面側邊欄容器隨斷點正確出現／消失，回到 1440 後 Pinned 仍為 3。共用的 `MediaQueryList` 在兩個方向都能收到 change 事件
-- **Q5／Q6**：`npx prisma migrate status` 為 up to date、`npx prisma generate` 成功（驗證 README 寫的步驟真的可跑）
-- 主控台 0 errors / 0 warnings；`tsc --noEmit`、lint、build、`test:db` 6/6 全通過，`/dashboard` 仍為 `ƒ (Dynamic)`
-
-### 已知情況
-
-- Q3 的 computed style 從 `rgba()` 變成 `color(srgb …)`，若日後寫視覺回歸測試而去比對 `getComputedStyle().backgroundColor` 的字串，會需要改用色彩比較而非字串相等
-- Q6 的 README 寫明 clone 後需先 `npx prisma generate`：已確認 `prisma` 與 `@prisma/client` 都沒有會自動產生 client 的 postinstall（`prisma` 只有 `preinstall`），而 `src/generated` 是 gitignore 的
+<!-- 來源、限制、實作方向、驗證結果、已知情況 -->
 
 ## History
 
@@ -97,5 +39,6 @@ In Progress
 - **Stats 與側邊欄接上資料庫完成**（`b4ef0a0`）：依 `context/features/stats-sidebar-spec.md`，側邊欄改讀 Neon。`src/lib/db/items.ts` 新增 `getSystemItemTypesWithCounts`（系統型別 + 一次 `groupBy` 的數量，只計目前使用者的 items，依 §8 順序排序）；`src/lib/db/collections.ts` 抽出共用的 `findCollectionSummaries`，新增 `getFavoriteCollections`、`getRecentNonFavoriteCollections`（上限 10），排序補上 `id` 次要鍵。`AppSidebar` 改為 async server component 並呼叫 `connection()`：Favorites 保留星號，Recent Collections 以圓點標示主要型別色（與 `CollectionCard` 邊框色一致）並保留數量 badge，新增 View all collections 連結；底部使用者區改讀 demo 使用者，`getCurrentUser()` 以 React `cache()` 讓 layout 與頁面同一請求只查一次。統計卡已於先前接上資料庫，本次確認型別數量加總與之一致。seed 將 React Patterns、AI Workflows 設為收藏以實測 Favorites（經使用者確認）。seed 連跑兩次冪等、`test:db` 6/6 PASS；瀏覽器實測桌面與 390px 手機寬度，build、lint、tsc 通過
 - **側邊欄在沒有使用者時仍顯示系統型別**（`39f5b05`）：Vercel production 部署後側邊欄只剩 logo —— 尚無 Auth，`getCurrentUser()` 查不到 demo 使用者（production 依設計不寫 demo 資料），而 `AppSidebar` 把整個 `SidebarContent` 綁在使用者存在與否。`src/lib/db/items.ts` 抽出 `getSystemItemTypes()`（系統型別不含使用者資料，不需要 `userId`），`getSystemItemTypesWithCounts(userId)` 改為呼叫它再合併 `groupBy` 數量；`AppSidebar` 查無使用者時仍列出型別、數量為 0，Collections 與底部使用者區維持只在有使用者時顯示。同時對 production 執行 seed（**未設** `SEED_DEMO`）補上 7 種系統型別，`test:db` 以 production 連線為 6/6（Demo 資料 SKIP、資料列數全 0）
 - **側邊欄 Pro 專屬型別加上 PRO 標示**（`a3df58b`）：依 `context/features/add-pro-badge-sidebar.md`，Types 區塊中 `isProOnly` 為 true 的型別（Files／Images）在名稱後方顯示 PRO badge。`ItemType.isProOnly` 是 schema 既有欄位（seed 依 §6 對這兩者設 true），本次只是把它讀出來：`ItemTypeWithCount` 補欄位、`getSystemItemTypes()` 的 `select` 補 `isProOnly`，有／無使用者兩條路徑共用同一函式故一併涵蓋，**無 migration、無 seed 改動**。`AppSidebar` 新增 `ProBadge`（`Badge variant="outline"`、`h-4 px-1 text-[10px]`、`text-sidebar-foreground/60`），以 `type.isProOnly &&` 條件渲染而非寫死 slug；視覺文字標 `aria-hidden`，另附 `sr-only` 的 "Pro plan only"（三個大寫字母語意不足）。兩個非顯而易見的細節：（1）型別名稱的 `<span>` 必須明確加 `truncate`，因為 `Badge` 渲染成 `<span>` 後會成為最後一個子元素，搶走 `SidebarMenuButton` 的 `[&>span:last-child]:truncate`，不補的話長名稱不再截斷；（2）右邊距以 DOM 量測決定為 `mr-8` —— 數量 badge 是 `absolute right-1` 不占版面寬度，`mr-6` 在「長名稱把 PRO 推到右側 + 3 位數數量」時會重疊 2px（現有 7 種型別名稱都短，觸發不到，但 `mr-8` 留 6px 餘裕徹底排除）。桌面 1440px 與 390px 手機（Sheet drawer）實測，主控台 0 errors / 0 warnings，`tsc --noEmit`、lint、build 通過，`/dashboard` 仍為 `ƒ (Dynamic)`。**已知情況**：本專案 `Sidebar` 用預設的 `collapsible="offcanvas"`，桌面收合時整個側邊欄滑出畫面、**沒有 icon 模式**，故 `group-data-[collapsible=icon]:hidden` 目前不會觸發，是對齊 `SidebarMenuBadge` 自身寫法的預防性 class；載入 spec 時寫進 Goals 的「收合成 icon 模式時 PRO 不顯示」在現況下無從驗證
+- **六項低風險清理**（`97cc529`）：依 `context/features/quick-wins.md`，處理 2026-09-20 兩次程式碼掃描中風險極低的項目。（1）`src/lib/prisma.ts` 的 `PrismaPg` 補 `max: 5` 與 `connectionTimeoutMillis: 10_000` —— `pg-pool/index.js:206` 的 `if (!this.options.connectionTimeoutMillis)` 在未設時**不掛計時器**，等同無限期等待取得連線，Neon 冷啟動時請求會一路卡到 Vercel 函式逾時且錯誤訊息看不出是資料庫問題；以無法路由的位址（`10.255.255.1`）實跑本專案的 prisma 模組驗證，改動後 10.1s 得到 `Connection terminated due to connection timeout`。（2）`getPinnedItems` 補 `PINNED_ITEMS_LIMIT = 10` 與 `take`，與同檔案的 `getRecentItems` 一致（`findItemSummaries` 只在收到 `take` 時才加上限）。（3）`ItemCard` 的透明度改用 `color-mix(in srgb, ${color} 10%, transparent)`，不再假設 `ItemType.color` 是 6 碼 hex（schema 裡只是無約束的 `String`）—— 色彩通道值完全相同，唯 alpha 由 `0x1a/255 = 0.10196` 變為 `0.1`，差 0.2%、合成到深色背景不足 1/255。（4）`use-mobile.ts` 的 `MediaQueryList` 改為模組層 lazy 建一次並由 `subscribe` 與 `getSnapshot` 共用，無行為改變。（5）移除全專案零引用的相依 `@neon/env`（`@neon/config` 仍由 `neon.ts` 使用）。（6）`README.md` 換掉 create-next-app 樣板，改為前置需求、`.env.local` 的鍵名、啟動四步、指令表、migration 紀律與 `context/` 導覽。驗證：Pinned 仍 3 張／Recent 仍 10 張、viewport 1440→760→1440 側邊欄正確切換、`npx prisma migrate status` 與 `generate` 實跑確認 README 指令可用、主控台 0 errors / 0 warnings、`tsc --noEmit`／lint／build／`test:db` 6/6 全通過。**已知情況**：Q3 使 computed style 由 `rgba()` 變為 `color(srgb …)`，日後若寫視覺回歸測試需改用色彩比較而非字串相等；README 寫明 clone 後須先 `npx prisma generate`，已確認 `prisma` 與 `@prisma/client` 都沒有會自動產生 client 的 postinstall 而 `src/generated` 是 gitignore 的。**明確不做**（另行處理）：collection 查詢重構（spec 已寫好在 `context/features/collection-query-perf.md`）、系統型別 slug 與 demo 帳號的重複常數、`AppSidebar.tsx` 拆檔、`seed.ts` 的 `buildPinnedAt` 以 title 當鍵、`cn` 入口統一、`.env.production` 的處理
 - **Vercel 部署**：build 指令在專案設定中被覆寫為 `prisma generate && prisma migrate deploy && next build`。兩次失敗皆為環境變數問題：先是缺 `DATABASE_URL_UNPOOLED`（`prisma.config.ts` 以 `env()` 讀取，缺值即 `PrismaConfigEnvError`），再來是連線字串格式錯誤（P1013）。production 環境變數需同時設定 pooled 的 `DATABASE_URL` 與直連的 `DATABASE_URL_UNPOOLED`，值不可加引號
 - **待辦**：Preview 部署同樣會跑 `prisma migrate deploy`，若 Preview 與 Production 共用資料庫，未合併的 migration 會直接套用到正式資料庫，建議改為 Preview 連另一個 Neon 分支。`src/lib/mock-data.ts` 已無任何引用，經使用者確認暫時保留。`scripts/test-db.ts` 印出的「Neon 分支」讀 `.env.local` 的 `NEON_BRANCH`，不隨實際連線變動
