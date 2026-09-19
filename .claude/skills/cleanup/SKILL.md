@@ -12,7 +12,10 @@ Review the codebase for cleanup tasks:
 4. Check for stale TODO comments
 5. Find orphaned/unused files
 6. Check that context files match actual project state
-7. Check if the .env.production has the same variables (not always the same value) as the .env. If something is missing, tell me.
+7. Check that `.env.production` has the same variable NAMES as `.env.local` (values
+   differ by design). There is no `.env` in this project. `NEON_BRANCH` is expected
+   to be missing from `.env.production` — it only feeds the banner in
+   `npm run test:db`. Report anything else that is missing, and never print values.
 8. Find `@ts-ignore` comments that might be stale
 
 **Mode: $ARGUMENTS**
