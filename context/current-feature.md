@@ -6,7 +6,7 @@
 
 ## Status
 
-已完成
+Complete
 
 ## Goals
 
