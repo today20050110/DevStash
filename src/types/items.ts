@@ -12,6 +12,8 @@ export interface ItemTypeWithCount {
   /** lucide-react icon name */
   icon: string;
   color: string;
+  /** Pro 方案才能使用的型別，UI 以 PRO 標示 */
+  isProOnly: boolean;
   /** 目前使用者在此型別下的 item 數量（不含已刪除） */
   itemCount: number;
 }

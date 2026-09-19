@@ -26,7 +26,14 @@ type SystemItemType = Omit<ItemTypeWithCount, "itemCount">;
 export async function getSystemItemTypes(): Promise<SystemItemType[]> {
   const types = await prisma.itemType.findMany({
     where: { isSystem: true, userId: null },
-    select: { id: true, name: true, slug: true, icon: true, color: true },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      icon: true,
+      color: true,
+      isProOnly: true,
+    },
   });
   return types.sort(
     (a, b) =>
