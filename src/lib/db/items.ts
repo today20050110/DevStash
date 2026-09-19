@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import type { ItemSummary, ItemTypeWithCount } from "@/types/items";
 
 const RECENT_ITEMS_LIMIT = 10;
+const PINNED_ITEMS_LIMIT = 10;
 
 /** ItemType 沒有排序欄位，依 project-overview.md §8 的型別順序；不在清單中的排最後 */
 const SYSTEM_TYPE_ORDER = [
@@ -121,10 +122,14 @@ async function findItemSummaries(
   }));
 }
 
-export function getPinnedItems(userId: string): Promise<ItemSummary[]> {
+export function getPinnedItems(
+  userId: string,
+  limit = PINNED_ITEMS_LIMIT,
+): Promise<ItemSummary[]> {
   return findItemSummaries(userId, {
     where: { pinnedAt: { not: null } },
     orderBy: { pinnedAt: "desc" },
+    take: limit,
   });
 }
 

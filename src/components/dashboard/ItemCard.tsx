@@ -21,8 +21,12 @@ export function ItemCard({ item }: ItemCardProps) {
       <CardContent className="flex gap-4">
         <div
           className="flex size-10 shrink-0 items-center justify-center rounded-lg"
-          // 1a is ~10% alpha on the type's six-digit hex colour.
-          style={{ backgroundColor: `${color}1a`, color }}
+          // color-mix rather than appending alpha to the hex — ItemType.color is an
+          // unconstrained String, so the six-digit form is not guaranteed.
+          style={{
+            backgroundColor: `color-mix(in srgb, ${color} 10%, transparent)`,
+            color,
+          }}
         >
           <TypeIcon name={icon} className="size-5" />
         </div>

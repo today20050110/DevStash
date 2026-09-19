@@ -1,16 +1,74 @@
-# Current Feature
+# Current Feature: Quick Wins
+
+一批風險極低的清理：連線池 fail-fast、pinned 上限、色彩相容、matchMedia、移除未用相依、README
+
+來源：`context/features/quick-wins.md`（2026-09-20 兩次程式碼掃描）
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
-<!-- 以 /feature load 載入 spec 後填入；成功長什麼樣子 -->
+- **Q1** `src/lib/prisma.ts`：`PrismaPg` 補 `max: 5` 與 `connectionTimeoutMillis: 10_000`，消除「取連線無限期等待」
+- **Q2** `src/lib/db/items.ts`：`getPinnedItems` 補 `PINNED_ITEMS_LIMIT = 10` 與 `take`，與同檔案的 `getRecentItems` 一致
+- **Q3** `src/components/dashboard/ItemCard.tsx`：`${color}1a` 改為 `color-mix(in srgb, ${color} 10%, transparent)`，不再假設色碼是 6 碼 hex
+- **Q4** `src/hooks/use-mobile.ts`：`MediaQueryList` 模組層建一次並共用，`subscribe` 與 `getSnapshot` 不再各建一個
+- **Q5** 移除未被引用的相依 `@neon/env`
+- **Q6** `README.md` 換掉 create-next-app 樣板，改成這個專案真正的啟動步驟
+- 六項皆不動資料模型、不需 migration、不改任何元件的 props 介面
+- **不做**：collection 查詢重構（另有 spec）、重複常數抽取、`AppSidebar` 拆檔、`seed.ts` 的 `buildPinnedAt`、`cn` 入口統一、`.env.production` 的處理
+
+分支：`feature/quick-wins`
 
 ## Notes
 
-<!-- 來源、限制、實作方向、驗證結果、已知情況 -->
+### 關於「N+1」
+
+兩次掃描都明確查過，**這個專案目前沒有 N+1**。所有元件（`CollectionCard`、`ItemCard`、`StatsCards`、`TypeIcon`）都只吃預先彙總好的 props，沒有任何元件自己查資料庫；型別數量是一次 `groupBy`。
+
+最接近的是 `src/lib/db/collections.ts:50-63` 的**關聯過度載入** —— 它是「單一查詢取回過多列」，不是「每列各發一次查詢」。那件事已寫成 `context/features/collection-query-perf.md`，牽涉 `$queryRaw` 與三個 export 的重構，不屬於低風險，故不併入本批。該 spec 保留在 `context/features/`，隨時可以 `/feature load collection-query-perf` 接續。
+
+### 各項的依據
+
+- **Q1**：已讀 `node_modules/pg-pool/index.js` 確認預設值 —— `max = 10`、`idleTimeoutMillis = 10000`，而第 206 行 `if (!this.options.connectionTimeoutMillis)` 在未設時直接不掛計時器。這是本批唯一一項「在 production 會以難以診斷的方式失效」的問題
+- **Q2**：`findItemSummaries` 只在收到 `take` 時才加上限。demo 只有 3 筆釘選，畫面不會變
+- **Q3**：`ItemType.color` 在 schema 裡只是 `String`，沒有格式約束。改完視覺應與現況無法區分
+- **Q4**：回傳值是 boolean、識別性穩定，**沒有正確性問題**，純粹是多餘的分配。檔案開頭「Rewritten from the shadcn default…」的註解要保留（History 記過日後 `shadcn add` 可能覆蓋此檔）
+- **Q5**：全專案 grep 零引用；`neon.ts` 用的是 `@neon/config/v1`，不受影響
+- **Q6**：現有 README 指向 `app/page.tsx`（本專案是 `src/app/`）、列出 yarn/pnpm/bun（本專案是 npm）
+
+### 驗證方式
+
+- Q1：`build` 與 `dev` 正常連線；另以不存在的 host 確認 10 秒內失敗而非無限等待
+- Q2：Pinned 區塊仍是 3 筆、順序不變
+- Q3：型別圖示方塊背景色以截圖與改動前比對，應無法區分
+- Q4：桌面、390px、以及跨越 768px 斷點拖曳視窗，側邊欄行為不變
+- Q6：README 中每一條指令實際跑過
+- 全部：`tsc --noEmit`、`npm run lint`、`npm run build`、`npm run test:db`
+
+### 實作結果
+
+- **Q1** `src/lib/prisma.ts:11-22`：`PrismaPg` 改為多行設定，補 `max: 5` 與 `connectionTimeoutMillis: 10_000`，兩行註解說明為何不用 pg 預設
+- **Q2** `src/lib/db/items.ts:6,124-135`：新增 `PINNED_ITEMS_LIMIT = 10`，`getPinnedItems` 補 `limit` 參數與 `take`，形狀與同檔案的 `getRecentItems` 一致
+- **Q3** `src/components/dashboard/ItemCard.tsx:24-29`：改用 `color-mix(in srgb, ${color} 10%, transparent)`，註解改寫為「`ItemType.color` 是未受約束的 String，不保證 6 碼形式」
+- **Q4** `src/hooks/use-mobile.ts:9-22`：`MediaQueryList` 以模組層 `let mql` + `getMql()` lazy 建一次，`subscribe` 與 `getSnapshot` 共用；原本說明改寫來由的註解保留
+- **Q5** `npm uninstall @neon/env`；`@neon/config` 仍在（`neon.ts` 有用）
+- **Q6** `README.md` 重寫：前置需求、`.env.local` 的三個鍵（只列鍵名）、啟動四步、指令表、migration 紀律、`context/` 導覽
+
+### 驗證結果
+
+- **Q1**：以無法路由的位址（`10.255.255.1`）實跑本專案的 `prisma` 模組，**10.1s 後**得到 `Connection terminated due to connection timeout`。改動前依 `pg-pool/index.js:206` 的 `if (!this.options.connectionTimeoutMillis)` 不會掛計時器，即無限期等待
+- **Q2**：Pinned 仍 3 張卡、Recent Items 仍 10 張，順序不變
+- **Q3**：色彩**數值相同、序列化表示不同** —— 舊寫法計算後為 `rgba(59, 130, 246, 0.1)`，新寫法為 `color(srgb 0.231373 0.509804 0.964706 / 0.1)`，通道值一一對應（59/255 = 0.231373…）。唯一實質差異是 alpha：`0x1a/255 = 0.10196` 對上 `10% = 0.1`，差 0.2%，合成到深色背景上不足 1/255，肉眼與截圖皆無法區分
+- **Q4**：1440 → 760 → 1440 實際改變 viewport，桌面側邊欄容器隨斷點正確出現／消失，回到 1440 後 Pinned 仍為 3。共用的 `MediaQueryList` 在兩個方向都能收到 change 事件
+- **Q5／Q6**：`npx prisma migrate status` 為 up to date、`npx prisma generate` 成功（驗證 README 寫的步驟真的可跑）
+- 主控台 0 errors / 0 warnings；`tsc --noEmit`、lint、build、`test:db` 6/6 全通過，`/dashboard` 仍為 `ƒ (Dynamic)`
+
+### 已知情況
+
+- Q3 的 computed style 從 `rgba()` 變成 `color(srgb …)`，若日後寫視覺回歸測試而去比對 `getComputedStyle().backgroundColor` 的字串，會需要改用色彩比較而非字串相等
+- Q6 的 README 寫明 clone 後需先 `npx prisma generate`：已確認 `prisma` 與 `@prisma/client` 都沒有會自動產生 client 的 postinstall（`prisma` 只有 `preinstall`），而 `src/generated` 是 gitignore 的
 
 ## History
 
