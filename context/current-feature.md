@@ -2,15 +2,18 @@
 
 ## Status
 
-Not Started
+In Progress — test-db 顯示實際連線主機（`fix/test-db-host`）
 
 ## Goals
 
-<!-- 以 /feature load 載入 spec 後填入；成功長什麼樣子 -->
+- `npm run test:db` 開頭印出實際連線的資料庫主機（由連線字串解析），以及它來自哪個環境變數
+- `NEON_BRANCH` 保留，但明確標示為標籤，不代表實際連線
+- 連線字串無法解析時不讓腳本崩潰
 
 ## Notes
 
-<!-- 來源、限制、實作方向、驗證結果、已知情況 -->
+- 起因：以 `source .env.production` 載入 production 連線字串時，未加引號的 `&` 被 shell 當成背景執行，變數沒設上；`.env.local` 隨後補上 Development 的值，而腳本仍印出手動設的「Neon 分支：production」，導致誤判 Development 的資料為 production
+- 主機名稱含 Neon endpoint id（例如 `ep-lucky-frost-…`），足以區分分支；不印出帳號密碼
 
 ## History
 

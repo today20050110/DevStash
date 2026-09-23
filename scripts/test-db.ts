@@ -14,12 +14,25 @@ import { Prisma, PrismaClient } from "../src/generated/prisma/client";
 // Prisma CLI 與 Node 都只讀 .env，Neon 的連線字串寫在 .env.local
 config({ path: ".env.local" });
 
-const connectionString =
-  process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;
+const connectionSource = process.env.DATABASE_URL_UNPOOLED
+  ? "DATABASE_URL_UNPOOLED"
+  : "DATABASE_URL";
+const connectionString = process.env[connectionSource];
 
 if (!connectionString) {
   throw new Error("DATABASE_URL_UNPOOLED / DATABASE_URL is not set");
 }
+
+/** 只取主機名稱，避免把帳號密碼印到終端機 */
+function connectionHost(url: string): string {
+  try {
+    return new URL(url).host || "(無法解析)";
+  } catch {
+    return "(無法解析)";
+  }
+}
+
+const host = connectionHost(connectionString);
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString }),
@@ -262,8 +275,10 @@ async function runCheck(
 }
 
 async function main(): Promise<void> {
-  const branch = process.env.NEON_BRANCH ?? "(未知)";
-  console.log(`Neon 分支：${branch}\n`);
+  // NEON_BRANCH 只是 .env.local 裡的標籤，實際連到哪裡要看連線字串
+  const branch = process.env.NEON_BRANCH ?? "(未設定)";
+  console.log(`連線主機：${host}（${connectionSource}）`);
+  console.log(`NEON_BRANCH 標籤：${branch}\n`);
 
   // 由檢查順便取回 demo 資料，檢查通過後再印出，避免查兩次
   const demo: { user: DemoUser | null } = { user: null };
