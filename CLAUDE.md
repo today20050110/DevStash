@@ -17,3 +17,13 @@ Read the following to get the full context of the project:
 - **Build**: `npm run build`
 - **Production server**: `npm run start`
 - **Lint**: `npm run lint`
+
+## Neon Database Safety
+
+Whenever using the Neon MCP server or Neon CLI:
+
+- **Project**: always `devstash` (project ID `shiny-voice-93414835`, org `org-polished-salad-91637654`). Never operate on any other project.
+- **Branch**: always the `Development` branch (compute endpoint `ep-lucky-frost-b3c82uje`). Pass the project ID and branch explicitly on every call; never rely on the default branch, which is `production`.
+- **Production is off-limits** (`production` branch, endpoint `ep-sparkling-field-b3cf2urc`). Do not read, query, migrate, reset, or delete anything on it unless I explicitly say "production" in the current request. Permission given once does not carry over to later requests.
+- Before running any SQL or any write operation, state the project and branch you are about to use. If a tool result shows a different branch or endpoint than expected, stop and tell me.
+- If the Neon MCP fails to connect, do not fall back to connection strings from `.env.production`. Use `.env.local` (Development) or ask me.
