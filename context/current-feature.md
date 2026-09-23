@@ -2,18 +2,15 @@
 
 ## Status
 
-In Progress — test-db 顯示實際連線主機（`fix/test-db-host`）
+Not Started
 
 ## Goals
 
-- `npm run test:db` 開頭印出實際連線的資料庫主機（由連線字串解析），以及它來自哪個環境變數
-- `NEON_BRANCH` 保留，但明確標示為標籤，不代表實際連線
-- 連線字串無法解析時不讓腳本崩潰
+<!-- 以 /feature load 載入 spec 後填入；成功長什麼樣子 -->
 
 ## Notes
 
-- 起因：以 `source .env.production` 載入 production 連線字串時，未加引號的 `&` 被 shell 當成背景執行，變數沒設上；`.env.local` 隨後補上 Development 的值，而腳本仍印出手動設的「Neon 分支：production」，導致誤判 Development 的資料為 production
-- 主機名稱含 Neon endpoint id（例如 `ep-lucky-frost-…`），足以區分分支；不印出帳號密碼
+<!-- 來源、限制、實作方向、驗證結果、已知情況 -->
 
 ## History
 
@@ -44,4 +41,5 @@ In Progress — test-db 顯示實際連線主機（`fix/test-db-host`）
 - **側邊欄 Pro 專屬型別加上 PRO 標示**（`a3df58b`）：依 `context/features/add-pro-badge-sidebar.md`，Types 區塊中 `isProOnly` 為 true 的型別（Files／Images）在名稱後方顯示 PRO badge。`ItemType.isProOnly` 是 schema 既有欄位（seed 依 §6 對這兩者設 true），本次只是把它讀出來：`ItemTypeWithCount` 補欄位、`getSystemItemTypes()` 的 `select` 補 `isProOnly`，有／無使用者兩條路徑共用同一函式故一併涵蓋，**無 migration、無 seed 改動**。`AppSidebar` 新增 `ProBadge`（`Badge variant="outline"`、`h-4 px-1 text-[10px]`、`text-sidebar-foreground/60`），以 `type.isProOnly &&` 條件渲染而非寫死 slug；視覺文字標 `aria-hidden`，另附 `sr-only` 的 "Pro plan only"（三個大寫字母語意不足）。兩個非顯而易見的細節：（1）型別名稱的 `<span>` 必須明確加 `truncate`，因為 `Badge` 渲染成 `<span>` 後會成為最後一個子元素，搶走 `SidebarMenuButton` 的 `[&>span:last-child]:truncate`，不補的話長名稱不再截斷；（2）右邊距以 DOM 量測決定為 `mr-8` —— 數量 badge 是 `absolute right-1` 不占版面寬度，`mr-6` 在「長名稱把 PRO 推到右側 + 3 位數數量」時會重疊 2px（現有 7 種型別名稱都短，觸發不到，但 `mr-8` 留 6px 餘裕徹底排除）。桌面 1440px 與 390px 手機（Sheet drawer）實測，主控台 0 errors / 0 warnings，`tsc --noEmit`、lint、build 通過，`/dashboard` 仍為 `ƒ (Dynamic)`。**已知情況**：本專案 `Sidebar` 用預設的 `collapsible="offcanvas"`，桌面收合時整個側邊欄滑出畫面、**沒有 icon 模式**，故 `group-data-[collapsible=icon]:hidden` 目前不會觸發，是對齊 `SidebarMenuBadge` 自身寫法的預防性 class；載入 spec 時寫進 Goals 的「收合成 icon 模式時 PRO 不顯示」在現況下無從驗證
 - **六項低風險清理**（`97cc529`）：依 `context/features/quick-wins.md`，處理 2026-09-20 兩次程式碼掃描中風險極低的項目。（1）`src/lib/prisma.ts` 的 `PrismaPg` 補 `max: 5` 與 `connectionTimeoutMillis: 10_000` —— `pg-pool/index.js:206` 的 `if (!this.options.connectionTimeoutMillis)` 在未設時**不掛計時器**，等同無限期等待取得連線，Neon 冷啟動時請求會一路卡到 Vercel 函式逾時且錯誤訊息看不出是資料庫問題；以無法路由的位址（`10.255.255.1`）實跑本專案的 prisma 模組驗證，改動後 10.1s 得到 `Connection terminated due to connection timeout`。（2）`getPinnedItems` 補 `PINNED_ITEMS_LIMIT = 10` 與 `take`，與同檔案的 `getRecentItems` 一致（`findItemSummaries` 只在收到 `take` 時才加上限）。（3）`ItemCard` 的透明度改用 `color-mix(in srgb, ${color} 10%, transparent)`，不再假設 `ItemType.color` 是 6 碼 hex（schema 裡只是無約束的 `String`）—— 色彩通道值完全相同，唯 alpha 由 `0x1a/255 = 0.10196` 變為 `0.1`，差 0.2%、合成到深色背景不足 1/255。（4）`use-mobile.ts` 的 `MediaQueryList` 改為模組層 lazy 建一次並由 `subscribe` 與 `getSnapshot` 共用，無行為改變。（5）移除全專案零引用的相依 `@neon/env`（`@neon/config` 仍由 `neon.ts` 使用）。（6）`README.md` 換掉 create-next-app 樣板，改為前置需求、`.env.local` 的鍵名、啟動四步、指令表、migration 紀律與 `context/` 導覽。驗證：Pinned 仍 3 張／Recent 仍 10 張、viewport 1440→760→1440 側邊欄正確切換、`npx prisma migrate status` 與 `generate` 實跑確認 README 指令可用、主控台 0 errors / 0 warnings、`tsc --noEmit`／lint／build／`test:db` 6/6 全通過。**已知情況**：Q3 使 computed style 由 `rgba()` 變為 `color(srgb …)`，日後若寫視覺回歸測試需改用色彩比較而非字串相等；README 寫明 clone 後須先 `npx prisma generate`，已確認 `prisma` 與 `@prisma/client` 都沒有會自動產生 client 的 postinstall 而 `src/generated` 是 gitignore 的。**明確不做**（另行處理）：collection 查詢重構（spec 已寫好在 `context/features/collection-query-perf.md`）、系統型別 slug 與 demo 帳號的重複常數、`AppSidebar.tsx` 拆檔、`seed.ts` 的 `buildPinnedAt` 以 title 當鍵、`cn` 入口統一、`.env.production` 的處理
 - **Vercel 部署**：build 指令在專案設定中被覆寫為 `prisma generate && prisma migrate deploy && next build`。兩次失敗皆為環境變數問題：先是缺 `DATABASE_URL_UNPOOLED`（`prisma.config.ts` 以 `env()` 讀取，缺值即 `PrismaConfigEnvError`），再來是連線字串格式錯誤（P1013）。production 環境變數需同時設定 pooled 的 `DATABASE_URL` 與直連的 `DATABASE_URL_UNPOOLED`，值不可加引號
-- **待辦**：Preview 部署同樣會跑 `prisma migrate deploy`，若 Preview 與 Production 共用資料庫，未合併的 migration 會直接套用到正式資料庫，建議改為 Preview 連另一個 Neon 分支。`src/lib/mock-data.ts` 已無任何引用，經使用者確認暫時保留。`scripts/test-db.ts` 印出的「Neon 分支」讀 `.env.local` 的 `NEON_BRANCH`，不隨實際連線變動。根目錄的 `.env.production` 存著 production 的 `DATABASE_URL` 與 `DATABASE_URL_UNPOOLED`（已 gitignore、未進版控），**經使用者確認保留**；風險在載入順序 —— Next.js 在 production 模式會同時載入 `.env.local` 與 `.env.production`（`npm run build` 的輸出會印 `Environments: .env.local, .env.production`），`.env.local` 優先，但只要它少掉某個鍵，本機 build／start 就會靜默改連正式資料庫。`.claude/skills/cleanup/SKILL.md` 第 7 項負責比對兩者的鍵名
+- test-db 顯示實際連線主機（`7ed7a38`）：`scripts/test-db.ts` 開頭改印「連線主機」（由連線字串解析出的 host，含 Neon endpoint id，不含帳密）與其來源變數（`DATABASE_URL_UNPOOLED` 或 `DATABASE_URL`）；原「Neon 分支」改名為「NEON_BRANCH 標籤」，明示它只是 `.env.local` 的標籤。起因：以 `source .env.production` 載入時，未加引號的連線字串中的 `&` 被 shell 當成背景執行，變數沒設上，`.env.local` 補上 Development 的值，腳本卻印出手動設的 production 標籤，造成誤判。對 production 執行應改用 `node --env-file=.env.production node_modules/tsx/dist/cli.mjs scripts/test-db.ts`（dotenv 不覆蓋已存在的變數，故 `.env.local` 不會蓋掉）。實測 Development（`ep-lucky-frost-…`，6/6）、production（`ep-sparkling-field-…`，資料列全 0、Demo SKIP）與無法解析的連線字串（顯示「(無法解析)」、exit 1）；tsc、lint、build 通過
+- **待辦**：Preview 部署同樣會跑 `prisma migrate deploy`，若 Preview 與 Production 共用資料庫，未合併的 migration 會直接套用到正式資料庫，建議改為 Preview 連另一個 Neon 分支。`src/lib/mock-data.ts` 已無任何引用，經使用者確認暫時保留。根目錄的 `.env.production` 存著 production 的 `DATABASE_URL` 與 `DATABASE_URL_UNPOOLED`（已 gitignore、未進版控），**經使用者確認保留**；風險在載入順序 —— Next.js 在 production 模式會同時載入 `.env.local` 與 `.env.production`（`npm run build` 的輸出會印 `Environments: .env.local, .env.production`），`.env.local` 優先，但只要它少掉某個鍵，本機 build／start 就會靜默改連正式資料庫。`.claude/skills/cleanup/SKILL.md` 第 7 項負責比對兩者的鍵名
