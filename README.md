@@ -31,8 +31,17 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 本機的 GitHub OAuth App callback URL 為 `http://localhost:3000/api/auth/callback/github`。
 production 要另建一個 OAuth App，callback 指向正式網域，`AUTH_SECRET` 也另外產生，不與本機共用。
 
-**不要在專案根目錄放 `.env.production`。** Next.js 的 `npm run build`／`start` 會載入它，
-且優先於 `.env`，本機 build 就會改連正式資料庫。
+根目錄的 `.env.production`（已 gitignore）放 production 的連線字串與 Auth 變數。
+Next.js 只在 `npm run build`／`start` 載入它，且優先於 `.env`，所以各指令連到的資料庫不同：
+
+| 指令 | 資料庫 |
+| --- | --- |
+| `npm run dev` | Development（`.env`） |
+| `npm run build`／`npm run start` | **production**（`.env.production`） |
+| Prisma CLI、`npm run test:db` | Development（`dotenv` 只讀 `.env`） |
+
+本機 `start` 起來的網站會讀寫正式資料庫；其 GitHub 登入使用 production 的 OAuth App，
+callback 指向正式網域，在 localhost 上會失敗。
 
 `DATABASE_URL_UNPOOLED` 不能省 —— `prisma.config.ts` 以 `env()` 讀取，缺值會直接
 拋 `PrismaConfigEnvError`。連線字串不要加引號。
