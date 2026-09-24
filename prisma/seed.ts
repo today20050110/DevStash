@@ -1,12 +1,9 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { hash } from "bcryptjs";
-import { config } from "dotenv";
+import "dotenv/config";
 
 import { PrismaClient, type Prisma } from "../src/generated/prisma/client";
 import type { ItemKind } from "../src/generated/prisma/enums";
-
-// 與 prisma.config.ts 一致：CLI 只讀 .env，Neon 的連線字串在 .env.local
-config({ path: ".env.local" });
 
 const connectionString =
   process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;

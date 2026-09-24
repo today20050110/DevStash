@@ -1,8 +1,6 @@
-import { config } from "dotenv";
+// Prisma 7 起 CLI 不再自動載入 .env，要手動載入
+import "dotenv/config";
 import { defineConfig, env } from "prisma/config";
-
-// Neon 的連線字串寫在 .env.local。Next.js 會自動讀，Prisma CLI 不會 —— 要手動載入。
-config({ path: ".env.local" });
 
 export default defineConfig({
   schema: "prisma/schema.prisma",

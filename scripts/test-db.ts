@@ -7,12 +7,9 @@
  */
 import { PrismaPg } from "@prisma/adapter-pg";
 import { compare } from "bcryptjs";
-import { config } from "dotenv";
+import "dotenv/config";
 
 import { Prisma, PrismaClient } from "../src/generated/prisma/client";
-
-// Prisma CLI 與 Node 都只讀 .env，Neon 的連線字串寫在 .env.local
-config({ path: ".env.local" });
 
 const connectionSource = process.env.DATABASE_URL_UNPOOLED
   ? "DATABASE_URL_UNPOOLED"
@@ -275,7 +272,7 @@ async function runCheck(
 }
 
 async function main(): Promise<void> {
-  // NEON_BRANCH 只是 .env.local 裡的標籤，實際連到哪裡要看連線字串
+  // NEON_BRANCH 只是 .env 裡的標籤，實際連到哪裡要看連線字串
   const branch = process.env.NEON_BRANCH ?? "(未設定)";
   console.log(`連線主機：${host}（${connectionSource}）`);
   console.log(`NEON_BRANCH 標籤：${branch}\n`);

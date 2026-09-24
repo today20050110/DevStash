@@ -11,13 +11,21 @@ Next.js 16 / React 19 / TypeScript · Neon Postgres + Prisma 7 · Tailwind CSS v
 
 ## 設定
 
-`.env.local`（已 gitignore，不要提交）需要這些鍵：
+`.env`（已 gitignore，不要提交）需要這些鍵：
 
 ```
 DATABASE_URL=            # pooled 連線字串，應用程式執行期使用
 DATABASE_URL_UNPOOLED=   # 直連字串，migration 與 seed 使用
 NEON_BRANCH=             # 選用，只供 npm run test:db 顯示用
+AUTH_SECRET=             # Auth.js 簽 JWT 用，以 npx auth secret 產生
+AUTH_GITHUB_ID=          # GitHub OAuth App
+AUTH_GITHUB_SECRET=
 ```
+
+本機的 GitHub OAuth App callback URL 為 `http://localhost:3000/api/auth/callback/github`。
+
+**不要在專案根目錄放 `.env.production`。** Next.js 的 `npm run build`／`start` 會載入它，
+且優先於 `.env`，本機 build 就會改連正式資料庫。
 
 `DATABASE_URL_UNPOOLED` 不能省 —— `prisma.config.ts` 以 `env()` 讀取，缺值會直接
 拋 `PrismaConfigEnvError`。連線字串不要加引號。
