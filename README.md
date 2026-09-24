@@ -17,12 +17,19 @@ Next.js 16 / React 19 / TypeScript · Neon Postgres + Prisma 7 · Tailwind CSS v
 DATABASE_URL=            # pooled 連線字串，應用程式執行期使用
 DATABASE_URL_UNPOOLED=   # 直連字串，migration 與 seed 使用
 NEON_BRANCH=             # 選用，只供 npm run test:db 顯示用
-AUTH_SECRET=             # Auth.js 簽 JWT 用，以 npx auth secret 產生
+AUTH_SECRET=             # Auth.js 簽 JWT 用，產生方式見下方
 AUTH_GITHUB_ID=          # GitHub OAuth App
 AUTH_GITHUB_SECRET=
 ```
 
+產生 `AUTH_SECRET`（不要用 `npx auth secret`，它可能寫出 `.env.local`，蓋過 `.env`）：
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
 本機的 GitHub OAuth App callback URL 為 `http://localhost:3000/api/auth/callback/github`。
+production 要另建一個 OAuth App，callback 指向正式網域，`AUTH_SECRET` 也另外產生，不與本機共用。
 
 **不要在專案根目錄放 `.env.production`。** Next.js 的 `npm run build`／`start` 會載入它，
 且優先於 `.env`，本機 build 就會改連正式資料庫。
