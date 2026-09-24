@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { connection } from "next/server";
-import { Folder, Layers, Settings, Star } from "lucide-react";
+import { Folder, Layers, Star } from "lucide-react";
 
 import { TypeIcon } from "@/components/dashboard/TypeIcon";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { UserMenu } from "@/components/dashboard/UserMenu";
 import { Badge } from "@/components/ui/badge";
 import {
   Sidebar,
@@ -62,16 +62,6 @@ async function getSidebarData(): Promise<SidebarData> {
       getRecentNonFavoriteCollections(user.id),
     ]);
   return { user, itemTypes, favoriteCollections, recentCollections };
-}
-
-function getInitials(user: CurrentUser): string {
-  const source = user.name?.trim() || user.email;
-  return source
-    .split(/\s+/)
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
 }
 
 /**
@@ -152,31 +142,6 @@ function RecentCollectionMenuItem({
       </SidebarMenuButton>
       <SidebarMenuBadge>{collection.itemCount}</SidebarMenuBadge>
     </SidebarMenuItem>
-  );
-}
-
-function UserMenu({ user }: { user: CurrentUser }) {
-  return (
-    <SidebarMenu>
-      <SidebarMenuItem>
-        <SidebarMenuButton size="lg">
-          <Avatar className="size-8 rounded-full">
-            <AvatarFallback className="rounded-full">
-              {getInitials(user)}
-            </AvatarFallback>
-          </Avatar>
-          <div className="grid flex-1 text-left leading-tight">
-            <span className="truncate text-sm font-medium">
-              {user.name ?? user.email}
-            </span>
-            <span className="truncate text-xs text-sidebar-foreground/70">
-              {user.email}
-            </span>
-          </div>
-          <Settings className="ml-auto size-4 text-sidebar-foreground/70" />
-        </SidebarMenuButton>
-      </SidebarMenuItem>
-    </SidebarMenu>
   );
 }
 

@@ -1,12 +1,9 @@
 import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
 
-import authConfig from "@/auth.config";
+import authConfig, { SIGN_IN_PATH } from "@/auth.config";
 
 const { auth } = NextAuth(authConfig);
-
-// 尚未自訂登入頁，導向 Auth.js 的預設頁；登入後經 callbackUrl 回到原頁面
-const SIGN_IN_PATH = "/api/auth/signin";
 
 export const proxy = auth((req) => {
   if (req.auth) {
