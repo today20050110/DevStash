@@ -40,7 +40,7 @@ interface SidebarData {
 }
 
 async function getSidebarData(): Promise<SidebarData> {
-  // 與頁面相同：不呼叫 connection() 的話，layout 可能在 build 時被預先渲染
+  // 與頁面相同：getCurrentUser() 已讀 cookie，仍明確呼叫以免 layout 被預先渲染
   await connection();
 
   const user = await getCurrentUser();

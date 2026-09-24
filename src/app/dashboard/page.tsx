@@ -32,8 +32,8 @@ interface DashboardData {
 }
 
 async function getDashboardData(): Promise<DashboardData> {
-  // 查詢不經過 cookies/headers 等 request-time API，不呼叫的話 Next.js
-  // 會在 build 時預先渲染，資料就凍結在 build 當下
+  // getCurrentUserId() 經 auth() 讀 cookie，本身已讓頁面成為動態渲染；
+  // 仍明確呼叫，免得日後有查詢不經過 auth() 時被 build 預先渲染、資料凍結
   await connection();
 
   const userId = await getCurrentUserId();
