@@ -20,6 +20,8 @@ NEON_BRANCH=             # 選用，只供 npm run test:db 顯示用
 AUTH_SECRET=             # Auth.js 簽 JWT 用，產生方式見下方
 AUTH_GITHUB_ID=          # GitHub OAuth App
 AUTH_GITHUB_SECRET=
+RESEND_API_KEY=          # 寄送註冊驗證信（Resend）
+APP_URL=                 # 選用，驗證信連結的網址根，見下方
 ```
 
 產生 `AUTH_SECRET`（不要用 `npx auth secret`，它可能寫出 `.env.local`，蓋過 `.env`）：
@@ -30,6 +32,14 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 
 本機的 GitHub OAuth App callback URL 為 `http://localhost:3000/api/auth/callback/github`。
 production 要另建一個 OAuth App，callback 指向正式網域，`AUTH_SECRET` 也另外產生，不與本機共用。
+
+以帳號密碼註冊後須點擊驗證信中的連結才能登入（GitHub 登入不需要）。寄件地址是
+`onboarding@resend.dev`：在 Resend 驗證自有網域之前，**只能寄給 Resend 帳號本人的 email**，
+寄給其他地址時帳號仍會建立，但登入頁會提示驗證信寄送失敗。這類信件常被 Gmail 分到垃圾郵件。
+
+驗證連結的網址根依序取 `APP_URL` → Vercel 自動提供的 `VERCEL_PROJECT_PRODUCTION_URL`
+→ `http://localhost:3000`，不從請求的 Host header 推導（可被偽造而把 token 送到別的網域）。
+本機與 Vercel production 通常不需要設定 `APP_URL`；Preview 部署的連結會指向正式網域。
 
 根目錄的 `.env.production`（已 gitignore）放 production 的連線字串與 Auth 變數。
 Next.js 只在 `npm run build`／`start` 載入它，且優先於 `.env`，所以各指令連到的資料庫不同：

@@ -14,7 +14,7 @@ type FieldErrors = Partial<Record<Field, string>>;
 
 interface RegisterResponse {
   success: boolean;
-  data?: { email: string };
+  data?: { email: string; verificationEmailSent: boolean };
   error?: string;
 }
 
@@ -63,7 +63,8 @@ export function RegisterForm() {
         return;
       }
       const email = encodeURIComponent(result.data.email);
-      router.push(`/sign-in?registered=1&email=${email}`);
+      const sent = result.data.verificationEmailSent ? "" : "&sent=0";
+      router.push(`/sign-in?registered=1&email=${email}${sent}`);
     } catch {
       setFormError("Network error, please try again");
     } finally {

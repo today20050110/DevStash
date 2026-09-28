@@ -2,12 +2,18 @@ import { NextResponse } from "next/server";
 
 import { Prisma } from "@/generated/prisma/client";
 import { registerSchema } from "@/lib/auth-schemas";
+import { issueVerificationEmail } from "@/lib/email-verification";
 import { hashPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 
 interface RegisterResponse {
   success: boolean;
-  data?: { id: string; name: string | null; email: string };
+  data?: {
+    id: string;
+    name: string | null;
+    email: string;
+    verificationEmailSent: boolean;
+  };
   error?: string;
 }
 
@@ -49,8 +55,10 @@ export async function POST(request: Request) {
       data: { name, email, passwordHash: await hashPassword(password) },
       select: { id: true, name: true, email: true },
     });
+    // 寄信失敗不回滾帳號（issueVerificationEmail 不會丟出）：使用者可從登入頁重寄
+    const verificationEmailSent = await issueVerificationEmail(user.email);
     return NextResponse.json<RegisterResponse>(
-      { success: true, data: user },
+      { success: true, data: { ...user, verificationEmailSent } },
       { status: 201 },
     );
   } catch (error) {

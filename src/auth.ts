@@ -3,13 +3,15 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 
 import authConfig, { CREDENTIALS_FIELDS } from "@/auth.config";
+import { EmailNotVerifiedError } from "@/lib/auth-errors";
 import { signInSchema } from "@/lib/auth-schemas";
 import { verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 
 const credentialsProvider = Credentials({
   credentials: CREDENTIALS_FIELDS,
-  // 任何失敗都回 null：不區分「帳號不存在」、「OAuth 帳號沒有密碼」與「密碼錯誤」
+  // 驗證失敗都回 null：不區分「帳號不存在」、「OAuth 帳號沒有密碼」與「密碼錯誤」。
+  // 唯一例外是密碼正確但 email 未驗證，丟出 EmailNotVerifiedError
   async authorize(credentials) {
     const parsed = signInSchema.safeParse(credentials);
     if (!parsed.success) {
@@ -25,6 +27,7 @@ const credentialsProvider = Credentials({
         email: true,
         image: true,
         passwordHash: true,
+        emailVerified: true,
       },
     });
     if (!user?.passwordHash) {
@@ -34,6 +37,9 @@ const credentialsProvider = Credentials({
     const isValid = await verifyPassword(password, user.passwordHash);
     if (!isValid) {
       return null;
+    }
+    if (!user.emailVerified) {
+      throw new EmailNotVerifiedError();
     }
 
     return {

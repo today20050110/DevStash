@@ -5,7 +5,7 @@ const PASSWORD_MIN_LENGTH = 8;
 const PASSWORD_MAX_BYTES = 72;
 
 // User.email 的 unique 區分大小寫，比對與寫入前一律 trim + 轉小寫
-const emailSchema = z
+export const emailSchema = z
   .string({ error: "Email is required" })
   .trim()
   .toLowerCase()

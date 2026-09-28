@@ -23,8 +23,29 @@ const ERROR_MESSAGES: Record<string, string> = {
   // 不自動連結帳號：同 email 已用帳號密碼註冊時，GitHub 登入會被拒絕
   OAuthAccountNotLinked:
     "This email is already registered with a password. Sign in with your email and password instead.",
+  // 由 /api/auth/verify-email 導回
+  VerificationExpired:
+    "This verification link has expired. Request a new one below.",
+  VerificationInvalid:
+    "This verification link is invalid or has already been used.",
 };
+const VERIFICATION_ERRORS = new Set([
+  "VerificationExpired",
+  "VerificationInvalid",
+]);
 const DEFAULT_ERROR = "Sign in failed, please try again";
+const EMAIL_NOT_SENT =
+  "Account created, but we couldn't send the verification email. Use the button below to resend it.";
+
+function getNotice(params: { registered: boolean; verified: boolean }) {
+  if (params.verified) {
+    return "Email verified. You can now sign in.";
+  }
+  if (params.registered) {
+    return "Account created. Check your inbox for a verification link.";
+  }
+  return undefined;
+}
 
 function firstParam(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -41,10 +62,18 @@ export default async function SignInPage({
   }
 
   const errorCode = firstParam(params.error);
+  const registered = firstParam(params.registered) === "1";
+  const verified = firstParam(params.verified) === "1";
+  // 註冊 API 回報驗證信寄送失敗
+  const emailNotSent = registered && firstParam(params.sent) === "0";
   const initialError = errorCode
     ? (ERROR_MESSAGES[errorCode] ?? DEFAULT_ERROR)
-    : undefined;
-  const registered = firstParam(params.registered) === "1";
+    : emailNotSent
+      ? EMAIL_NOT_SENT
+      : undefined;
+  const initialNeedsVerification =
+    registered ||
+    (errorCode !== undefined && VERIFICATION_ERRORS.has(errorCode));
 
   return (
     <Card>
@@ -56,8 +85,9 @@ export default async function SignInPage({
         <SignInForm
           callbackUrl={callbackUrl}
           defaultEmail={firstParam(params.email) ?? ""}
-          notice={registered ? "Account created. Please sign in." : undefined}
+          notice={getNotice({ registered, verified })}
           initialError={initialError}
+          initialNeedsVerification={initialNeedsVerification}
         />
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <span className="h-px flex-1 bg-border" />
