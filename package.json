@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test:db": "tsx scripts/test-db.ts",
+    "db:prune-users": "tsx scripts/prune-users.ts",
     "db:studio": "prisma studio"
   },
   "dependencies": {
