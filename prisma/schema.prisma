@@ -70,7 +70,7 @@ model User {
   /// 寫進 JWT，每次回查使用者時比對；重設或變更密碼時加一，讓既有登入全部失效
   sessionVersion Int @default(0)
 
-  plan              Plan                @default(FREE)
+  plan               Plan                @default(FREE)
   stripeCustomerId   String?             @unique
   subscriptionStatus SubscriptionStatus?
   currentPeriodEnd   DateTime?
@@ -215,12 +215,16 @@ model Item {
   aiUsages    AiUsage[]
 
   /// 每個查詢都會帶 userId（見 project-overview §4.3），
-  /// 所以所有索引都以 userId 開頭
+  /// 所以一般索引都以 userId 開頭
   @@index([userId, deletedAt])
   @@index([userId, itemTypeId, deletedAt])
   @@index([userId, pinnedAt(sort: Desc)])
   @@index([userId, lastUsedAt(sort: Desc)])
   @@index([userId, createdAt(sort: Desc)])
+  /// pg_trgm 搜尋用的 GIN 索引，由初始 migration 手寫建立（ILIKE '%query%'）。
+  /// 宣告在這裡讓 Prisma 知道它們存在，否則每次 migrate dev 都會產生 DROP INDEX
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "Item_title_trgm_idx")
+  @@index([content(ops: raw("gin_trgm_ops"))], type: Gin, map: "Item_content_trgm_idx")
 }
 
 model Collection {
@@ -281,6 +285,8 @@ model Tag {
 
   @@unique([userId, slug])
   @@index([userId])
+  /// pg_trgm 搜尋用，理由同 Item 的 trgm 索引
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "Tag_name_trgm_idx")
 }
 
 /// 顯式 join table：需要 source 區分 AI 建議與使用者確認的標籤

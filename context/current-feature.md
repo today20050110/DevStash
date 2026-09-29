@@ -1,16 +1,36 @@
-# Current Feature
+# Current Feature: 把 pg_trgm 搜尋索引寫進 schema.prisma
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
-<!-- 以 /feature load 載入 spec 後填入；成功長什麼樣子 -->
+- 在 `schema.prisma` 宣告初始 migration 手寫的三個 GIN 索引，名稱與運算子類別和資料庫中完全一致：
+  - `Item_title_trgm_idx`：`Item.title`，`gin_trgm_ops`
+  - `Item_content_trgm_idx`：`Item.content`，`gin_trgm_ops`
+  - `Tag_name_trgm_idx`：`Tag.name`，`gin_trgm_ops`
+- `prisma migrate diff`（資料庫 → schema）回報沒有差異：之後產生 migration 不會再夾帶 `DROP INDEX`
+- **不產生新的 migration**：索引已經存在，只是讓 schema 反映現況
+- Development 與 production 的索引都不受影響；tsc、lint、build 通過
 
 ## Notes
 
-<!-- 來源、限制、實作方向、驗證結果、已知情況 -->
+- **來源**：「重設與變更密碼後讓既有登入失效」實作時的 migration 事故。這三個索引只寫在初始 migration 的手寫 SQL 裡，不在 schema 中，每次 `prisma migrate dev` 都會想把它們刪掉
+- 語法（Prisma 的 extended indexes，PostgreSQL 限定）：`@@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "Item_title_trgm_idx")`，實作前先查證 Prisma 7.10 的文件
+- 只驗證、不寫入：以 `prisma migrate diff` 比對 Development 資料庫與 schema，不執行 `migrate dev`
+- **資料庫**：Neon 專案 `devstash`，Development 分支（`br-broad-pine-b312blp9`，endpoint `ep-lucky-frost-b3c82uje`），唯讀比對
+- **語法查證**：Context7 查到的 Prisma 文件預設已是 v8（PSL 語法改為 `type: "hash"`、`expression:` 等），v7 仍使用 Prisma 4 起正式支援的 extended indexes 語法。以 `prisma validate` 通過、`migrate diff` 為空作為最終依據
+- **實作**：
+  - `Item` 加上 `title`、`content` 的 `@@index([...(ops: raw("gin_trgm_ops"))], type: Gin, map: "…")`；`Tag` 加上 `name` 的同樣寫法。`map` 指定與資料庫相同的索引名稱，否則 Prisma 會以預設命名視為不同索引
+  - `Item` 原註解「所有索引都以 userId 開頭」改為「一般索引」
+  - `prisma format` 另外把上一個功能加 `sessionVersion` 時沒對齊的 `plan` 欄位補齊（只有空白）
+- **驗證**：
+  - 修改前 `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` 輸出三行 `DROP INDEX`
+  - 只加 Item 兩個索引時剩 `DROP INDEX "Tag_name_trgm_idx"`；三個都加上後輸出「This is an empty migration」，`--exit-code` 為 0
+  - `prisma validate`、`generate` 成功；`migrate status` 同步；`test:db` 6/6 PASS；tsc、lint、build 通過
+  - production 未查詢：它的結構由同一組 migration（初始 migration 建立索引 + `add_user_session_version`）產生，與 Development 相同，這次也沒有新的 migration 要套用
+- **上一個功能的後續確認**：「重設與變更密碼後讓既有登入失效」記錄的 GitHub 登入未實測，已由使用者在本機完成——dev server log 中 `/api/auth/callback/github` 302、無 `[auth][error]`；Development 新建 GitHub 帳號 `today20050110@yahoo.com.tw`（`sessionVersion` 0、無密碼）
 
 ## History
 
