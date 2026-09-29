@@ -1,36 +1,16 @@
-# Current Feature: 把 pg_trgm 搜尋索引寫進 schema.prisma
+# Current Feature
 
 ## Status
 
-In Progress
+Not Started
 
 ## Goals
 
-- 在 `schema.prisma` 宣告初始 migration 手寫的三個 GIN 索引，名稱與運算子類別和資料庫中完全一致：
-  - `Item_title_trgm_idx`：`Item.title`，`gin_trgm_ops`
-  - `Item_content_trgm_idx`：`Item.content`，`gin_trgm_ops`
-  - `Tag_name_trgm_idx`：`Tag.name`，`gin_trgm_ops`
-- `prisma migrate diff`（資料庫 → schema）回報沒有差異：之後產生 migration 不會再夾帶 `DROP INDEX`
-- **不產生新的 migration**：索引已經存在，只是讓 schema 反映現況
-- Development 與 production 的索引都不受影響；tsc、lint、build 通過
+<!-- 以 /feature load 載入 spec 後填入；成功長什麼樣子 -->
 
 ## Notes
 
-- **來源**：「重設與變更密碼後讓既有登入失效」實作時的 migration 事故。這三個索引只寫在初始 migration 的手寫 SQL 裡，不在 schema 中，每次 `prisma migrate dev` 都會想把它們刪掉
-- 語法（Prisma 的 extended indexes，PostgreSQL 限定）：`@@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "Item_title_trgm_idx")`，實作前先查證 Prisma 7.10 的文件
-- 只驗證、不寫入：以 `prisma migrate diff` 比對 Development 資料庫與 schema，不執行 `migrate dev`
-- **資料庫**：Neon 專案 `devstash`，Development 分支（`br-broad-pine-b312blp9`，endpoint `ep-lucky-frost-b3c82uje`），唯讀比對
-- **語法查證**：Context7 查到的 Prisma 文件預設已是 v8（PSL 語法改為 `type: "hash"`、`expression:` 等），v7 仍使用 Prisma 4 起正式支援的 extended indexes 語法。以 `prisma validate` 通過、`migrate diff` 為空作為最終依據
-- **實作**：
-  - `Item` 加上 `title`、`content` 的 `@@index([...(ops: raw("gin_trgm_ops"))], type: Gin, map: "…")`；`Tag` 加上 `name` 的同樣寫法。`map` 指定與資料庫相同的索引名稱，否則 Prisma 會以預設命名視為不同索引
-  - `Item` 原註解「所有索引都以 userId 開頭」改為「一般索引」
-  - `prisma format` 另外把上一個功能加 `sessionVersion` 時沒對齊的 `plan` 欄位補齊（只有空白）
-- **驗證**：
-  - 修改前 `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` 輸出三行 `DROP INDEX`
-  - 只加 Item 兩個索引時剩 `DROP INDEX "Tag_name_trgm_idx"`；三個都加上後輸出「This is an empty migration」，`--exit-code` 為 0
-  - `prisma validate`、`generate` 成功；`migrate status` 同步；`test:db` 6/6 PASS；tsc、lint、build 通過
-  - production 未查詢：它的結構由同一組 migration（初始 migration 建立索引 + `add_user_session_version`）產生，與 Development 相同，這次也沒有新的 migration 要套用
-- **上一個功能的後續確認**：「重設與變更密碼後讓既有登入失效」記錄的 GitHub 登入未實測，已由使用者在本機完成——dev server log 中 `/api/auth/callback/github` 302、無 `[auth][error]`；Development 新建 GitHub 帳號 `today20050110@yahoo.com.tw`（`sessionVersion` 0、無密碼）
+<!-- 來源、限制、實作方向、驗證結果、已知情況 -->
 
 ## History
 
@@ -82,3 +62,4 @@ In Progress
 - **Profile 頁面完成**（`e2bc0e9`）：依 `context/features/profile-spec.md`（隨本次 commit 加入版控）。**無 migration**。`/profile` 顯示使用者資訊（`UserAvatar`：GitHub 大頭貼或縮寫；名稱、email、以新增的 `formatLongDate` 顯示含年份的建立日期、登入方式）、使用統計（items、collections 總數與 7 種系統型別的數量，沿用 `getItemCounts`／`getCollectionCounts`／`getSystemItemTypesWithCounts`，排除軟刪除）、變更密碼（僅 `hasPassword` 帳號顯示；需目前密碼，新密碼沿用 `newPasswordSchema`；成功時一併刪除該 email 未使用的重設 token）、刪除帳號（`alert-dialog` 內輸入自己的 email 才能按下，伺服器端以 `emailSchema` 正規化後再比對；刪除後 `signOut` 導向 `/sign-in?deleted=1`）。使用者未另外指定，三個待決定事項皆照建議：（1）`src/app/dashboard/layout.tsx` 移為 `src/app/(app)/layout.tsx`（`AppLayout`、`LayoutProps<"/">`），`/dashboard` 與 `/profile` 共用側邊欄與頂部列、網址不變，日後 `/items/[type]`、`/collections/[slug]` 也放進此 group；（2）以輸入 email 確認刪除而非密碼（GitHub 帳號沒有密碼）；（3）刪除順序由 `scripts/prune-users.ts` 抽成 `src/lib/db/user-deletion.ts` 的 `deleteUsersAndContent(tx, userIds)`，兩處共用——先寫 `PendingDeletion` 再刪 AiUsage／Item／Collection／Tag／自訂 ItemType／User（`Item.itemType` 為 `Restrict`，型別須在 item 之後），並檢查其他使用者的 item 是否用到這些使用者的自訂型別；token 不以 userId 關聯，由呼叫端依 email 刪除。新增 `src/lib/db/users.ts` 的 `getUserProfile`（`passwordHash` 只轉成 `hasPassword`）、`src/actions/profile.ts`、`changePasswordSchema`、`src/components/profile/` 四個元件；`resetIdentifier` 改為匯出；`GitHubIcon` 由 `GitHubSignInButton` 抽出共用；proxy matcher 加入 `/profile/:path*`；`UserMenu` 移除「尚未建立」註解。刪除對話框不用 `AlertDialogAction`（點擊即關閉，看不到伺服器錯誤），改用一般 submit 按鈕。驗證（Development，Playwright 1440／390px）：未登入導向 `/sign-in?callbackUrl=%2Fprofile`；腳本建立的測試帳號統計正確（6 筆 item 含 1 筆軟刪除 → 顯示 5）；變更密碼三種欄位錯誤、成功後欄位清空、重設 token 刪除而驗證 token 保留；暫時清掉 `passwordHash` 模擬 GitHub 帳號時隱藏變更密碼並顯示「GitHub」；刪除帳號時 email 不符按鈕停用、移除 `disabled` 強制送出被伺服器擋下、`  PROFILE@test.com ` 可比對成功，刪除後使用者／item／collection／tag／`ItemCollection`／兩種 token 皆清除、檔案 item 寫入 `PendingDeletion`，舊密碼無法登入；demo 帳號 390px 正常；主控台 0 errors；prune 預演輸出不變；tsc、lint、build 通過，build 新增 `ƒ /profile`。測試資料已清除。**已知情況**：（1）JWT session 無法撤銷，變更密碼或刪除帳號後其他裝置在 token 過期前仍通過 proxy（頁面回查資料庫，帳號刪除後為空狀態或導回登入頁）；（2）刪除帳號只需已登入的瀏覽器與輸入 email，不需密碼；（3）推送後正式網站的刪除帳號對所有使用者開放，會直接刪除 production 的資料；（4）`PendingDeletion` 尚無 sweeper，R2 檔案不會真的被刪除（R2 上傳也還沒做）
 - auth-auditor agent 與第一次稽核（`.claude/agents/auth-auditor.md`、`docs/audit-results/AUTH_SECURITY_REVIEW.md`，與下一筆分開 commit）：依使用者要求建立稽核認證程式碼的 subagent（Opus；Glob／Grep／Read／Write，另加 WebSearch／WebFetch 供查證），只看 NextAuth 不會自動處理的部分（密碼雜湊、速率限制、token 產生／過期／只能用一次、Profile 的 session 驗證），不回報 CSRF、cookie 旗標、OAuth state、JWT 簽章與 Server Actions 的同源檢查；每個問題須引用實際行號、追完整條路徑、寫出具體利用情境，已知情況標為「已知」；每次執行整份覆寫報告並記錄最後稽核日期。第一次稽核（2026-09-30，`76d3d55`）：Critical 0／High 0／Medium 2／Low 1，Passed Checks 24 項，三項皆經人工對照程式碼確認不是誤報——（1）Medium：email 驗證關閉時可先用受害者 email 註冊並登入，受害者以忘記密碼取回帳號後攻擊者的 JWT 仍有效（proxy 每次請求回寫 cookie，`next-auth/lib/index.js`），由下一筆修正；（2）Medium：各認證端點無速率限制（已知，延後到引入 Redis）；（3）Low：可由登入回應時間（查無帳號不跑 bcrypt）、申請重設的回應時間與 `/api/auth/verify-email` 帶任意 token 時對已驗證帳號導向 `verified=1` 判斷 email 是否已註冊（尚未處理）
 - **重設與變更密碼後讓既有登入失效完成**（`4fb9d91`）：修正稽核報告的 Medium 第 1 項，同時解決先前記錄的「變更密碼後其他裝置仍然登入」。**有 migration**：`User.sessionVersion Int @default(0)`（`20260929193930_add_user_session_version`）。登入時 `auth.ts` 的 `jwt` callback（要查資料庫，不能放在 proxy 也 import 的 `auth.config.ts`）只在 `user` 有值時讀取版本寫進 token；`session` callback 以 `token.sessionVersion ?? 0` 帶入 session（上線前的 token 視為 0，與預設值相同，不會把所有人登出）；`getCurrentUser()` 比對版本，不符回 null；`(app)/layout.tsx` 改為 async，查無使用者時導向登入頁而非顯示空白頁。重設密碼時版本加一（所有裝置失效）；變更密碼時版本加一並以 `signIn("credentials", { redirect: false })` 用新密碼替目前裝置重新簽發。**刻意不使用 Auth.js 的 `update()`**：`trigger === "update"` 前端也能經 `POST /api/auth/session` 觸發，若在此重讀版本，被偷的舊 token 能自行恢復。變更密碼**不能直接回傳訊息**：action 設定新 cookie 後 Next.js 在同一請求內重新渲染目前頁面，而 `auth()` 讀原始請求的 cookie header（`next-auth/lib/index.js` 的 `headers()`），拿到舊 token 被 layout 導回登入頁（實測落在 `/dashboard`）；改為 `redirect("/profile?passwordChanged=1")`——action 內 redirect 時 Next.js 會把新 cookie 合併進內部轉址請求（`action-handler.js` 的 `getForwardedHeaders`，已讀原始碼確認），成功訊息由頁面依參數顯示，`ChangePasswordState.message` 移除；重新簽發失敗時導向 `/sign-in?reset=1&email=…`。**Migration 事故**：直接執行 `prisma migrate dev`（未加 `--create-only`），產生的 SQL 夾帶三行 `DROP INDEX`，刪掉初始 migration 手寫的 `pg_trgm` GIN 索引（`Item_title_trgm_idx`、`Item_content_trgm_idx`、`Tag_name_trgm_idx`，因為不在 `schema.prisma` 裡），並已套用到 Development；修正為 migration 檔只留 `ALTER TABLE`、在 Development 以 `CREATE INDEX IF NOT EXISTS` 重建、把 `_prisma_migrations` 的 checksum 更新為修改後檔案的 SHA-256，之後 `migrate status` 同步、`test:db` 6/6；production 未受影響。**之後每次產生 migration 都會再出現這三行 DROP INDEX**，務必 `--create-only` 後刪除再套用；根治做法是在 schema 以 `@@index([title(ops: raw("gin_trgm_ops"))], type: Gin)` 宣告（未處理）。Prisma 重寫 `migration_lock.toml` 時只改了行尾字元，已還原。驗證（Playwright 多個 browser context）：變更密碼後 A 停在 `/profile?passwordChanged=1` 顯示成功訊息且重新整理仍登入、B 被導回登入頁並顯示表單（不會無限導向）；稽核的攻擊情境——A 登入中、C 以重設連結改密碼並以新密碼登入後，A 被導回登入頁，版本 1 → 2；失效 token 以空 `data`、`{ sessionVersion: 2 }`、`{ user: { sessionVersion: 2 } }` 呼叫 update 皆無法恢復；以 `AUTH_SECRET` 簽發無版本的 token 對 demo（版本 0）仍有效；tsc、lint、build 通過，測試帳號已刪除。實測中途使用者開的 dev server（PID 16704）仍載入舊 Prisma client 而回 `Unknown field sessionVersion`，經使用者同意關閉並由 Claude 在背景重新啟動。**已知情況**：（1）GitHub 登入後的版本寫入未實測（`jwt` callback 以 adapter 回傳的 `user.id` 查詢，邏輯與帳密相同）；（2）`/api/auth/session` 的回應會帶出 `sessionVersion` 數字，只是計數器，不構成風險；（3）layout 導回登入頁時沒有帶 `callbackUrl`（`/profile` 頁本身的導向有帶，但 layout 先執行）
+- **pg_trgm 搜尋索引宣告進 schema.prisma**（`a825fdb`）：處理上一筆的 migration 事故根源。初始 migration 手寫的三個 GIN 索引（`Item_title_trgm_idx`、`Item_content_trgm_idx`、`Tag_name_trgm_idx`）不在 schema 中，每次 `prisma migrate dev` 都會產生 `DROP INDEX`。`Item` 與 `Tag` 以 Prisma 4 起正式支援的 extended indexes 宣告：`@@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "Item_title_trgm_idx")`，`map` 必須與資料庫的索引名稱相同，否則 Prisma 視為不同索引。Context7 查到的 Prisma 文件預設已是 v8 語法，v7 以 `prisma validate` 與 `migrate diff` 為準。**無 migration**。驗證（唯讀比對 Development）：修改前 `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` 輸出三行 `DROP INDEX`，只加 Item 兩個時剩 Tag 一行，三個都加後為「This is an empty migration」、`--exit-code` 0；`migrate status` 同步、`test:db` 6/6、tsc／lint／build 通過；production 未查詢（由同一組 migration 產生，結構相同）。其他：`Item` 註解「所有索引都以 userId 開頭」改為「一般索引」；`prisma format` 補齊上一筆加 `sessionVersion` 時沒對齊的 `plan` 欄位。**上一筆的後續確認**：「重設與變更密碼後讓既有登入失效」的 GitHub 登入由使用者在本機實測通過——dev server log 中 `/api/auth/callback/github` 302、無 `[auth][error]`，Development 新建的 GitHub 帳號 `today20050110@yahoo.com.tw` 的 `sessionVersion` 為 0、無密碼
