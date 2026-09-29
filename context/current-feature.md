@@ -1,50 +1,16 @@
-# Current Feature: Email 驗證開關
+# Current Feature
 
 ## Status
 
-In Progress
+Not Started
 
 ## Goals
 
-- 以環境變數 `EMAIL_VERIFICATION_ENABLED` 切換 email 驗證，判斷集中在單一函式 `isEmailVerificationEnabled()`（`src/lib/email-verification.ts`），各處不直接讀 `process.env`
-- **關閉時**：
-  - 註冊不寄驗證信，也不建立 `VerificationToken`
-  - 帳號密碼使用者不論 `emailVerified` 為何都能登入（`authorize` 略過 `EmailNotVerifiedError`）
-  - 註冊成功後導向 `/sign-in?registered=1&email=…`，提示改為「Account created. You can now sign in.」，不提寄信、不顯示「Resend verification email」
-  - `resendVerificationEmail` 不寄信
-- **開啟時**：行為與現在完全相同
-- `/api/auth/verify-email` 兩種狀態都保留，開關切換前寄出的連結仍然有效
-- README 與 `.env` 補上這個鍵與說明；Vercel 不設這個變數即為關閉，推送後 Redeploy 即生效
-- 兩種狀態皆實測：註冊、登入、重寄按鈕的顯示與否；tsc、lint、build 通過
+<!-- 以 /feature load 載入 spec 後填入；成功長什麼樣子 -->
 
 ## Notes
 
-- **起因**：Resend 尚未驗證自有網域，`onboarding@resend.dev` 只能寄給 Resend 帳號本人，正式網站的其他人註冊後永遠收不到驗證信，也就無法登入
-- **採環境變數而非其他方案**：
-  - 資料庫設定表：要多一張表和 migration，也需要管理 UI 才方便切換
-  - Vercel Flags／Flags SDK：多一個相依與外部服務，只為一個布林值不划算
-  - 環境變數的代價：在 Vercel 修改後必須 Redeploy 才生效，因為值在函式啟動時讀取
-- **未決定事項 1，預設值**：未設定時要開啟還是關閉？建議**只有值為 `"true"` 才開啟**。理由是開啟時需要 `RESEND_API_KEY` 和可用的寄件網域，漏設時註冊的人會被鎖在外面，傷害比「漏設時沒有驗證」大。反面理由：驗證本身是安全機制，漏設時會靜默失去保護
-- **未決定事項 2，關閉期間註冊的帳號**：建議 `emailVerified` 維持 null，不假裝已驗證。代價是日後重新開啟時，這些帳號需要先從登入頁重寄驗證信才能登入。另一個做法是關閉時直接寫入 `emailVerified = now()`，重新開啟時不受影響，但資料會宣稱驗證過一個實際沒寄過信的 email
-- **會碰到的檔案**：`src/auth.ts`（`authorize` 的檢查）、`src/app/api/auth/register/route.ts`（`issueVerificationEmail`）、`src/lib/email-verification.ts`、`src/app/(auth)/sign-in/page.tsx`（`getNotice`、重寄按鈕的顯示條件）、`src/components/auth/SignInForm.tsx`、README
-- `RegisterForm` 目前在 `verificationEmailSent` 為 false 時帶 `&sent=0`，關閉時需要避免誤顯示「寄信失敗」的提示；register API 的回應可能要多一個欄位來區分「沒寄」與「寄失敗」
-- 這個開關不影響 GitHub 登入：OAuth 使用者本來就不檢查 `emailVerified`
-- **使用者決定**：兩個未決定事項都採建議做法（只有 `"true"` 才開啟；關閉期間註冊的帳號 `emailVerified` 維持 null）
-- **實作**：
-  - register API 的回應新增 `verificationRequired`；`RegisterForm` 只在 `verificationRequired && !verificationEmailSent` 時帶 `&sent=0`
-  - `/sign-in` 在關閉時忽略 `sent=0` 與 `VerificationExpired`／`VerificationInvalid`，因為未驗證也能登入，提示重寄反而誤導
-  - `.env` 與 `.env.production` 都補上 `EMAIL_VERIFICATION_ENABLED=false`，讓 cleanup 比對鍵名時一致
-  - Vercel 不用設定：未設定就是關閉
-- **驗證**（curl，Development `ep-lucky-frost`）：
-  - 關閉時：註冊回 `verificationRequired: false`，不建立 token、`emailVerified` 為 null；登入 302 → `/`；錯誤密碼仍為 `CredentialsSignin`；註冊後的頁面顯示「You can now sign in」、沒有寄信失敗的提示、`initialNeedsVerification` 為 false；`?error=VerificationExpired` 不顯示錯誤
-  - 開啟時（以 `EMAIL_VERIFICATION_ENABLED=true npm run dev` 啟動）：寄給 `@test.com` 失敗，`verificationEmailSent: false`，頁面顯示寄信失敗與重寄按鈕；新帳號與「關閉期間註冊的帳號」登入都回 `code=email_not_verified`；已驗證的 demo 帳號登入成功
-  - 測試帳號 `flagoff@test.com`、`flagon@test.com` 與 1 個 token 已從 Development 刪除
-  - tsc、lint、build 通過
-  - 瀏覽器實測（Playwright，1536px）：
-    - 關閉時：註冊後導向的網址沒有 `sent=0`，頁面顯示綠色的「Account created. You can now sign in.」、沒有重寄按鈕；登入後進入 `/dashboard`，側邊欄顯示新帳號；主控台 0 errors / 0 warnings
-    - 開啟時：關閉期間註冊的帳號登入被擋，顯示「Please verify your email first」與重寄按鈕；新註冊的帳號因寄到 `@test.com` 失敗而導向 `&sent=0`，顯示寄信失敗與重寄按鈕
-    - 測試帳號 `browseroff@test.com`、`browseron@test.com` 與 1 個 token 已從 Development 刪除
-  - Playwright MCP 在 session 開始時逾時（超過 30 秒，推測是 `npx @playwright/mcp@latest` 啟動時要查 registry 或下載新版），用 `/mcp` 重新連接後就正常了
+<!-- 來源、限制、實作方向、驗證結果、已知情況 -->
 
 ## History
 
@@ -91,3 +57,4 @@ In Progress
 - prune-users 腳本（`648aca5`）：`scripts/prune-users.ts`（`npm run db:prune-users`）刪除 `demo@devstash.io` 以外的所有使用者與其內容（Account、Session、Item 含 ItemCollection／ItemTag、Collection、Tag、自訂 ItemType、AiUsage，以及非 demo 的 VerificationToken），系統型別與 demo 資料不動。預設只預演，加 `--confirm` 才刪除；連線主機含 production endpoint（`ep-sparkling-field-b3cf2urc`）時須另加 `--production`；找不到 demo 使用者時中止（否則會刪光所有人）；於單一 transaction 內依序刪除 —— item 先於自訂型別，因 `Item.itemType` 是 `onDelete: Restrict`，demo 的 item 若用到他人自訂型別則事先中止；有 `storageKey` 的 item 寫入 `PendingDeletion` 交給 sweeper。以假的 production 主機驗證防護（exit 1，未連線）。已對 Development 執行，刪除 6 位使用者（`today20050110@yahoo.com.tw`（GitHub）、`test@test.com`、`phase3@test.com`、`test123@test.com`、`test1234@test.com`、`today20050110@gmail.com`，皆無 item／collection／tag／token），之後 `test:db` 6/6（user 1 / item 18 / collection 5 / tag 26）。之後以 GitHub 登入會建立新的空帳號
 - production 未驗證帳號清理：email 驗證上線（部署 `dev-stash-8p9lxpck5`，Ready，migrate 連 `ep-sparkling-field-b3cf2urc` 且無待套用 migration；正式網域 `/sign-in`、`/register` 200，`/api/auth/verify-email` 無參數時 307 至 `?error=VerificationInvalid`）後，經使用者明確指示查詢 production：共 2 個帳號，`today20050110@yahoo.com.tw`（GitHub，不受驗證影響）與 `test1234@test.com`（帳密、未驗證，即「Vercel production 的資料庫連線曾指向 Development」事件後在正式網站註冊的測試帳號）。後者 `@test.com` 收不到信，永遠無法完成驗證，經使用者明確指示「刪除 production 的 test1234@test.com」：刪除前確認無 item／collection／tag／自訂型別／Account／token，於 transaction 內刪除；之後 production 只剩 GitHub 帳號
 - Vercel 的 `RESEND_API_KEY` 改為 Sensitive：原本設為 Config，值會以明碼顯示在 dashboard。覆寫前以 `vercel env pull` 將 production 變數拉到 scratchpad，只比對 SHA-256 指紋後立即刪除檔案，確認 Vercel 舊值、`.env`、`.env.production` 為同一把 key（均未印出）；再以 `vercel env add RESEND_API_KEY production --sensitive --force` 由 stdin 傳入 `.env.production` 的值，`vercel env ls` 顯示為 `Secret`／`Hidden`。未重新部署：現行部署沿用建置時的同一把 key。Sensitive 變數無法讀回，新值是否完整待下次部署後以 gmail 註冊收信驗證
+- **Email 驗證開關完成**（`e19a205`）：inline 描述載入。起因是 Resend 尚未驗證自有網域，`onboarding@resend.dev` 只能寄給 Resend 帳號本人，正式網站的其他人註冊後收不到驗證信也就無法登入。新增環境變數 `EMAIL_VERIFICATION_ENABLED`，判斷集中在 `src/lib/email-verification.ts` 的 `isEmailVerificationEnabled()`。**預設關閉，只有值為 `"true"` 才開啟**（經使用者確認：開啟需要可用的寄件網域，漏設時註冊者會被鎖在外面，傷害大於漏設時沒有驗證）；**關閉期間註冊的帳號 `emailVerified` 維持 null**（經使用者確認，不假裝已驗證；代價是日後重新開啟時需先重寄驗證信才能登入）。不採資料庫設定表（需 migration 與管理 UI）或 Vercel Flags（為一個布林值多一個外部服務）；代價是在 Vercel 修改後須 Redeploy 才生效。關閉時：`authorize` 不丟 `EmailNotVerifiedError`；註冊 API 不寄信、不建 token，回應新增 `verificationRequired`，`RegisterForm` 只在 `verificationRequired && !verificationEmailSent` 時帶 `&sent=0`，避免誤報寄信失敗；`resendVerificationEmail` 直接返回；`/sign-in` 的註冊提示改為「Account created. You can now sign in.」，不顯示重寄按鈕，並忽略 `sent=0` 與 `VerificationExpired`／`VerificationInvalid`（未驗證也能登入，提示重寄反而誤導）。`/api/auth/verify-email` 兩種狀態都保留。README 補上說明；`.env` 與 `.env.production` 加上 `EMAIL_VERIFICATION_ENABLED=false` 讓 cleanup 比對鍵名一致；Vercel 未設定即為關閉。驗證：curl 與 Playwright 兩種狀態都實測（開啟時以 `EMAIL_VERIFICATION_ENABLED=true npm run dev` 啟動）——關閉時註冊後直接登入進入 `/dashboard`、主控台 0 errors；開啟時關閉期間註冊的帳號被擋並顯示重寄按鈕，寄到 `@test.com` 失敗時顯示寄信失敗提示，已驗證的 demo 帳號登入成功；tsc、lint、build 通過。測試帳號 `flagoff`／`flagon`／`browseroff`／`browseron@test.com` 與其 token 已從 Development 刪除。**已知情況**：（1）推送後正式網站的驗證為關閉，任何 email 註冊後都能直接登入；（2）上次改為 Sensitive 的 `RESEND_API_KEY` 是否完整，要等重新開啟驗證後才能驗證；（3）Playwright MCP 在 session 開始時逾時（`npx @playwright/mcp@latest` 啟動時查 registry 或下載新版，推測），以 `/mcp` 重新連接後正常
