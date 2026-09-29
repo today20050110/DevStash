@@ -57,6 +57,20 @@ export const resetPasswordSchema = z
     path: ["confirmPassword"],
   });
 
+// 目前密碼不套用規則（理由同登入）；新密碼沿用註冊規則
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z
+      .string({ error: "Current password is required" })
+      .min(1, "Current password is required"),
+    newPassword: newPasswordSchema,
+    confirmPassword: z.string({ error: "Please confirm your new password" }),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
+
 // 登入不套用密碼規則：規則日後調整時，既有使用者仍要能登入
 export const signInSchema = z.object({
   email: emailSchema,

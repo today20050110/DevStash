@@ -16,6 +16,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import "dotenv/config";
 
 import { PrismaClient } from "../src/generated/prisma/client";
+import { deleteUsersAndContent } from "../src/lib/db/user-deletion";
 
 const KEEP_EMAIL = "demo@devstash.io";
 // CLAUDE.md 記載的 production compute endpoint
@@ -125,20 +126,7 @@ async function main() {
 
   await prisma.$transaction(
     async (tx) => {
-      const fileItems = await tx.item.findMany({
-        where: { ...owned, storageKey: { not: null } },
-        select: { storageKey: true },
-      });
-      await tx.pendingDeletion.createMany({
-        data: fileItems.map((item) => ({ storageKey: item.storageKey! })),
-      });
-      // 先刪 item 再刪型別（Restrict），其餘由 onDelete: Cascade 帶走
-      await tx.aiUsage.deleteMany({ where: owned });
-      await tx.item.deleteMany({ where: owned });
-      await tx.collection.deleteMany({ where: owned });
-      await tx.tag.deleteMany({ where: owned });
-      await tx.itemType.deleteMany({ where: owned });
-      await tx.user.deleteMany({ where: { id: { in: userIds } } });
+      await deleteUsersAndContent(tx, userIds);
       await tx.verificationToken.deleteMany({ where: otherTokens });
     },
     { timeout: 60_000 },

@@ -43,8 +43,12 @@ function getNotice(params: {
   registered: boolean;
   verified: boolean;
   passwordReset: boolean;
+  accountDeleted: boolean;
   verificationEnabled: boolean;
 }) {
+  if (params.accountDeleted) {
+    return "Your account has been deleted.";
+  }
   if (params.passwordReset) {
     return "Password updated. You can now sign in.";
   }
@@ -79,6 +83,7 @@ export default async function SignInPage({
   const registered = firstParam(params.registered) === "1";
   const verified = firstParam(params.verified) === "1";
   const passwordReset = firstParam(params.reset) === "1";
+  const accountDeleted = firstParam(params.deleted) === "1";
   // 註冊 API 回報驗證信寄送失敗
   const emailNotSent =
     verificationEnabled && registered && firstParam(params.sent) === "0";
@@ -104,6 +109,7 @@ export default async function SignInPage({
             registered,
             verified,
             passwordReset,
+            accountDeleted,
             verificationEnabled,
           })}
           initialError={initialError}

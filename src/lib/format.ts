@@ -9,3 +9,15 @@ const DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
 export function formatDate(date: Date): string {
   return DATE_FORMATTER.format(date);
 }
+
+const LONG_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+  timeZone: "UTC",
+});
+
+// "September 29, 2026" — for dates that can be more than a year old
+export function formatLongDate(date: Date): string {
+  return LONG_DATE_FORMATTER.format(date);
+}

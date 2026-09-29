@@ -50,7 +50,6 @@ export function UserMenu({ user }: { user: CurrentUser }) {
               {user.email}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {/* /profile 尚未建立，先放入口 */}
             <DropdownMenuItem asChild>
               <Link href="/profile">
                 <User />

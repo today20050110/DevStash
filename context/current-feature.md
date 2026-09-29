@@ -1,16 +1,74 @@
-# Current Feature
+# Current Feature: Profile 頁面
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
-<!-- 以 /feature load 載入 spec 後填入；成功長什麼樣子 -->
+- 建立 `/profile`，需登入才能進入：加進 `src/proxy.ts` 的 matcher，頁面本身查無使用者時也導向登入頁
+- **使用者資訊**：頭像、名稱、email、帳號建立日期
+  - 頭像沿用 `UserAvatar`：有 GitHub 大頭貼（`User.image`）就顯示，否則顯示名稱或 email 的縮寫
+  - 日期沿用 `src/lib/format.ts` 的 `formatDate`（固定 en-US + UTC，避免 hydration 不一致）
+- **使用統計**：items 總數、collections 總數，以及 7 種系統型別各自的數量（snippets、prompts、commands、notes、files、images、links）
+  - 沿用 `getItemCounts`、`getCollectionCounts`、`getSystemItemTypesWithCounts`，全部必填 `userId` 並排除軟刪除的資料
+- **變更密碼**：只有有 `passwordHash` 的帳號看得到
+  - 需輸入目前密碼、新密碼、確認新密碼；新密碼沿用 `newPasswordSchema`
+  - 目前密碼錯誤時顯示欄位錯誤；成功時顯示成功訊息
+  - 以 Server Action 處理、Zod 驗證，回傳 `{ success, data, error }`
+- **刪除帳號**：以確認對話框防止誤刪
+  - 刪除使用者與其全部內容：items、collections、tags、自訂型別、AI 用量、OAuth 帳號，以及該 email 的驗證與重設 token
+  - 有 `storageKey` 的 item 寫入 `PendingDeletion`，交給日後的 sweeper 清掉 R2 檔案
+  - 刪除後登出，導向 `/sign-in` 並顯示帳號已刪除
+- 側邊欄使用者選單的 Profile 連結改為可用（移除「尚未建立」的註解）
+- 桌面與 390px 手機寬度實測；tsc、lint、build 通過
 
 ## Notes
 
-<!-- 來源、限制、實作方向、驗證結果、已知情況 -->
+- **來源**：`context/features/profile-spec.md`
+- **無 migration**：需要的欄位都已在 schema 中
+- **未決定事項 1，版面**：`/profile` 要不要有 dashboard 的側邊欄與頂部列？
+  - 建議**要**：把 `src/app/dashboard/layout.tsx` 移到 route group `src/app/(app)/layout.tsx`，`/dashboard` 與 `/profile` 共用，網址不變
+  - 日後的 `/items/[type]`、`/collections/[slug]` 也會放進同一個 group
+- **未決定事項 2，刪除帳號的確認方式**：建議在對話框中**輸入自己的 email** 才能按下刪除
+  - 不要求密碼：GitHub 帳號沒有密碼，兩種帳號用同一種確認方式較一致
+  - 代價：拿到已登入瀏覽器的人不必知道密碼就能刪除帳號
+- **未決定事項 3，刪除邏輯的位置**：`scripts/prune-users.ts` 已有完整的刪除順序（先刪 item 再刪自訂型別，因為 `Item.itemType` 是 `onDelete: Restrict`；檔案寫入 `PendingDeletion`）
+  - 建議抽成共用函式（例如 `src/lib/db/users.ts` 的 `deleteUsersAndContent`），刪除帳號與 prune 腳本都呼叫它，避免兩份刪除順序日後不一致
+- **變更密碼時是否刪除未使用的重設 token**：建議**是**。使用者已經知道並換掉了密碼，舊的重設連結沒有理由繼續有效
+- **已知限制**：session 採 JWT，變更密碼或刪除帳號後，其他裝置上已發出的登入憑證在過期前仍能通過 proxy；不過 `getCurrentUser()` 會回查資料庫，帳號刪除後頁面會是空狀態，不會洩漏資料
+- **需要新增的 shadcn 元件**：`alert-dialog`（刪除確認）。安裝後確認 `src/hooks/use-mobile.ts` 沒有被覆寫
+- 自訂型別目前還沒有 UI，統計只列系統型別
+- **使用者決定**：`/feature start` 時沒有另外指定，三個未決定事項都照建議做（共用 route group、輸入 email 確認刪除、抽出共用刪除函式）；變更密碼時刪除未使用的重設 token
+- **實作**：
+  - 版面：`src/app/dashboard/layout.tsx` 移到 `src/app/(app)/layout.tsx`（改名 `AppLayout`，因為 route group 沒有自己的路由鍵，改用 `LayoutProps<"/">`，與 `(auth)` 相同），`dashboard/page.tsx` 移到 `(app)/dashboard/`
+  - `src/lib/db/user-deletion.ts` 的 `deleteUsersAndContent(tx, userIds)`：
+    - 由 `scripts/prune-users.ts` 抽出，腳本改為呼叫它；腳本原本的預演檢查保留
+    - 函式內另外檢查「其他使用者的 item 用到這些使用者的自訂型別」並丟出錯誤
+    - token 不以 userId 關聯，由呼叫端依 email 刪除
+  - `src/lib/db/users.ts` 的 `getUserProfile`：`passwordHash` 只轉成 `hasPassword` 布林值，雜湊不離開這個函式
+  - `src/actions/profile.ts`：
+    - `changePasswordAction`：目前密碼錯誤回欄位錯誤；在 transaction 內更新密碼並刪除重設 token
+    - `deleteAccountAction`：以 `emailSchema` 正規化後比對；在 transaction 內刪除使用者與內容、驗證 token、重設 token；最後 `signOut` 導向 `/sign-in?deleted=1`
+  - `changePasswordSchema` 沿用 `newPasswordSchema`；`password-reset.ts` 匯出 `resetIdentifier`
+  - `format.ts` 新增 `formatLongDate`：原本的 `formatDate` 沒有年份，不適合顯示帳號建立日期
+  - 元件：`ProfileInfo`（頭像、名稱、email、建立日期、登入方式）、`ProfileStats`（沿用統計卡樣式與 `TypeIcon`）、`ChangePasswordForm`、`DeleteAccountDialog`
+    - 刪除對話框不用 `AlertDialogAction`：它點擊後會關閉對話框，看不到伺服器回傳的錯誤
+    - 輸入的 email 不符時停用刪除按鈕；關閉對話框時清空輸入
+  - `GitHubIcon` 由 `GitHubSignInButton` 抽成獨立元件，profile 頁顯示登入方式時共用
+  - `/sign-in` 新增 `?deleted=1` 提示；proxy matcher 加入 `/profile/:path*`；`UserMenu` 移除「尚未建立」的註解
+  - `shadcn add alert-dialog`：`use-mobile.ts` 未被覆寫，`button.tsx` 相同而略過
+- **驗證**（Development `ep-lucky-frost`，Playwright 1440px 與 390px）：
+  - 未登入開啟 `/profile` 導向 `/sign-in?callbackUrl=%2Fprofile`，登入後回到 `/profile`；從側邊欄使用者選單點 Profile 可進入
+  - 以腳本建立的測試帳號（6 筆 item 含 1 筆軟刪除、1 筆有 `storageKey`，1 個 collection、1 個 tag，驗證與重設 token 各 1）：統計顯示 5 items、1 collection，各型別數量正確
+  - 變更密碼：目前密碼錯誤、兩次不一致、少於 8 字元皆顯示欄位錯誤；成功後欄位清空、新密碼生效、重設 token 被刪除、驗證 token 保留
+  - 把測試帳號的 `passwordHash` 暫時清掉並設 GitHub 大頭貼：顯示大頭貼與「GitHub」，變更密碼區塊不顯示
+  - 刪除帳號：空白與不符的 email 時按鈕停用；移除 `disabled` 強制送出時伺服器回「doesn't match」；關閉後再開輸入清空；`  PROFILE@test.com ` 可比對成功；刪除後導向 `/sign-in?deleted=1` 顯示提示，再進 `/profile` 被導回登入頁，舊密碼無法登入；資料庫中使用者、item、collection、tag、`ItemCollection`、兩種 token 皆已刪除，檔案 item 寫入 `PendingDeletion`
+  - demo 帳號在 390px 顯示正常（18 items、5 collections）；主控台 0 errors / 0 warnings
+  - `npm run db:prune-users` 預演正常，呼叫共用函式後輸出不變
+  - tsc、lint、build 通過，build 新增 `ƒ /profile`，`/dashboard` 仍為動態
+  - 測試帳號 `profile@test.com` 已刪除，測試用的 `PendingDeletion` 資料列已移除
+  - 本機 3000 port 是使用者自己開的 dev server（PID 16704），實測沿用它，沒有關閉
 
 ## History
 

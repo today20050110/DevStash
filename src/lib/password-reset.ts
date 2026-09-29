@@ -20,7 +20,8 @@ export const RESET_LINK_ERRORS = {
   invalid: "This reset link is invalid or has already been used.",
 } as const satisfies Record<Exclude<ResetTokenStatus, "valid">, string>;
 
-function resetIdentifier(email: string): string {
+// 變更密碼與刪除帳號時用來清除尚未使用的重設 token
+export function resetIdentifier(email: string): string {
   return `${IDENTIFIER_PREFIX}${email}`;
 }
 
