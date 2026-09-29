@@ -1,6 +1,7 @@
 "use server";
 
 import { AuthError } from "next-auth";
+import { after } from "next/server";
 
 import { signIn, signOut } from "@/auth";
 import { SIGN_IN_PATH } from "@/auth.config";
@@ -96,16 +97,16 @@ export async function resendVerification(
     return { success: false, error: rateLimitMessage(limit.reset) };
   }
 
-  try {
-    await resendVerificationEmail(parsed.data);
-  } catch (error) {
-    // 只有查詢帳號失敗會走到這裡；寄信失敗已在內部處理，對外維持相同訊息
-    console.error("Failed to resend verification email", error);
-    return {
-      success: false,
-      error: "Something went wrong, please try again",
-    };
-  }
+  // 只有存在且未驗證的帳號會寄信：在回應送出之後才執行，回應時間不透露帳號狀態
+  const email = parsed.data;
+  after(async () => {
+    try {
+      await resendVerificationEmail(email);
+    } catch (error) {
+      // 只有查詢帳號失敗會走到這裡；寄信失敗已在內部處理
+      console.error("Failed to resend verification email", error);
+    }
+  });
   // 無論帳號是否存在都回相同訊息，不透露 email 是否已註冊
   return { success: true, message: RESEND_SENT };
 }

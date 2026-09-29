@@ -6,7 +6,7 @@ import authConfig, { CREDENTIALS_FIELDS } from "@/auth.config";
 import { EmailNotVerifiedError, RateLimitedError } from "@/lib/auth-errors";
 import { signInSchema } from "@/lib/auth-schemas";
 import { isEmailVerificationEnabled } from "@/lib/email-verification";
-import { verifyPassword } from "@/lib/password";
+import { verifyAgainstDummyHash, verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 import { checkRateLimit, getClientIp, ipEmailKey } from "@/lib/rate-limit";
 
@@ -43,6 +43,8 @@ const credentialsProvider = Credentials({
       },
     });
     if (!user?.passwordHash) {
+      // 仍跑一次 bcrypt：否則「帳號不存在」比「密碼錯誤」快，可據此判斷 email 是否已註冊
+      await verifyAgainstDummyHash(password);
       return null;
     }
 

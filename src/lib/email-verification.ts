@@ -79,13 +79,10 @@ export async function verifyEmailToken(
   const where = { identifier: email, token: hashToken(token) };
   const record = await prisma.verificationToken.findFirst({ where });
 
+  // 找不到 token 時不查帳號狀態：否則帶任意 token 就能從導向結果看出
+  // 這個 email 是否已註冊且已驗證（已驗證的人再點舊連結，會看到「無效或已使用」）
   if (!record) {
-    // 已驗證過的人再點一次舊連結時，不必顯示錯誤
-    const user = await prisma.user.findUnique({
-      where: { email },
-      select: { emailVerified: true },
-    });
-    return user?.emailVerified ? "already-verified" : "invalid";
+    return "invalid";
   }
 
   if (record.expires < new Date()) {

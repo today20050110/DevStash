@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { z } from "zod";
 
 import { SIGN_IN_PATH } from "@/auth.config";
@@ -51,13 +52,17 @@ export async function requestPasswordResetAction(
     return { success: false, error: rateLimitMessage(limit.reset) };
   }
 
-  try {
-    await requestPasswordReset(parsed.data);
-  } catch (error) {
-    // 寄信失敗已在內部處理，這裡只會是資料庫錯誤
-    console.error("Failed to request password reset", error);
-    return { success: false, error: GENERIC_ERROR };
-  }
+  // 查帳號、建立 token、寄信都在回應送出之後才執行：只有帳號存在時才會寄信，
+  // 若在回應前 await，回應時間就會透露 email 是否已註冊。錯誤只記在 log
+  const email = parsed.data;
+  after(async () => {
+    try {
+      await requestPasswordReset(email);
+    } catch (error) {
+      // 寄信失敗已在內部處理，這裡只會是資料庫錯誤
+      console.error("Failed to request password reset", error);
+    }
+  });
   // 無論帳號是否存在都回相同訊息，不透露 email 是否已註冊
   return { success: true, message: RESET_REQUESTED };
 }
