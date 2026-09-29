@@ -1,33 +1,16 @@
-# Current Feature: 速率限制加上只看 IP 的上限
+# Current Feature
 
 ## Status
 
-In Progress
+Not Started
 
 ## Goals
 
-- 登入與重寄驗證信在「IP + email」之前，先檢查一道只看 IP、比較寬鬆的上限：
-  - 登入：同一 IP 15 分鐘 30 次
-  - 重寄驗證信：同一 IP 15 分鐘 10 次
-- 任一道超過都擋下；一般使用者碰不到只看 IP 的上限，但同一 IP 換 email 繼續嘗試會被擋
-- 實測：同一 IP 換 email 在上限後被擋；不同 IP 不受影響；原本的 IP + email 限制仍有效；tsc、lint、build 通過
+<!-- 以 /feature load 載入 spec 後填入；成功長什麼樣子 -->
 
 ## Notes
 
-- **來源**：`docs/audit-results/AUTH_SECURITY_REVIEW.md` 第二次稽核（2026-09-30，`c5d9b24`）唯一的 Low 項目
-  - 同一 IP 換 email 就是新的計數，可以對大量 email 各試常見密碼
-  - 用隨機 email 大量呼叫重寄驗證信（不跑 bcrypt，成本低），約 50 萬次可用完 Upstash 免費方案每月 50 萬個指令；額度用完後 Redis 回錯誤，`@upstash/ratelimit` 的 `limit()` 不會捕捉（已讀原始碼），`checkRateLimit` 的 catch 會放行，當月剩下的時間所有限制失效
-- 註冊、忘記密碼、送出新密碼本來就只以 IP 為鍵；變更密碼以 userId 為鍵，需要先登入，不在這次範圍
-- **仍然存在**：稽核「未能確認的項目」——Vercel 若接受 IPv6，攻擊者可在一個 /64 內輪換位址，只看 IP 的上限也會失效；額度耗盡時 fail open 的設計不變
-- **實作**：
-  - `LIMITS` 新增 `signInIp`（30／15 分鐘）與 `resendVerificationIp`（10／15 分鐘）
-  - 新增 `checkRateLimits(checks)`：依序檢查多道限制，第一道被擋就停止，後面的不再計數
-  - `authorize` 改為 `checkRateLimits([["signInIp", ip], ["signIn", ipEmailKey(ip, email)]])`；`resendVerification` 同樣先 `resendVerificationIp` 再 `resendVerification`
-- **驗證**（Development，dev server 讀 `.env` 的 Upstash、`EMAIL_VERIFICATION_ENABLED=true`；以 `x-real-ip` 指定測試 IP）：
-  - 登入（curl 直接呼叫 `/api/auth/callback/credentials`）：同一 IP 換 32 個 email，前 30 次 `credentials`、第 31、32 次 `rate_limited`；另一個 IP 不受影響；同一 IP 同一 email 第 6 次 `rate_limited`（原本的限制仍有效）；同一 email 每次換 IP 6 次皆 `credentials`（已知：沒有同一 email 跨 IP 的總量限制）
-  - 重寄驗證信（Playwright）：同一 IP 換 11 個 email，前 10 次送出、第 11 次被擋；另一個 IP 不受影響
-  - tsc、lint、build 通過
-- 第二次稽核報告（`docs/audit-results/AUTH_SECURITY_REVIEW.md`，Critical 0／High 0／Medium 0／Low 1）隨本次一起提交；報告中的 Low 即為本次修正的項目，下次執行 auth-auditor 時會整份重寫
+<!-- 來源、限制、實作方向、驗證結果、已知情況 -->
 
 ## History
 
@@ -83,3 +66,5 @@ In Progress
 - **認證端點的速率限制完成**（`61c2266`）：依 `context/features/rate-limiting-spec.md`（隨本次 commit 加入版控），對應稽核報告 Medium 第 2 項。新增 `@upstash/ratelimit` ^2.2.0、`@upstash/redis` ^1.39.0 與 `src/lib/rate-limit.ts`：sliding window，限制集中在 `LIMITS`（登入 5／15 分鐘 IP+email、註冊 3／1 小時 IP、申請重設 3／1 小時 IP、送出新密碼 5／15 分鐘 IP、重寄驗證信 3／15 分鐘 IP+email，以及 spec 沒列、經使用者同意加上的變更密碼 5／15 分鐘 userId）；`checkRateLimit` 在沒有設定、連線錯誤時放行，`timeout: 1000` 逾時時 SDK 也放行（**fail open**）；`getClientIp` 依序讀 `x-real-ip`、`x-forwarded-for`（已查 Vercel 文件：Vercel 覆寫此 header、不轉發外部 IP）；`ipEmailKey` 先對 email 做 SHA-256。**spec 與現況的對應**：忘記密碼、重設、重寄驗證信是 server action 而非 spec 寫的 API route，回傳錯誤訊息而非 429；登入的限制放在 `authorize(credentials, request)`，因為 `/api/auth/callback/credentials` 可以繞過 server action 直接呼叫，超過時丟 `RateLimitedError`（`CredentialsSignin` 子類別、`code = "rate_limited"`、帶 `reset`），直接呼叫被擋時登入頁依 `?code=rate_limited` 顯示專屬訊息；註冊 API 回 429 與 `Retry-After`；錯誤沿用頁面上的訊息、不用 spec 的 toast（經使用者確認）。送出新密碼與註冊在驗證格式之前檢查，格式錯誤的請求也計入。**Upstash 透過 Vercel 整合建立**：`vercel integration add upstash/upstash-kv --name devstash-ratelimit --plan free -m primaryRegion=iad1 -e production -e preview --no-env-pull --no-claim`（第一次須由使用者在瀏覽器接受條款；`--no-env-pull` 避免產生 `.env.local`；區域配合 Vercel 函式的 `iad1`），設定 `KV_REST_API_*` 等 5 個變數（`true-sculpin-320214`）。安裝時 Production 上另有使用者先前手動設定的 `UPSTASH_REDIS_REST_*`（`moving-mastodon-320335`），以 scratchpad 只比對主機名稱確認是不同資料庫；使用者選用整合的資料庫。本機用的第二個免費資料庫無法經整合建立（「Billing plan not found: free」，只剩付費方案），改把 `moving-mastodon` 的兩個變數由 Production 移到 Development（先新增、比對值相同後才刪除 production 的）。結果 Production／Preview 為 `KV_*`、Development 為 `UPSTASH_REDIS_REST_*`，`getRedis()` 以 `KV_*` 優先，不用 `Redis.fromEnv()`。整合另自動加入 Upstash 的 agent skill：`.claude/skills/upstash-ratelimit-js/`、`upstash-redis-js/` 與 `skills-lock.json` 一併 commit（與 Neon skill 一致），同內容的 `.agents/` 加入 `.gitignore`（經使用者確認）。README 補上環境變數與各環境對照；`project-overview.md` §3.4、§7 改寫為 Redis 只用於速率限制、不當快取。驗證（dev server 以 Development 的資料庫啟動，值只放在程序環境、測完刪除暫存）：沒有設定時全部放行；直接呼叫 API 同一 email 第 6 次 `rate_limited`、被擋後正確密碼也擋、換 email 不受影響；註冊第 4 次 429 + `Retry-After: 3373`；Playwright 驗證登入表單、忘記密碼、送出新密碼、變更密碼、重寄驗證信（`EMAIL_VERIFICATION_ENABLED=true`）皆在超過時顯示「Too many attempts. Please try again in X minutes.」；Redis 位址不存在時全部放行、log 記錄逾時、每次多約 1 秒；tsc、lint、build 通過，測試帳號已刪除。**已知情況**：（1）顯示的等待分鐘數偏短（sliding window 的 `reset` 是目前固定時段的結束時間）；（2）登入計入所有嘗試（含成功），變更密碼後的重新簽發也會用掉一次；（3）`KV_*`、`UPSTASH_REDIS_REST_*` 為 Config 類型，dashboard 可見明碼，建議改為 Sensitive（Development 不支援）；（4）另外發現 Vercel 函式在 `iad1`、Neon 在 `ap-southeast-1`，每次資料庫查詢都橫跨太平洋（未處理）；（5）沒有同一 email 跨 IP 的總量限制
 - Upstash 的 `KV_*` 改為 Sensitive：整合設定的 `KV_REST_API_URL`、`KV_REST_API_TOKEN`、`KV_REST_API_READ_ONLY_TOKEN`、`KV_URL`、`REDIS_URL`（Production+Preview 同一筆紀錄）原為 Config，dashboard 可見明碼。這些變數由整合管理（API 的 `contentHint` 為 `integration-store-secret`、`storeId` 指向 `devstash-ratelimit`），擔心覆寫會斷開連結、日後 token 輪換不再同步，所以先以程式未使用的 `KV_REST_API_READ_ONLY_TOKEN` 試驗。`vercel env update --sensitive` 以 stdin 傳值時必須指定單一環境（會把共用紀錄拆開），改用 `vercel api /v9/projects/dev-stash/env/{id} -X PATCH --input body.json`，body 為 `{ type: "sensitive", value }`、值取自 scratchpad 的 `vercel env pull`，未顯示於畫面；Git Bash 會把 `/v9/...` 轉成 Windows 路徑，需加 `MSYS_NO_PATHCONV=1`。試驗後 `type` 為 `sensitive`、target 仍為 production+preview、`contentHint` 保留，其餘 4 個以同樣方式處理，`vercel env ls` 皆為 `Hidden`／`Secret`，暫存檔已刪除。值未變更。Sensitive 無法讀回，經使用者同意以 `vercel redeploy dev-stash-9kwrs2fkx… --target production` 重新部署（`dev-stash-cgmpg22py`，Ready，無待套用 migration），送出一次格式錯誤的註冊請求回 400、log 無 `Rate limit check failed/timed out`，確認值完整且連得上 Upstash。Development 的 `UPSTASH_REDIS_REST_*` 維持 Config（Development 環境不支援 Sensitive）
 - **修正可判斷 email 是否已註冊的途徑**（`12ea6e3`）：處理 `docs/audit-results/AUTH_SECURITY_REVIEW.md` 的 Low 項目；註冊回 409 為 Auth Phase 2 經使用者確認的設計，不處理。（1）登入：`src/lib/password.ts` 新增 `verifyAgainstDummyHash`（以 `hash(randomBytes(16), BCRYPT_ROUNDS)` 產生並快取的假雜湊），`authorize` 在查無帳號或沒有密碼時也跑一次 bcrypt；（2）申請重設密碼與重寄驗證信（後者稽核未列、但有同樣的時間差）：查帳號、建 token、寄信改在 `after()` 中於回應送出後執行，錯誤只記 log、畫面一律顯示成功訊息；（3）`verifyEmailToken` 找不到 token 時直接回 `invalid`，不再依 `emailVerified` 回 `already-verified`（該值只剩「同一有效 token 同時使用兩次」的競態路徑）。**行為變化**：已驗證的人再點舊驗證連結會看到「無效或已經用過」。驗證（Development，`EMAIL_VERIFICATION_ENABLED=true`）：登入回應時間已註冊密碼錯 0.68–0.73 秒、不存在 0.70–0.82 秒、只用 GitHub 0.65–0.73 秒；Playwright 以不同 `x-real-ip` 避開速率限制計時，申請重設 存在 240／225 ms、不存在 243／244 ms，重寄驗證信 存在 310／303 ms、不存在 310／302 ms，回應後資料庫確實建立對應 token；驗證端點已驗證帳號 + 任意 token 由 `verified=1` 改為 `VerificationInvalid`、正確 token 仍可驗證、同一連結第二次為 `VerificationInvalid`；正確密碼登入正常；tsc、lint、build 通過，測試資料已刪除。**意外發現**：本機 `.env` 已有使用者自行加入的 `UPSTASH_REDIS_REST_*`（修改時間 04:28，只看鍵名），自上一筆改為也讀 `UPSTASH_*` 後，本機 `npm run dev` 一直啟用速率限制（Development 的 `moving-mastodon`），上一筆「未設定時放行」的實測仍有效（當時只讀 `KV_*`）。**待辦**：重跑 auth-auditor 更新報告；確認 `.env.production` 是否也有 Upstash 的鍵（cleanup skill 第 7 項）
+- 第二次 auth-auditor 稽核（2026-09-30，`c5d9b24`）：Critical 0／High 0／Medium 0／Low 1，報告隨下一筆 commit 提交。上次三項的查證皆為修正正確：`sessionVersion` 只在登入時讀取、不處理 `trigger === "update"`，所有登入後的進入點都經 `getCurrentUser()` 比對；六個端點都有速率限制、登入的檢查在 `authorize`、production 的 IP 無法偽造；列舉途徑已消除（註冊 409 為已確認的設計）。唯一的新問題（Low，經人工對照程式碼確認）：登入與重寄驗證信只以 IP + email 為鍵，同一 IP 換 email 就是新的計數，可對大量帳號各試常見密碼；以隨機 email 大量呼叫重寄驗證信（不跑 bcrypt）約 50 萬次可用完 Upstash 免費方案每月 50 萬個指令，額度耗盡後 Redis 回錯誤，`@upstash/ratelimit` 的 `limit()` 不捕捉（已讀原始碼），`checkRateLimit` 會放行，當月所有限制失效。未能確認：Vercel 是否接受 IPv6（若接受可在 /64 內輪換位址）、Upstash 的 `EVALSHA` 計幾個指令
+- **速率限制加上只看 IP 的上限**（`e9633d8`）：修正上述 Low。`LIMITS` 新增 `signInIp`（30／15 分鐘）與 `resendVerificationIp`（10／15 分鐘）；新增 `checkRateLimits(checks)` 依序檢查、第一道被擋就停止且後面不再計數；`authorize` 與 `resendVerification` 改為先只看 IP、再看 IP + email。驗證（Development，`.env` 的 Upstash、`EMAIL_VERIFICATION_ENABLED=true`，以 `x-real-ip` 指定測試 IP）：登入同一 IP 換 32 個 email，前 30 次 `credentials`、之後 `rate_limited`；另一 IP 不受影響；同一 IP 同一 email 第 6 次仍被擋；重寄驗證信同一 IP 換 11 個 email，第 11 次被擋；tsc、lint、build 通過。**已知情況**：同一 email 每次換 IP 仍不受限（沒有跨 IP 的總量限制）；IPv6 輪換未確認；額度耗盡時仍 fail open，但單一 IP 會先被 IP 上限擋下。另：使用者詢問課程的 `github-oauth-redirect-fix.md`（GitHub 登入要按兩次），對照後本專案自 Auth Phase 3 起已是建議的寫法（Server Action 呼叫 `@/auth` 的 `signIn`、`<form action>`、`redirectTo`、無 `next-auth/react`），不需修改
