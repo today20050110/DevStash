@@ -36,6 +36,8 @@ const VERIFICATION_ERRORS = new Set([
   "VerificationInvalid",
 ]);
 const DEFAULT_ERROR = "Sign in failed, please try again";
+// 經由 URL 帶回時拿不到解除時間，不寫具體分鐘數
+const RATE_LIMITED = "Too many attempts. Please try again later.";
 const EMAIL_NOT_SENT =
   "Account created, but we couldn't send the verification email. Use the button below to resend it.";
 
@@ -63,6 +65,21 @@ function getNotice(params: {
   return undefined;
 }
 
+function getInitialError(params: {
+  errorCode: string | undefined;
+  code: string | undefined;
+  emailNotSent: boolean;
+}) {
+  // 直接呼叫 /api/auth/callback/credentials 被速率限制擋下時，Auth.js 以 &code= 帶回原因
+  if (params.code === "rate_limited") {
+    return RATE_LIMITED;
+  }
+  if (params.errorCode) {
+    return ERROR_MESSAGES[params.errorCode] ?? DEFAULT_ERROR;
+  }
+  return params.emailNotSent ? EMAIL_NOT_SENT : undefined;
+}
+
 export default async function SignInPage({
   searchParams,
 }: PageProps<"/sign-in">) {
@@ -87,11 +104,11 @@ export default async function SignInPage({
   // 註冊 API 回報驗證信寄送失敗
   const emailNotSent =
     verificationEnabled && registered && firstParam(params.sent) === "0";
-  const initialError = errorCode
-    ? (ERROR_MESSAGES[errorCode] ?? DEFAULT_ERROR)
-    : emailNotSent
-      ? EMAIL_NOT_SENT
-      : undefined;
+  const initialError = getInitialError({
+    errorCode,
+    code: firstParam(params.code),
+    emailNotSent,
+  });
   const initialNeedsVerification =
     verificationEnabled && (registered || isVerificationError);
 

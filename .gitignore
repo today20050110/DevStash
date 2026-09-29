@@ -44,3 +44,6 @@ next-env.d.ts
 
 # prisma — generated client lives in src/ since Prisma 7, not node_modules
 /src/generated
+
+# Vercel integration 安裝時為其他 AI 工具產生的 skill 副本（與 .claude/skills 相同）
+/.agents

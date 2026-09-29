@@ -11,6 +11,7 @@ import { deleteUsersAndContent } from "@/lib/db/user-deletion";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { resetIdentifier } from "@/lib/password-reset";
 import { prisma } from "@/lib/prisma";
+import { checkRateLimit, rateLimitMessage } from "@/lib/rate-limit";
 
 export interface ChangePasswordState {
   success: boolean;
@@ -53,6 +54,11 @@ export async function changePasswordAction(
     const currentUser = await getCurrentUser();
     if (!currentUser) {
       return { success: false, error: NOT_SIGNED_IN };
+    }
+    // 以帳號為鍵：拿到已登入瀏覽器的人不能用這個表單無限次猜目前的密碼
+    const limit = await checkRateLimit("changePassword", currentUser.id);
+    if (!limit.success) {
+      return { success: false, error: rateLimitMessage(limit.reset) };
     }
     const user = await prisma.user.findUnique({
       where: { id: currentUser.id },

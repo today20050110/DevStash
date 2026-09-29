@@ -11,6 +11,11 @@ import {
   requestPasswordReset,
   resetPassword,
 } from "@/lib/password-reset";
+import {
+  checkRateLimit,
+  getActionClientIp,
+  rateLimitMessage,
+} from "@/lib/rate-limit";
 
 export interface ForgotPasswordState {
   success: boolean;
@@ -39,6 +44,13 @@ export async function requestPasswordResetAction(
     return { success: false, error: parsed.error.issues[0].message };
   }
 
+  // 每次申請都可能寄信：擋下拿來轟炸別人信箱的請求
+  const ip = await getActionClientIp();
+  const limit = await checkRateLimit("forgotPassword", ip);
+  if (!limit.success) {
+    return { success: false, error: rateLimitMessage(limit.reset) };
+  }
+
   try {
     await requestPasswordReset(parsed.data);
   } catch (error) {
@@ -54,6 +66,13 @@ export async function resetPasswordAction(
   _prevState: ResetPasswordState,
   formData: FormData,
 ): Promise<ResetPasswordState> {
+  // 放在驗證格式之前：拿亂碼 token 反覆嘗試的請求也要計入
+  const ip = await getActionClientIp();
+  const limit = await checkRateLimit("resetPassword", ip);
+  if (!limit.success) {
+    return { success: false, error: rateLimitMessage(limit.reset) };
+  }
+
   const parsed = resetPasswordSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     const { fieldErrors } = z.flattenError(parsed.error);

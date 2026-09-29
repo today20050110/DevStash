@@ -8,6 +8,12 @@ import {
 } from "@/lib/email-verification";
 import { hashPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
+import {
+  checkRateLimit,
+  getClientIp,
+  rateLimitMessage,
+  retryAfterSeconds,
+} from "@/lib/rate-limit";
 
 interface RegisterResponse {
   success: boolean;
@@ -32,6 +38,18 @@ function errorResponse(error: string, status: number) {
 }
 
 export async function POST(request: Request) {
+  // 放在解析 body 之前：格式錯誤的請求也要計入
+  const limit = await checkRateLimit("register", getClientIp(request.headers));
+  if (!limit.success) {
+    return NextResponse.json<RegisterResponse>(
+      { success: false, error: rateLimitMessage(limit.reset) },
+      {
+        status: 429,
+        headers: { "Retry-After": String(retryAfterSeconds(limit.reset)) },
+      },
+    );
+  }
+
   let body: unknown;
   try {
     body = await request.json();

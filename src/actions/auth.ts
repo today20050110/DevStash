@@ -4,9 +4,15 @@ import { AuthError } from "next-auth";
 
 import { signIn, signOut } from "@/auth";
 import { SIGN_IN_PATH } from "@/auth.config";
-import { EmailNotVerifiedError } from "@/lib/auth-errors";
+import { EmailNotVerifiedError, RateLimitedError } from "@/lib/auth-errors";
 import { emailSchema, signInSchema } from "@/lib/auth-schemas";
 import { resendVerificationEmail } from "@/lib/email-verification";
+import {
+  checkRateLimit,
+  getActionClientIp,
+  ipEmailKey,
+  rateLimitMessage,
+} from "@/lib/rate-limit";
 import { getSafeRedirect } from "@/lib/redirect";
 
 export interface SignInState {
@@ -48,6 +54,9 @@ export async function signInWithCredentials(
     });
     return { success: true };
   } catch (error) {
+    if (error instanceof RateLimitedError) {
+      return { success: false, error: rateLimitMessage(error.reset) };
+    }
     if (error instanceof EmailNotVerifiedError) {
       return {
         success: false,
@@ -77,6 +86,14 @@ export async function resendVerification(
   const parsed = emailSchema.safeParse(formData.get("email"));
   if (!parsed.success) {
     return { success: false, error: parsed.error.issues[0].message };
+  }
+
+  const limit = await checkRateLimit(
+    "resendVerification",
+    ipEmailKey(await getActionClientIp(), parsed.data),
+  );
+  if (!limit.success) {
+    return { success: false, error: rateLimitMessage(limit.reset) };
   }
 
   try {

@@ -3,23 +3,34 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 
 import authConfig, { CREDENTIALS_FIELDS } from "@/auth.config";
-import { EmailNotVerifiedError } from "@/lib/auth-errors";
+import { EmailNotVerifiedError, RateLimitedError } from "@/lib/auth-errors";
 import { signInSchema } from "@/lib/auth-schemas";
 import { isEmailVerificationEnabled } from "@/lib/email-verification";
 import { verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
+import { checkRateLimit, getClientIp, ipEmailKey } from "@/lib/rate-limit";
 
 const credentialsProvider = Credentials({
   credentials: CREDENTIALS_FIELDS,
   // 驗證失敗都回 null：不區分「帳號不存在」、「OAuth 帳號沒有密碼」與「密碼錯誤」。
-  // 唯一例外是開啟驗證時密碼正確但 email 未驗證，丟出 EmailNotVerifiedError
-  async authorize(credentials) {
+  // 例外：嘗試次數超過限制時丟出 RateLimitedError；開啟驗證時密碼正確但 email 未驗證，
+  // 丟出 EmailNotVerifiedError
+  async authorize(credentials, request) {
     const parsed = signInSchema.safeParse(credentials);
     if (!parsed.success) {
       return null;
     }
 
     const { email, password } = parsed.data;
+    // 放在這裡而不是 server action：/api/auth/callback/credentials 可以被直接呼叫
+    const limit = await checkRateLimit(
+      "signIn",
+      ipEmailKey(getClientIp(request.headers), email),
+    );
+    if (!limit.success) {
+      throw new RateLimitedError(limit.reset);
+    }
+
     const user = await prisma.user.findUnique({
       where: { email },
       select: {

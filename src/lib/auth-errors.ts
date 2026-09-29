@@ -8,3 +8,15 @@ import { CredentialsSignin } from "next-auth";
 export class EmailNotVerifiedError extends CredentialsSignin {
   code = "email_not_verified";
 }
+
+/**
+ * 登入嘗試次數超過限制。在 authorize 裡丟出，server action 與直接呼叫
+ * /api/auth/callback/credentials 都會經過。reset 帶到 server action 組出等待時間
+ */
+export class RateLimitedError extends CredentialsSignin {
+  code = "rate_limited";
+
+  constructor(readonly reset: number) {
+    super();
+  }
+}

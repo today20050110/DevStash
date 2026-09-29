@@ -202,7 +202,9 @@ Stripe webhook 保證 at-least-once 送達，重送是常態而非異常。沒�
 
 - **`Collection.itemCount` 快取欄位** — 直接 `count()`，資料量到不了需要快取的規模。
 - **`Collection.dominantTypeId` 快取欄位** — UI 需要「集合中最多的型別」來決定卡片底色，用一次 `groupBy` 查詢即可，不要在每次寫入時維護。注意不要在列表頁對每張卡片各查一次（N+1）。
-- **Redis** — 你的筆記寫「Maybe」。答案是 v1 不要。Neon 的連線池加上 Next.js 的 `unstable_cache` 已經夠了。等到 AI 速率限制需要跨請求的計數器時再引入。
+- **Redis 當快取** — 你的筆記寫「Maybe」。答案是 v1 不要。Neon 的連線池加上 Next.js 的 `unstable_cache` 已經夠了。
+  - 更新：認證端點的速率限制需要跨請求、跨函式實例的計數器，已引入 Upstash Redis（`@upstash/ratelimit`，見 `src/lib/rate-limit.ts`）
+  - 用途僅限速率限制，仍不拿來當資料快取；日後 AI 用量上限也可以沿用
 
 ---
 
@@ -349,7 +351,8 @@ Schema 中以 `Unsupported("tsvector")` 宣告，實際欄位由 migration 建�
 | 認證      | Auth.js v5 (NextAuth)       | Email/密碼 + GitHub OAuth      |
 | AI        | OpenAI gpt-5-nano           |                                |
 | 樣式      | Tailwind CSS v4 + shadcn/ui |                                |
-| 快取      | 無（v1）                    | Redis 延後                     |
+| 快取      | 無（v1）                    | Redis 不當快取                 |
+| 速率限制  | Upstash Redis               | `@upstash/ratelimit`，fail open |
 
 ### Prisma 版本注意事項
 

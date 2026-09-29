@@ -1,16 +1,87 @@
-# Current Feature
+# Current Feature: 認證端點的速率限制
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
-<!-- 以 /feature load 載入 spec 後填入；成功長什麼樣子 -->
+- 新增 `src/lib/rate-limit.ts`：Upstash Redis + `@upstash/ratelimit`，sliding window，回傳 `{ success, remaining, reset }`；各端點的限制集中定義在這個檔案
+- 限制如下（依 spec；實際入口依專案現況對應，見 Notes）：
+
+  | 動作 | 實際入口 | 限制 | 鍵 |
+  | --- | --- | --- | --- |
+  | 登入 | `auth.ts` 的 `authorize`（server action 與 `/api/auth/callback/credentials` 都會經過） | 5 次／15 分鐘 | IP + email |
+  | 註冊 | `POST /api/auth/register` | 3 次／1 小時 | IP |
+  | 申請重設密碼 | `requestPasswordResetAction` | 3 次／1 小時 | IP |
+  | 送出新密碼 | `resetPasswordAction` | 5 次／15 分鐘 | IP |
+  | 重寄驗證信 | `resendVerification` | 3 次／15 分鐘 | IP + email |
+
+- 超過限制時：
+  - API route 回 429、`Retry-After` header、`{ success: false, error: "Too many attempts. Please try again in X minutes." }`
+  - Server action 回傳同樣的錯誤訊息，顯示在表單上
+  - 登入被限制時顯示「Too many attempts…」，不是「Invalid email or password」
+- **Fail open**：沒有設定 Upstash 環境變數，或 Upstash 無法連線、逾時時，放行請求並記錄 log，不讓登入整個壞掉
+- 環境變數 `UPSTASH_REDIS_REST_URL`、`UPSTASH_REDIS_REST_TOKEN`：寫進 README；本機 `.env` 與 Vercel 各自設定
+- 實測：各端點超過限制時被擋、`Retry-After` 正確、fail open 正常；tsc、lint、build 通過
 
 ## Notes
 
-<!-- 來源、限制、實作方向、驗證結果、已知情況 -->
+- **來源**：`context/features/rate-limiting-spec.md`；對應稽核報告 Medium 第 2 項
+- **spec 與專案現況不同的地方**：
+  - spec 的 `/api/auth/forgot-password`、`/api/auth/reset-password`、`/api/auth/resend-verification` 不存在：這三個是 server action。server action 無法自訂 HTTP 狀態碼與 header，所以回傳錯誤訊息，不是 429
+  - 登入走 server action `signInWithCredentials`，但 Auth.js 的 `/api/auth/callback/credentials` 仍然可以被直接呼叫。**限制必須放在 `authorize` 裡**，兩條路都會經過，才擋得住直接打 API 的人。`authorize` 的第二個參數是 `Request`，可以從中取得 IP
+  - 被限制時在 `authorize` 丟出 `CredentialsSignin` 的子類別（`code = "rate_limited"`），做法與既有的 `EmailNotVerifiedError` 相同，server action 以 `instanceof` 判斷並顯示專屬訊息
+- **未決定事項 1，錯誤顯示方式**：spec 寫 toast，但 Auth Phase 3 時已決定認證表單的錯誤直接顯示在頁面上、不引入 toast。建議**沿用頁面上的錯誤訊息**，與現有表單一致
+- **未決定事項 2，Upstash 的建立方式**（需要你操作）：
+  - (a) 透過 Vercel Marketplace 的 Upstash 整合建立：Vercel 會自動把連線資訊寫進環境變數，但變數名稱可能是 `KV_REST_API_URL`／`KV_REST_API_TOKEN`，程式需要同時接受兩種名稱
+  - (b) 在 Upstash 官網自行建立資料庫，再把兩個變數手動設到 Vercel
+  - 本機與 production 建議**分開兩個資料庫**，避免本機測試時把正式網站的使用者鎖住；本機不設定也可以，會 fail open
+- **未決定事項 3，是否加上 spec 沒列的端點**：建議加上**變更密碼**（5 次／15 分鐘，以 userId 為鍵）。它要輸入目前密碼，拿到已登入瀏覽器的人可以用它猜密碼
+- **IP 的取得**：Vercel 會以真實的客戶端 IP 覆寫 `x-forwarded-for`，使用者無法偽造；實作時要查證並寫進註解。本機直接連線時 header 可以偽造，但不影響 production
+- **email 放進 Redis 鍵之前先做 SHA-256**：避免 Redis 裡出現明文 email
+- **需要同步更新的文件**：`project-overview.md` §3.4 寫「Redis v1 不要」、§7 技術棧寫「Redis 延後」，引入 Upstash 後要改寫；README 補上環境變數
+- **不在這次範圍**：每個 email 跨 IP 的總量限制（分散式的撞庫攻擊）、`/api/auth/verify-email`、刪除帳號
+- **使用者決定**：三個未決定事項都照建議（錯誤顯示在頁面上、不用 toast；透過 Vercel 整合建立 Upstash；加上變更密碼的限制）
+- **Upstash 建立經過**：
+  - `vercel integration discover --category storage` 找到 `upstash/upstash-kv`；Vercel 函式區域為 `iad1`（`vercel project inspect`），資料庫建在同一區
+  - 第一次 `vercel integration add` 回 `integration_terms_acceptance_required`，由使用者在瀏覽器接受 Upstash 條款後重跑成功
+  - 最終指令：`vercel integration add upstash/upstash-kv --name devstash-ratelimit --plan free -m primaryRegion=iad1 -e production -e preview --no-env-pull --no-claim`
+    - `--no-env-pull`：預設的 env pull 會建立 `.env.local`，本專案不使用 `.env.local`
+    - 只連 production 與 preview；本機不設定，fail open
+  - 整合設定了 `KV_REST_API_URL`、`KV_REST_API_TOKEN`、`KV_REST_API_READ_ONLY_TOKEN`、`KV_URL`、`REDIS_URL`（Production、Preview，Config 類型），資料庫主機 `true-sculpin-320214.upstash.io`
+  - 同時自動在專案加入 Upstash 的 agent skill：`.claude/skills/upstash-ratelimit-js/`、`.claude/skills/upstash-redis-js/`、`.agents/`，並修改 `skills-lock.json`
+- **Production 上另有一組 `UPSTASH_REDIS_REST_URL`／`UPSTASH_REDIS_REST_TOKEN`**（安裝前約 24 分鐘設定、只在 Production，不是 Claude 設的），指向另一個資料庫 `moving-mastodon-320335.upstash.io`。以 `vercel env pull` 拉到 scratchpad、只比對主機名稱與 token 是否相同後立即刪除檔案。**使用者決定用整合建立的 `true-sculpin`**；另一個資料庫與那兩個變數是否刪除由使用者決定
+- **因此程式只讀 `KV_REST_API_URL`／`KV_REST_API_TOKEN`，不用 `Redis.fromEnv()`**：`fromEnv()` 會優先讀 `UPSTASH_REDIS_REST_URL`，在 production 會連到另一個資料庫
+- 這些變數目前是 Config 類型（dashboard 上 token 為明碼），之後建議改為 Sensitive，覆寫前先問使用者
+- **另外發現（不在這次範圍）**：Vercel 函式在 `iad1`（美國東部），Neon 在 `ap-southeast-1`（新加坡），每次資料庫查詢都橫跨太平洋
+- **本機用的 Redis（使用者選擇）**：
+  - 想再以整合建立一個只連 Development 的免費資料庫，`vercel integration add … --plan free -e development` 回「Billing plan not found: free」，只剩付費方案（Upstash 經 Vercel 整合只能有一個免費資料庫）；沒有建立
+  - 改用使用者先前手動建立、在 production 上閒置的 `moving-mastodon`：從 production 讀出 `UPSTASH_REDIS_REST_URL`／`_TOKEN` 暫存於 scratchpad，以 stdin `vercel env add … development` 新增到 Development，比對值與原值相同後才 `vercel env rm … production --yes`，測試結束後刪除暫存檔
+  - 結果：Production／Preview 只有 `KV_*`（`true-sculpin`），Development 只有 `UPSTASH_REDIS_REST_*`（`moving-mastodon`）
+  - 因此 `getRedis()` 改為 `KV_*` 優先、沒有時讀 `UPSTASH_REDIS_REST_*`
+- **實作**：
+  - `src/lib/rate-limit.ts`：`checkRateLimit(action, key)`（沒有設定、連線錯誤回 allow；`timeout: 1000` 逾時時 SDK 回 success 並記錄 warn）、`getClientIp(headers)`（`x-real-ip` → `x-forwarded-for` 第一段 → `"unknown"`；已查 Vercel 文件：Vercel 覆寫 `x-forwarded-for` 且不轉發外部 IP）、`getActionClientIp()`（server action 以 `next/headers` 取得）、`ipEmailKey(ip, email)`（email 先 SHA-256）、`retryAfterSeconds`、`rateLimitMessage`；限制集中在 `LIMITS`，key 前綴 `devstash:ratelimit:{action}`
+  - 登入：`authorize(credentials, request)` 在 schema 驗證後、查資料庫前檢查，超過時丟 `RateLimitedError`（`CredentialsSignin` 子類別，`code = "rate_limited"`，帶 `reset`）；`signInWithCredentials` 以 `instanceof` 回傳含等待分鐘數的訊息；直接呼叫 API 被擋時 Auth.js 導回 `/sign-in?error=CredentialsSignin&code=rate_limited`，登入頁顯示「Too many attempts. Please try again later.」（拿不到 reset，不寫分鐘數；錯誤判斷抽成 `getInitialError()`）
+  - 註冊 API：在解析 body 之前檢查，回 429、`Retry-After`、`{ success: false, error }`
+  - 送出新密碼：在驗證格式之前檢查，亂碼 token 也計入；忘記密碼、重寄驗證信在驗證 email 格式之後檢查
+  - 變更密碼：`getCurrentUser()` 之後、驗證目前密碼之前，以 userId 為鍵
+  - README 補上環境變數與各環境對照；`project-overview.md` §3.4 與 §7 改寫（Redis 只用於速率限制，不當快取）
+  - 新增 `@upstash/ratelimit` ^2.2.0、`@upstash/redis` ^1.39.0
+- **驗證**（dev server 以 Development 的 `moving-mastodon` 啟動，值只放在程序環境）：
+  - 沒有設定 Upstash：錯誤密碼 8 次皆 `code=credentials`、正確密碼可登入、註冊 5 次皆 400
+  - 直接呼叫 `/api/auth/callback/credentials`：同一 email 前 5 次 `credentials`、第 6、7 次 `rate_limited`；被擋後正確密碼也擋；換 email 不受影響
+  - 註冊：第 4 次 429、`Retry-After: 3373`、「Try again in 57 minutes」
+  - Playwright：登入表單第 6 次顯示「Too many attempts. Please try again in 11 minutes.」；忘記密碼第 4 次被擋；送出新密碼（有效 token、兩次不一致）第 6 次被擋；變更密碼（目前密碼錯）第 6 次被擋；重寄驗證信（`EMAIL_VERIFICATION_ENABLED=true` 啟動）第 4 次被擋
+  - 登入頁 `?code=rate_limited` 顯示正確訊息
+  - Redis 位址不存在：登入 7 次、註冊 4 次皆放行，log 為 `Rate limit check timed out … allowing`，每次請求多約 1 秒
+  - tsc、lint、build 通過；主控台只有重啟 dev server 造成的 HMR 斷線與既有的 pg SSL 警告
+  - 測試帳號 `rl@test.com` 已刪除；Redis 中的測試計數會在時間窗結束後自動過期
+- **已知情況**：
+  - 顯示的等待分鐘數偏短：sliding window 回傳的 `reset` 是目前固定時段的結束時間，之後前一時段仍按比例計入，實際可能多擋一小段
+  - 登入的限制計入所有嘗試（含成功），15 分鐘內成功登入 5 次也會被擋；變更密碼成功後以 `signIn` 重新簽發也會用掉一次登入額度
+  - `KV_*` 與 `UPSTASH_REDIS_REST_*` 都是 Config 類型（dashboard 明碼），建議改為 Sensitive（Development 環境不支援 Sensitive）
+  - 整合安裝自動加入 `.claude/skills/upstash-ratelimit-js/`、`.claude/skills/upstash-redis-js/`、`.agents/skills/…`（同內容副本），並修改 `skills-lock.json`；是否 commit 待使用者決定
 
 ## History
 

@@ -23,6 +23,8 @@ AUTH_GITHUB_SECRET=
 EMAIL_VERIFICATION_ENABLED=  # 設為 true 才要求 email 驗證，見下方
 RESEND_API_KEY=          # 寄送註冊驗證信（Resend），關閉驗證時可不設
 APP_URL=                 # 選用，驗證信連結的網址根，見下方
+UPSTASH_REDIS_REST_URL=  # 選用，速率限制用的 Upstash Redis，見下方
+UPSTASH_REDIS_REST_TOKEN=
 ```
 
 產生 `AUTH_SECRET`（不要用 `npx auth secret`，它可能寫出 `.env.local`，蓋過 `.env`）：
@@ -49,6 +51,19 @@ email 驗證預設關閉：`EMAIL_VERIFICATION_ENABLED` 不是 `true` 時不寄�
 驗證信與重設信連結的網址根依序取 `APP_URL` → Vercel 自動提供的 `VERCEL_PROJECT_PRODUCTION_URL`
 → `http://localhost:3000`，不從請求的 Host header 推導（可被偽造而把 token 送到別的網域）。
 本機與 Vercel production 通常不需要設定 `APP_URL`；Preview 部署的連結會指向正式網域。
+
+登入、註冊、忘記密碼、重設密碼、重寄驗證信與變更密碼有速率限制（`src/lib/rate-limit.ts`，
+Upstash Redis）。連線資訊依序讀 `KV_REST_API_URL`／`KV_REST_API_TOKEN` →
+`UPSTASH_REDIS_REST_URL`／`UPSTASH_REDIS_REST_TOKEN`：
+
+| 環境 | 變數 | 資料庫 |
+| --- | --- | --- |
+| Production、Preview | `KV_REST_API_*`（Vercel 的 Upstash 整合自動設定） | `devstash-ratelimit` |
+| Development | `UPSTASH_REDIS_REST_*`（Vercel 的 Development 環境變數） | 另一個 Upstash 資料庫 |
+
+兩者分開，本機測試不會鎖住正式網站的使用者。**本機不設定也可以**：沒有設定、連不上或逾時（1 秒）
+時一律放行並記錄 log（fail open）。要在本機測試速率限制，把 Development 的兩個值帶進
+`npm run dev` 的程序環境即可；不要用 `vercel env pull` 的預設路徑，它會建立 `.env.local`。
 
 根目錄的 `.env.production`（已 gitignore）放 production 的連線字串與 Auth 變數。
 Next.js 只在 `npm run build`／`start` 載入它，且優先於 `.env`，所以各指令連到的資料庫不同：
