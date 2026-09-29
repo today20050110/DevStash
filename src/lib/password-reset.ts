@@ -84,7 +84,7 @@ export async function getResetTokenStatus(
 /**
  * 驗證並消耗 token 後更新密碼。能收到重設信即證明擁有這個信箱，
  * 所以 emailVerified 原本為 null 時一併寫入。
- * 已發出的 JWT session 無法撤銷，其他裝置在 token 過期前仍保持登入。
+ * 同時把 sessionVersion 加一，讓所有裝置上既有的登入失效（見 getCurrentUser）。
  */
 export async function resetPassword(
   email: string,
@@ -111,9 +111,10 @@ export async function resetPassword(
     if (count === 0) {
       return "invalid";
     }
+    // 版本加一：包含搶先登入的人在內，所有裝置上既有的登入都失效
     const updated = await tx.user.updateMany({
       where: { email, passwordHash: { not: null } },
-      data: { passwordHash },
+      data: { passwordHash, sessionVersion: { increment: 1 } },
     });
     if (updated.count === 0) {
       return "invalid";

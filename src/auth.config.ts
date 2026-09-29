@@ -29,6 +29,8 @@ export default {
       if (token.sub) {
         session.user.id = token.sub;
       }
+      // 上線前簽發的 token 沒有版本，視為 0（與欄位預設值相同），不會被登出
+      session.user.sessionVersion = token.sessionVersion ?? 0;
       return session;
     },
   },

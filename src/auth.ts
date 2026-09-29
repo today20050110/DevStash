@@ -59,6 +59,24 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
   // Credentials provider 也只支援 JWT strategy。
   session: { strategy: "jwt" },
   ...authConfig,
+  callbacks: {
+    ...authConfig.callbacks,
+    /**
+     * 只在剛登入（user 有值，帳號密碼與 GitHub 皆同）時從資料庫讀 sessionVersion。
+     * 刻意不處理 trigger === "update"：前端也能呼叫 /api/auth/session 觸發它，
+     * 若在那裡重讀版本，被偷走的舊 token 就能自行更新到新版本而不會失效。
+     */
+    async jwt({ token, user }) {
+      if (user?.id) {
+        const record = await prisma.user.findUnique({
+          where: { id: user.id },
+          select: { sessionVersion: true },
+        });
+        token.sessionVersion = record?.sessionVersion ?? 0;
+      }
+      return token;
+    },
+  },
   // 以實際驗證邏輯取代 auth.config.ts 的 Credentials 佔位
   providers: authConfig.providers.map((provider) =>
     typeof provider !== "function" && provider.id === "credentials"

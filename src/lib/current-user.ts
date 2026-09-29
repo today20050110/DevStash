@@ -9,6 +9,7 @@ import type { CurrentUser } from "@/types/user";
  *
  * 不直接用 JWT 裡的 name/email：token 在過期前一直有效，使用者被刪除後
  * 仍能通過驗簽，回查一次才能確認帳號還在。未登入或查無此人時回傳 null。
+ * 同時比對 sessionVersion：重設或變更密碼後版本加一，之前簽發的 token 一律視為未登入。
  * 以 cache() 包起來：layout 的側邊欄與頁面在同一個請求內各自呼叫，只查一次。
  */
 export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
@@ -18,10 +19,20 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     return null;
   }
 
-  return prisma.user.findUnique({
+  const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, name: true, email: true, image: true },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      image: true,
+      sessionVersion: true,
+    },
   });
+  if (!user || user.sessionVersion !== session.user.sessionVersion) {
+    return null;
+  }
+  return { id: user.id, name: user.name, email: user.email, image: user.image };
 });
 
 export async function getCurrentUserId(): Promise<string | null> {

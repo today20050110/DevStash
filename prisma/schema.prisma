@@ -67,7 +67,10 @@ model User {
   /// 只有 credentials 登入的使用者有值；OAuth 使用者為 null
   passwordHash String?
 
-  plan               Plan                @default(FREE)
+  /// 寫進 JWT，每次回查使用者時比對；重設或變更密碼時加一，讓既有登入全部失效
+  sessionVersion Int @default(0)
+
+  plan              Plan                @default(FREE)
   stripeCustomerId   String?             @unique
   subscriptionStatus SubscriptionStatus?
   currentPeriodEnd   DateTime?

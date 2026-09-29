@@ -18,6 +18,7 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { getCollectionCounts } from "@/lib/db/collections";
 import { getItemCounts, getSystemItemTypesWithCounts } from "@/lib/db/items";
 import { getUserProfile } from "@/lib/db/users";
+import { firstParam } from "@/lib/search-params";
 
 export const metadata: Metadata = {
   title: "Profile — DevStash",
@@ -47,7 +48,10 @@ async function getProfileData() {
   return { profile, itemCounts, collectionCounts, itemTypes };
 }
 
-export default async function ProfilePage() {
+export default async function ProfilePage({
+  searchParams,
+}: PageProps<"/profile">) {
+  const { passwordChanged } = await searchParams;
   const { profile, itemCounts, collectionCounts, itemTypes } =
     await getProfileData();
 
@@ -80,7 +84,10 @@ export default async function ProfilePage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <ChangePasswordForm email={profile.email} />
+              <ChangePasswordForm
+                email={profile.email}
+                passwordChanged={firstParam(passwordChanged) === "1"}
+              />
             </CardContent>
           </Card>
         )}

@@ -15,19 +15,28 @@ const INITIAL_STATE: ChangePasswordState = { success: false };
 interface ChangePasswordFormProps {
   // 讓密碼管理器把新密碼存到這個帳號
   email: string;
+  // 成功後 action 以 redirect 回到 /profile?passwordChanged=1，由頁面傳入
+  passwordChanged: boolean;
 }
 
-export function ChangePasswordForm({ email }: ChangePasswordFormProps) {
+export function ChangePasswordForm({
+  email,
+  passwordChanged,
+}: ChangePasswordFormProps) {
   const [state, formAction, isPending] = useActionState(
     changePasswordAction,
     INITIAL_STATE,
   );
+  // 再次送出後以該次結果為準
+  const showSuccess = passwordChanged && state === INITIAL_STATE;
 
   return (
     <form action={formAction} className="grid max-w-md gap-4">
       {state.error && <FormMessage variant="error">{state.error}</FormMessage>}
-      {state.message && (
-        <FormMessage variant="success">{state.message}</FormMessage>
+      {showSuccess && (
+        <FormMessage variant="success">
+          Password updated. You&apos;ve been signed out on other devices.
+        </FormMessage>
       )}
       <input
         type="email"

@@ -1,16 +1,54 @@
-# Current Feature
+# Current Feature: 重設與變更密碼後讓既有登入失效
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
-<!-- 以 /feature load 載入 spec 後填入；成功長什麼樣子 -->
+- `User` 新增 `sessionVersion Int @default(0)`，以 `prisma migrate dev` 產生 migration（只在 Development 執行；production 由 Vercel 部署時的 `prisma migrate deploy` 套用）
+- 登入時把資料庫中的 `sessionVersion` 寫進 JWT；帳號密碼與 GitHub 登入都適用
+- `getCurrentUser()` 回查資料庫時一併比對版本，不一致時視同未登入（回傳 null）
+- 重設密碼成功時把 `sessionVersion` 加一：**所有**裝置上既有的登入都失效
+- 變更密碼成功時把 `sessionVersion` 加一，並替目前這台裝置重新簽發登入：其他裝置失效，自己不必重新登入
+- 登入版本失效時，進入登入後的頁面會導回登入頁，而不是顯示空白的 dashboard
+- 實測：兩個瀏覽器 context 模擬兩台裝置，重設密碼與變更密碼後另一台失效；變更密碼的那台維持登入；GitHub 與既有 token 的相容性；tsc、lint、build 通過
 
 ## Notes
 
-<!-- 來源、限制、實作方向、驗證結果、已知情況 -->
+- **來源**：`docs/audit-results/AUTH_SECURITY_REVIEW.md` 的 Medium 第 1 項
+  - production 的 email 驗證關閉時，攻擊者可以先用受害者的 email 註冊並登入
+  - 受害者之後以忘記密碼取回帳號，但重設不會讓攻擊者的 JWT 失效
+  - proxy 每次請求都會回寫 session cookie（`next-auth/lib/index.js`），攻擊者持續使用就不會過期
+  - 同時解決先前記錄的已知情況「變更密碼後其他裝置仍然登入」
+- **既有 token 的相容性**：這次上線前發出的 JWT 沒有 `sessionVersion`，視為 0，與新欄位的預設值相同，所以不會把所有人登出；之後只要重設或變更密碼一次，舊 token 就會失效
+- **不使用 Auth.js 的 `update()` 來換發 token**：`jwt` callback 的 `trigger === "update"` 也能由前端呼叫 `/api/auth/session` 觸發。如果在這裡重新讀取資料庫的版本，被偷走的舊 token 也能自行更新到新版本，等於沒有失效。變更密碼後改用 `signIn("credentials", { redirect: false })` 以新密碼重新登入，由 `authorize` 驗證密碼後才簽發
+- **為什麼放在 `getCurrentUser()` 而不是 proxy**：proxy 只 import `auth.config.ts`，不能查資料庫（避免把 Prisma 帶進 proxy 的 bundle）。所有讀寫使用者資料的地方都經過 `getCurrentUser()`，比對放在這裡就能擋下所有資料存取
+- **資料庫**：Neon 專案 `devstash`，Development 分支（`br-broad-pine-b312blp9`，endpoint `ep-lucky-frost-b3c82uje`）
+- **不在這次範圍**：稽核報告的第 2 項（速率限制）與第 3 項（可判斷 email 是否已註冊）
+- **Migration 事故（已修正，只影響 Development）**：
+  - 直接執行 `prisma migrate dev`（沒有加 `--create-only`），產生的 SQL 除了新增欄位，還有三行 `DROP INDEX`，刪掉初始 migration 手寫的 `pg_trgm` GIN 索引（`Item_title_trgm_idx`、`Item_content_trgm_idx`、`Tag_name_trgm_idx`）。原因是這三個索引不在 `schema.prisma` 裡，Prisma 比對時認為是多餘的
+  - 已套用到 Development 後才發現。修正方式：migration 檔只保留 `ALTER TABLE`；在 Development 以 `CREATE INDEX IF NOT EXISTS` 重建三個索引；把 `_prisma_migrations` 中這筆的 checksum 更新為修改後檔案的 SHA-256
+  - 修正後 `migrate status` 同步、`test:db` 6/6 PASS。production 由部署時的 `migrate deploy` 套用修正後的檔案，只新增欄位
+  - **之後每次產生 migration 都會遇到同樣的 DROP INDEX**，必須用 `--create-only`，檢查並刪掉這三行後再套用。根治做法是在 schema 以 `@@index([title(ops: raw("gin_trgm_ops"))], type: Gin)` 宣告這些索引（另案處理）
+  - Prisma 重寫 `migration_lock.toml` 時只換了行尾字元，內容與 HEAD 相同，已還原
+- **實作**：
+  - `jwt` callback 寫在 `auth.ts`（要查資料庫，不能放在 proxy 也會 import 的 `auth.config.ts`）；`session` callback 把 `token.sessionVersion ?? 0` 帶進 `session.user.sessionVersion`
+  - `next-auth.d.ts` 擴充 `Session.user.sessionVersion` 與 `@auth/core/jwt` 的 `JWT.sessionVersion`
+  - `getCurrentUser()` 多 select `sessionVersion` 並與 session 比對，回傳值維持原本的四個欄位
+  - `(app)/layout.tsx` 改為 async：`getCurrentUser()` 為 null 時 `redirect(SIGN_IN_PATH)`，登入失效時不再顯示空白頁面
+  - 變更密碼**不能直接回傳成功訊息**：action 設定新 cookie 後，Next.js 會在同一個請求內重新渲染目前頁面，但 `auth()` 讀的是原始請求的 cookie header（`next-auth/lib/index.js` 的 `headers()`），拿到舊 token 而被 layout 導回登入頁，最後落在 `/dashboard`（實測時發生）
+  - 改為成功後 `redirect("/profile?passwordChanged=1")`：Next.js 處理 action 內的 redirect 時，會把 action 設定的 cookie 合併進內部轉址請求（`action-handler.js` 的 `getForwardedHeaders`），轉址後的頁面讀得到新 token
+  - 成功訊息改由頁面依 `passwordChanged` 參數傳給 `ChangePasswordForm`；`ChangePasswordState.message` 移除
+  - 重新簽發失敗時（例如 email 驗證在登入後才開啟），導向 `/sign-in?reset=1&email=…`
+- **驗證**（Development，Playwright 以多個 browser context 模擬多台裝置）：
+  - **實測中途**：使用者開的 dev server（PID 16704）還載入著舊的 Prisma client，登入時回 `Unknown field sessionVersion`。經使用者同意關閉並重新啟動；目前的 dev server 由 Claude 在背景啟動
+  - 變更密碼：A、B 兩台登入，A 變更密碼後停在 `/profile?passwordChanged=1` 並顯示成功訊息，重新整理仍維持登入；B 的 `/dashboard`、`/profile` 導向 `/sign-in` 並顯示登入表單（不會無限導向）
+  - 重設密碼（稽核報告的攻擊情境）：A 登入中，C 以重設連結改密碼並用新密碼登入；A 的 `/dashboard`、`/profile` 導向 `/sign-in`；`sessionVersion` 1 → 2
+  - 失效的 token 呼叫 `POST /api/auth/session`（update），`data` 為空、`{ sessionVersion: 2 }`、`{ user: { sessionVersion: 2 } }` 皆無法改變 token 內的版本，依然被導回登入頁
+  - 相容性：以 `AUTH_SECRET` 簽一個沒有 `sessionVersion` 的 token，對版本為 0 的 demo 帳號仍然有效（`/dashboard` 200、`/profile` 正常）
+  - tsc、lint、build 通過；測試帳號 `sv@test.com` 已刪除
+  - **未實測**：GitHub 登入後的版本寫入。`jwt` callback 以 `user.id` 查詢，GitHub 登入時 `user` 是 adapter 回傳的 User，邏輯相同
 
 ## History
 
