@@ -20,7 +20,8 @@ NEON_BRANCH=             # 選用，只供 npm run test:db 顯示用
 AUTH_SECRET=             # Auth.js 簽 JWT 用，產生方式見下方
 AUTH_GITHUB_ID=          # GitHub OAuth App
 AUTH_GITHUB_SECRET=
-RESEND_API_KEY=          # 寄送註冊驗證信（Resend）
+EMAIL_VERIFICATION_ENABLED=  # 設為 true 才要求 email 驗證，見下方
+RESEND_API_KEY=          # 寄送註冊驗證信（Resend），關閉驗證時可不設
 APP_URL=                 # 選用，驗證信連結的網址根，見下方
 ```
 
@@ -33,7 +34,11 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 本機的 GitHub OAuth App callback URL 為 `http://localhost:3000/api/auth/callback/github`。
 production 要另建一個 OAuth App，callback 指向正式網域，`AUTH_SECRET` 也另外產生，不與本機共用。
 
-以帳號密碼註冊後須點擊驗證信中的連結才能登入（GitHub 登入不需要）。寄件地址是
+email 驗證預設關閉：`EMAIL_VERIFICATION_ENABLED` 不是 `true` 時不寄驗證信，帳號密碼註冊後即可登入。
+關閉期間註冊的帳號 `emailVerified` 維持空值，日後開啟驗證時需先從登入頁重寄驗證信才能登入。
+在 Vercel 修改這個變數後須 Redeploy 才會生效。
+
+開啟時，以帳號密碼註冊後須點擊驗證信中的連結才能登入（GitHub 登入不需要）。寄件地址是
 `onboarding@resend.dev`：在 Resend 驗證自有網域之前，**只能寄給 Resend 帳號本人的 email**，
 寄給其他地址時帳號仍會建立，但登入頁會提示驗證信寄送失敗。這類信件常被 Gmail 分到垃圾郵件。
 

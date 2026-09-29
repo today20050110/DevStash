@@ -1,16 +1,50 @@
-# Current Feature
+# Current Feature: Email 驗證開關
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
-<!-- 以 /feature load 載入 spec 後填入；成功長什麼樣子 -->
+- 以環境變數 `EMAIL_VERIFICATION_ENABLED` 切換 email 驗證，判斷集中在單一函式 `isEmailVerificationEnabled()`（`src/lib/email-verification.ts`），各處不直接讀 `process.env`
+- **關閉時**：
+  - 註冊不寄驗證信，也不建立 `VerificationToken`
+  - 帳號密碼使用者不論 `emailVerified` 為何都能登入（`authorize` 略過 `EmailNotVerifiedError`）
+  - 註冊成功後導向 `/sign-in?registered=1&email=…`，提示改為「Account created. You can now sign in.」，不提寄信、不顯示「Resend verification email」
+  - `resendVerificationEmail` 不寄信
+- **開啟時**：行為與現在完全相同
+- `/api/auth/verify-email` 兩種狀態都保留，開關切換前寄出的連結仍然有效
+- README 與 `.env` 補上這個鍵與說明；Vercel 不設這個變數即為關閉，推送後 Redeploy 即生效
+- 兩種狀態皆實測：註冊、登入、重寄按鈕的顯示與否；tsc、lint、build 通過
 
 ## Notes
 
-<!-- 來源、限制、實作方向、驗證結果、已知情況 -->
+- **起因**：Resend 尚未驗證自有網域，`onboarding@resend.dev` 只能寄給 Resend 帳號本人，正式網站的其他人註冊後永遠收不到驗證信，也就無法登入
+- **採環境變數而非其他方案**：
+  - 資料庫設定表：要多一張表和 migration，也需要管理 UI 才方便切換
+  - Vercel Flags／Flags SDK：多一個相依與外部服務，只為一個布林值不划算
+  - 環境變數的代價：在 Vercel 修改後必須 Redeploy 才生效，因為值在函式啟動時讀取
+- **未決定事項 1，預設值**：未設定時要開啟還是關閉？建議**只有值為 `"true"` 才開啟**。理由是開啟時需要 `RESEND_API_KEY` 和可用的寄件網域，漏設時註冊的人會被鎖在外面，傷害比「漏設時沒有驗證」大。反面理由：驗證本身是安全機制，漏設時會靜默失去保護
+- **未決定事項 2，關閉期間註冊的帳號**：建議 `emailVerified` 維持 null，不假裝已驗證。代價是日後重新開啟時，這些帳號需要先從登入頁重寄驗證信才能登入。另一個做法是關閉時直接寫入 `emailVerified = now()`，重新開啟時不受影響，但資料會宣稱驗證過一個實際沒寄過信的 email
+- **會碰到的檔案**：`src/auth.ts`（`authorize` 的檢查）、`src/app/api/auth/register/route.ts`（`issueVerificationEmail`）、`src/lib/email-verification.ts`、`src/app/(auth)/sign-in/page.tsx`（`getNotice`、重寄按鈕的顯示條件）、`src/components/auth/SignInForm.tsx`、README
+- `RegisterForm` 目前在 `verificationEmailSent` 為 false 時帶 `&sent=0`，關閉時需要避免誤顯示「寄信失敗」的提示；register API 的回應可能要多一個欄位來區分「沒寄」與「寄失敗」
+- 這個開關不影響 GitHub 登入：OAuth 使用者本來就不檢查 `emailVerified`
+- **使用者決定**：兩個未決定事項都採建議做法（只有 `"true"` 才開啟；關閉期間註冊的帳號 `emailVerified` 維持 null）
+- **實作**：
+  - register API 的回應新增 `verificationRequired`；`RegisterForm` 只在 `verificationRequired && !verificationEmailSent` 時帶 `&sent=0`
+  - `/sign-in` 在關閉時忽略 `sent=0` 與 `VerificationExpired`／`VerificationInvalid`，因為未驗證也能登入，提示重寄反而誤導
+  - `.env` 與 `.env.production` 都補上 `EMAIL_VERIFICATION_ENABLED=false`，讓 cleanup 比對鍵名時一致
+  - Vercel 不用設定：未設定就是關閉
+- **驗證**（curl，Development `ep-lucky-frost`）：
+  - 關閉時：註冊回 `verificationRequired: false`，不建立 token、`emailVerified` 為 null；登入 302 → `/`；錯誤密碼仍為 `CredentialsSignin`；註冊後的頁面顯示「You can now sign in」、沒有寄信失敗的提示、`initialNeedsVerification` 為 false；`?error=VerificationExpired` 不顯示錯誤
+  - 開啟時（以 `EMAIL_VERIFICATION_ENABLED=true npm run dev` 啟動）：寄給 `@test.com` 失敗，`verificationEmailSent: false`，頁面顯示寄信失敗與重寄按鈕；新帳號與「關閉期間註冊的帳號」登入都回 `code=email_not_verified`；已驗證的 demo 帳號登入成功
+  - 測試帳號 `flagoff@test.com`、`flagon@test.com` 與 1 個 token 已從 Development 刪除
+  - tsc、lint、build 通過
+  - 瀏覽器實測（Playwright，1536px）：
+    - 關閉時：註冊後導向的網址沒有 `sent=0`，頁面顯示綠色的「Account created. You can now sign in.」、沒有重寄按鈕；登入後進入 `/dashboard`，側邊欄顯示新帳號；主控台 0 errors / 0 warnings
+    - 開啟時：關閉期間註冊的帳號登入被擋，顯示「Please verify your email first」與重寄按鈕；新註冊的帳號因寄到 `@test.com` 失敗而導向 `&sent=0`，顯示寄信失敗與重寄按鈕
+    - 測試帳號 `browseroff@test.com`、`browseron@test.com` 與 1 個 token 已從 Development 刪除
+  - Playwright MCP 在 session 開始時逾時（超過 30 秒，推測是 `npx @playwright/mcp@latest` 啟動時要查 registry 或下載新版），用 `/mcp` 重新連接後就正常了
 
 ## History
 

@@ -14,6 +14,15 @@ export type VerifyEmailResult =
   | "expired"
   | "invalid";
 
+/**
+ * 只有 EMAIL_VERIFICATION_ENABLED 為 "true" 時才要求驗證。預設關閉：
+ * 開啟需要可寄給任何人的 Resend 網域，漏設時註冊者會永遠無法登入。
+ * 關閉期間註冊的帳號 emailVerified 維持 null，重新開啟後需先重寄驗證信。
+ */
+export function isEmailVerificationEnabled(): boolean {
+  return process.env.EMAIL_VERIFICATION_ENABLED === "true";
+}
+
 // 資料庫只存雜湊：資料外洩時拿不到可用的連結
 function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
@@ -71,6 +80,9 @@ export async function issueVerificationEmail(email: string): Promise<boolean> {
  * 呼叫端對使用者一律顯示相同訊息，不透露 email 是否已註冊。
  */
 export async function resendVerificationEmail(email: string): Promise<void> {
+  if (!isEmailVerificationEnabled()) {
+    return;
+  }
   const user = await prisma.user.findUnique({
     where: { email },
     select: { passwordHash: true, emailVerified: true },

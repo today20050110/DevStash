@@ -13,6 +13,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { getCurrentUser } from "@/lib/current-user";
+import { isEmailVerificationEnabled } from "@/lib/email-verification";
 import { getSafeRedirect } from "@/lib/redirect";
 
 export const metadata: Metadata = { title: "Sign in · DevStash" };
@@ -37,12 +38,18 @@ const DEFAULT_ERROR = "Sign in failed, please try again";
 const EMAIL_NOT_SENT =
   "Account created, but we couldn't send the verification email. Use the button below to resend it.";
 
-function getNotice(params: { registered: boolean; verified: boolean }) {
+function getNotice(params: {
+  registered: boolean;
+  verified: boolean;
+  verificationEnabled: boolean;
+}) {
   if (params.verified) {
     return "Email verified. You can now sign in.";
   }
   if (params.registered) {
-    return "Account created. Check your inbox for a verification link.";
+    return params.verificationEnabled
+      ? "Account created. Check your inbox for a verification link."
+      : "Account created. You can now sign in.";
   }
   return undefined;
 }
@@ -61,19 +68,25 @@ export default async function SignInPage({
     redirect(callbackUrl);
   }
 
-  const errorCode = firstParam(params.error);
+  const verificationEnabled = isEmailVerificationEnabled();
+  const rawErrorCode = firstParam(params.error);
+  const isVerificationError =
+    rawErrorCode !== undefined && VERIFICATION_ERRORS.has(rawErrorCode);
+  // 關閉驗證時不必處理舊連結失效：未驗證也能直接登入，提示重寄反而誤導
+  const errorCode =
+    isVerificationError && !verificationEnabled ? undefined : rawErrorCode;
   const registered = firstParam(params.registered) === "1";
   const verified = firstParam(params.verified) === "1";
   // 註冊 API 回報驗證信寄送失敗
-  const emailNotSent = registered && firstParam(params.sent) === "0";
+  const emailNotSent =
+    verificationEnabled && registered && firstParam(params.sent) === "0";
   const initialError = errorCode
     ? (ERROR_MESSAGES[errorCode] ?? DEFAULT_ERROR)
     : emailNotSent
       ? EMAIL_NOT_SENT
       : undefined;
   const initialNeedsVerification =
-    registered ||
-    (errorCode !== undefined && VERIFICATION_ERRORS.has(errorCode));
+    verificationEnabled && (registered || isVerificationError);
 
   return (
     <Card>
@@ -85,7 +98,7 @@ export default async function SignInPage({
         <SignInForm
           callbackUrl={callbackUrl}
           defaultEmail={firstParam(params.email) ?? ""}
-          notice={getNotice({ registered, verified })}
+          notice={getNotice({ registered, verified, verificationEnabled })}
           initialError={initialError}
           initialNeedsVerification={initialNeedsVerification}
         />

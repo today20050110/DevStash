@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 
 import { Prisma } from "@/generated/prisma/client";
 import { registerSchema } from "@/lib/auth-schemas";
-import { issueVerificationEmail } from "@/lib/email-verification";
+import {
+  isEmailVerificationEnabled,
+  issueVerificationEmail,
+} from "@/lib/email-verification";
 import { hashPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 
@@ -12,6 +15,8 @@ interface RegisterResponse {
     id: string;
     name: string | null;
     email: string;
+    // 關閉驗證時為 false，verificationEmailSent 也會是 false，前端不該提示寄信失敗
+    verificationRequired: boolean;
     verificationEmailSent: boolean;
   };
   error?: string;
@@ -56,9 +61,14 @@ export async function POST(request: Request) {
       select: { id: true, name: true, email: true },
     });
     // 寄信失敗不回滾帳號（issueVerificationEmail 不會丟出）：使用者可從登入頁重寄
-    const verificationEmailSent = await issueVerificationEmail(user.email);
+    const verificationRequired = isEmailVerificationEnabled();
+    const verificationEmailSent =
+      verificationRequired && (await issueVerificationEmail(user.email));
     return NextResponse.json<RegisterResponse>(
-      { success: true, data: { ...user, verificationEmailSent } },
+      {
+        success: true,
+        data: { ...user, verificationRequired, verificationEmailSent },
+      },
       { status: 201 },
     );
   } catch (error) {
