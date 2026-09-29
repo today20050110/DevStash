@@ -9,7 +9,7 @@ import { EmailNotVerifiedError, RateLimitedError } from "@/lib/auth-errors";
 import { emailSchema, signInSchema } from "@/lib/auth-schemas";
 import { resendVerificationEmail } from "@/lib/email-verification";
 import {
-  checkRateLimit,
+  checkRateLimits,
   getActionClientIp,
   ipEmailKey,
   rateLimitMessage,
@@ -89,10 +89,11 @@ export async function resendVerification(
     return { success: false, error: parsed.error.issues[0].message };
   }
 
-  const limit = await checkRateLimit(
-    "resendVerification",
-    ipEmailKey(await getActionClientIp(), parsed.data),
-  );
+  const ip = await getActionClientIp();
+  const limit = await checkRateLimits([
+    ["resendVerificationIp", ip],
+    ["resendVerification", ipEmailKey(ip, parsed.data)],
+  ]);
   if (!limit.success) {
     return { success: false, error: rateLimitMessage(limit.reset) };
   }

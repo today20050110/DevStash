@@ -1,16 +1,33 @@
-# Current Feature
+# Current Feature: 速率限制加上只看 IP 的上限
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
-<!-- 以 /feature load 載入 spec 後填入；成功長什麼樣子 -->
+- 登入與重寄驗證信在「IP + email」之前，先檢查一道只看 IP、比較寬鬆的上限：
+  - 登入：同一 IP 15 分鐘 30 次
+  - 重寄驗證信：同一 IP 15 分鐘 10 次
+- 任一道超過都擋下；一般使用者碰不到只看 IP 的上限，但同一 IP 換 email 繼續嘗試會被擋
+- 實測：同一 IP 換 email 在上限後被擋；不同 IP 不受影響；原本的 IP + email 限制仍有效；tsc、lint、build 通過
 
 ## Notes
 
-<!-- 來源、限制、實作方向、驗證結果、已知情況 -->
+- **來源**：`docs/audit-results/AUTH_SECURITY_REVIEW.md` 第二次稽核（2026-09-30，`c5d9b24`）唯一的 Low 項目
+  - 同一 IP 換 email 就是新的計數，可以對大量 email 各試常見密碼
+  - 用隨機 email 大量呼叫重寄驗證信（不跑 bcrypt，成本低），約 50 萬次可用完 Upstash 免費方案每月 50 萬個指令；額度用完後 Redis 回錯誤，`@upstash/ratelimit` 的 `limit()` 不會捕捉（已讀原始碼），`checkRateLimit` 的 catch 會放行，當月剩下的時間所有限制失效
+- 註冊、忘記密碼、送出新密碼本來就只以 IP 為鍵；變更密碼以 userId 為鍵，需要先登入，不在這次範圍
+- **仍然存在**：稽核「未能確認的項目」——Vercel 若接受 IPv6，攻擊者可在一個 /64 內輪換位址，只看 IP 的上限也會失效；額度耗盡時 fail open 的設計不變
+- **實作**：
+  - `LIMITS` 新增 `signInIp`（30／15 分鐘）與 `resendVerificationIp`（10／15 分鐘）
+  - 新增 `checkRateLimits(checks)`：依序檢查多道限制，第一道被擋就停止，後面的不再計數
+  - `authorize` 改為 `checkRateLimits([["signInIp", ip], ["signIn", ipEmailKey(ip, email)]])`；`resendVerification` 同樣先 `resendVerificationIp` 再 `resendVerification`
+- **驗證**（Development，dev server 讀 `.env` 的 Upstash、`EMAIL_VERIFICATION_ENABLED=true`；以 `x-real-ip` 指定測試 IP）：
+  - 登入（curl 直接呼叫 `/api/auth/callback/credentials`）：同一 IP 換 32 個 email，前 30 次 `credentials`、第 31、32 次 `rate_limited`；另一個 IP 不受影響；同一 IP 同一 email 第 6 次 `rate_limited`（原本的限制仍有效）；同一 email 每次換 IP 6 次皆 `credentials`（已知：沒有同一 email 跨 IP 的總量限制）
+  - 重寄驗證信（Playwright）：同一 IP 換 11 個 email，前 10 次送出、第 11 次被擋；另一個 IP 不受影響
+  - tsc、lint、build 通過
+- 第二次稽核報告（`docs/audit-results/AUTH_SECURITY_REVIEW.md`，Critical 0／High 0／Medium 0／Low 1）隨本次一起提交；報告中的 Low 即為本次修正的項目，下次執行 auth-auditor 時會整份重寫
 
 ## History
 

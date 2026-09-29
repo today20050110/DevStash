@@ -6,6 +6,8 @@ import { headers } from "next/headers";
 
 /** 各動作的限制（sliding window）。鍵由呼叫端組成：IP、ipEmailKey() 或 userId */
 const LIMITS = {
+  // IP：比 IP + email 寬鬆，擋「同一 IP 換 email 繼續試」（例如對大量帳號各試常見密碼）
+  signInIp: { tokens: 30, window: "15 m" },
   // IP + email
   signIn: { tokens: 5, window: "15 m" },
   // IP
@@ -14,6 +16,8 @@ const LIMITS = {
   forgotPassword: { tokens: 3, window: "1 h" },
   // IP
   resetPassword: { tokens: 5, window: "15 m" },
+  // IP：理由同 signInIp；這條路不跑 bcrypt，換 email 大量呼叫的成本很低
+  resendVerificationIp: { tokens: 10, window: "15 m" },
   // IP + email
   resendVerification: { tokens: 3, window: "15 m" },
   // userId：已登入的人可以用它猜目前的密碼
@@ -94,6 +98,23 @@ export async function checkRateLimit(
     console.error(`Rate limit check failed for ${action}; allowing`, error);
     return allowed;
   }
+}
+
+/**
+ * 依序檢查多道限制，第一道被擋就回傳它的結果，後面的不再計數。
+ * 用於「先只看 IP、再看 IP + email」這類組合。
+ */
+export async function checkRateLimits(
+  checks: [RateLimitAction, string][],
+): Promise<RateLimitResult> {
+  let result: RateLimitResult = { success: true, remaining: 0, reset: 0 };
+  for (const [action, key] of checks) {
+    result = await checkRateLimit(action, key);
+    if (!result.success) {
+      break;
+    }
+  }
+  return result;
 }
 
 /**

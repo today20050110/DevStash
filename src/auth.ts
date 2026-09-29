@@ -8,7 +8,7 @@ import { signInSchema } from "@/lib/auth-schemas";
 import { isEmailVerificationEnabled } from "@/lib/email-verification";
 import { verifyAgainstDummyHash, verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
-import { checkRateLimit, getClientIp, ipEmailKey } from "@/lib/rate-limit";
+import { checkRateLimits, getClientIp, ipEmailKey } from "@/lib/rate-limit";
 
 const credentialsProvider = Credentials({
   credentials: CREDENTIALS_FIELDS,
@@ -23,10 +23,11 @@ const credentialsProvider = Credentials({
 
     const { email, password } = parsed.data;
     // 放在這裡而不是 server action：/api/auth/callback/credentials 可以被直接呼叫
-    const limit = await checkRateLimit(
-      "signIn",
-      ipEmailKey(getClientIp(request.headers), email),
-    );
+    const ip = getClientIp(request.headers);
+    const limit = await checkRateLimits([
+      ["signInIp", ip],
+      ["signIn", ipEmailKey(ip, email)],
+    ]);
     if (!limit.success) {
       throw new RateLimitedError(limit.reset);
     }
