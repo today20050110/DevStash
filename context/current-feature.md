@@ -1,35 +1,16 @@
-# Current Feature: 修正可判斷 email 是否已註冊的途徑
+# Current Feature
 
 ## Status
 
-In Progress
+Not Started
 
 ## Goals
 
-- **登入的時間差**：查無使用者或帳號沒有密碼時，仍以一個假的 bcrypt 雜湊比對一次，讓回應時間與「密碼錯誤」相近
-- **申請重設密碼的時間差**：查帳號、建立 token、寄信都移到回應送出之後（Next.js 的 `after()`），回應時間與帳號是否存在無關
-- **重寄驗證信的時間差**：同樣以 `after()` 處理（稽核報告沒列，但 `resendVerificationEmail` 也只對存在且未驗證的帳號寄信，有同樣的時間差）
-- **驗證連結**：`/api/auth/verify-email` 找不到 token 時一律回 `VerificationInvalid`，不再依帳號是否已驗證導向 `verified=1`
-- 實測：各路徑的回應時間接近、驗證端點帶任意 token 對已驗證帳號也回錯誤；原本的正常流程（登入、重設、重寄、驗證）不受影響；tsc、lint、build 通過
+<!-- 以 /feature load 載入 spec 後填入；成功長什麼樣子 -->
 
 ## Notes
 
-- **來源**：`docs/audit-results/AUTH_SECURITY_REVIEW.md` 的 Low 項目
-- **不處理**：註冊回 409 會直接透露 email 已註冊，這是 Auth Phase 2 經使用者確認的設計
-- **行為變化**：已驗證的使用者再點一次舊的驗證連結，會從「驗證成功」變成「連結無效或已經用過」。錯誤訊息原本就寫著「或已經用過」
-- **`after()` 的代價**：申請重設與重寄驗證信時，資料庫錯誤不會再回報給使用者（畫面一律顯示成功訊息），只記在 server log。原本這兩個流程對「帳號不存在」本來就顯示同樣的訊息
-- **假雜湊**：以 `hashPassword()` 對隨機字串產生、在模組內快取，成本參數自動與正式雜湊一致；第一次用到時會多花一次雜湊的時間
-- **實作**：
-  - `src/lib/password.ts` 新增 `verifyAgainstDummyHash(password)`（假雜湊以 `hash(randomBytes(16), BCRYPT_ROUNDS)` 產生並快取 Promise）；`authorize` 在 `!user?.passwordHash` 時呼叫它再回 null
-  - `requestPasswordResetAction`、`resendVerification`：原本 `await` 的工作包進 `after(async () => { try … catch → console.error })`，回應一律顯示成功訊息
-  - `verifyEmailToken`：找不到 token 時直接回 `"invalid"`，移除查 `emailVerified` 的分支；`already-verified` 只剩「同一有效 token 同時被使用兩次」的競態路徑（需持有有效 token）
-- **意外發現**：本機 `.env` 已有 `UPSTASH_REDIS_REST_URL`／`_TOKEN`（修改時間 04:28，早於建立整合，應為使用者自行加入；只看鍵名）。上一個功能「沒有設定 Upstash 時放行」的實測仍有效（當時 `getRedis()` 只讀 `KV_*`）；改為也讀 `UPSTASH_*` 之後，本機 `npm run dev` 一直啟用速率限制、連 Development 的 `moving-mastodon`
-- **驗證**（Development，dev server 以 `EMAIL_VERIFICATION_ENABLED=true` 啟動）：
-  - 登入回應時間（curl 直接呼叫 `/api/auth/callback/credentials`）：已註冊密碼錯 0.68–0.73 秒（第一次 1.34 秒為冷啟動）、不存在 0.70–0.82 秒、只用 GitHub 的帳號 0.65–0.73 秒。實測中同一 email 超過 5 次被速率限制擋下（0.02 秒回 `rate_limited`），各類型只取未被擋的樣本
-  - Playwright 以不同的 `x-real-ip` 避開速率限制計時：申請重設（demo 存在 240／225 ms、不存在 243／244 ms）；重寄驗證信（未驗證帳號 310／303 ms、不存在 310／302 ms）；回應後資料庫確實建立了 demo 的重設 token 與未驗證帳號的驗證 token，不存在的 email 沒有 token；log 中的寄信失敗是 Resend 只能寄給帳號本人的限制
-  - 驗證端點：已驗證的 demo + 任意 token → `VerificationInvalid`（修正前 `verified=1`）；不存在 + 任意 token → `VerificationInvalid`；未驗證帳號 + 正確 token → `verified=1`；同一連結再點一次 → `VerificationInvalid`（修正前 `verified=1`）
-  - 正確密碼登入 302 → `/`
-  - tsc、lint、build 通過；測試帳號 `enum@test.com` 與測試 token 已刪除
+<!-- 來源、限制、實作方向、驗證結果、已知情況 -->
 
 ## History
 
@@ -84,3 +65,4 @@ In Progress
 - **pg_trgm 搜尋索引宣告進 schema.prisma**（`a825fdb`）：處理上一筆的 migration 事故根源。初始 migration 手寫的三個 GIN 索引（`Item_title_trgm_idx`、`Item_content_trgm_idx`、`Tag_name_trgm_idx`）不在 schema 中，每次 `prisma migrate dev` 都會產生 `DROP INDEX`。`Item` 與 `Tag` 以 Prisma 4 起正式支援的 extended indexes 宣告：`@@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "Item_title_trgm_idx")`，`map` 必須與資料庫的索引名稱相同，否則 Prisma 視為不同索引。Context7 查到的 Prisma 文件預設已是 v8 語法，v7 以 `prisma validate` 與 `migrate diff` 為準。**無 migration**。驗證（唯讀比對 Development）：修改前 `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` 輸出三行 `DROP INDEX`，只加 Item 兩個時剩 Tag 一行，三個都加後為「This is an empty migration」、`--exit-code` 0；`migrate status` 同步、`test:db` 6/6、tsc／lint／build 通過；production 未查詢（由同一組 migration 產生，結構相同）。其他：`Item` 註解「所有索引都以 userId 開頭」改為「一般索引」；`prisma format` 補齊上一筆加 `sessionVersion` 時沒對齊的 `plan` 欄位。**上一筆的後續確認**：「重設與變更密碼後讓既有登入失效」的 GitHub 登入由使用者在本機實測通過——dev server log 中 `/api/auth/callback/github` 302、無 `[auth][error]`，Development 新建的 GitHub 帳號 `today20050110@yahoo.com.tw` 的 `sessionVersion` 為 0、無密碼
 - **認證端點的速率限制完成**（`61c2266`）：依 `context/features/rate-limiting-spec.md`（隨本次 commit 加入版控），對應稽核報告 Medium 第 2 項。新增 `@upstash/ratelimit` ^2.2.0、`@upstash/redis` ^1.39.0 與 `src/lib/rate-limit.ts`：sliding window，限制集中在 `LIMITS`（登入 5／15 分鐘 IP+email、註冊 3／1 小時 IP、申請重設 3／1 小時 IP、送出新密碼 5／15 分鐘 IP、重寄驗證信 3／15 分鐘 IP+email，以及 spec 沒列、經使用者同意加上的變更密碼 5／15 分鐘 userId）；`checkRateLimit` 在沒有設定、連線錯誤時放行，`timeout: 1000` 逾時時 SDK 也放行（**fail open**）；`getClientIp` 依序讀 `x-real-ip`、`x-forwarded-for`（已查 Vercel 文件：Vercel 覆寫此 header、不轉發外部 IP）；`ipEmailKey` 先對 email 做 SHA-256。**spec 與現況的對應**：忘記密碼、重設、重寄驗證信是 server action 而非 spec 寫的 API route，回傳錯誤訊息而非 429；登入的限制放在 `authorize(credentials, request)`，因為 `/api/auth/callback/credentials` 可以繞過 server action 直接呼叫，超過時丟 `RateLimitedError`（`CredentialsSignin` 子類別、`code = "rate_limited"`、帶 `reset`），直接呼叫被擋時登入頁依 `?code=rate_limited` 顯示專屬訊息；註冊 API 回 429 與 `Retry-After`；錯誤沿用頁面上的訊息、不用 spec 的 toast（經使用者確認）。送出新密碼與註冊在驗證格式之前檢查，格式錯誤的請求也計入。**Upstash 透過 Vercel 整合建立**：`vercel integration add upstash/upstash-kv --name devstash-ratelimit --plan free -m primaryRegion=iad1 -e production -e preview --no-env-pull --no-claim`（第一次須由使用者在瀏覽器接受條款；`--no-env-pull` 避免產生 `.env.local`；區域配合 Vercel 函式的 `iad1`），設定 `KV_REST_API_*` 等 5 個變數（`true-sculpin-320214`）。安裝時 Production 上另有使用者先前手動設定的 `UPSTASH_REDIS_REST_*`（`moving-mastodon-320335`），以 scratchpad 只比對主機名稱確認是不同資料庫；使用者選用整合的資料庫。本機用的第二個免費資料庫無法經整合建立（「Billing plan not found: free」，只剩付費方案），改把 `moving-mastodon` 的兩個變數由 Production 移到 Development（先新增、比對值相同後才刪除 production 的）。結果 Production／Preview 為 `KV_*`、Development 為 `UPSTASH_REDIS_REST_*`，`getRedis()` 以 `KV_*` 優先，不用 `Redis.fromEnv()`。整合另自動加入 Upstash 的 agent skill：`.claude/skills/upstash-ratelimit-js/`、`upstash-redis-js/` 與 `skills-lock.json` 一併 commit（與 Neon skill 一致），同內容的 `.agents/` 加入 `.gitignore`（經使用者確認）。README 補上環境變數與各環境對照；`project-overview.md` §3.4、§7 改寫為 Redis 只用於速率限制、不當快取。驗證（dev server 以 Development 的資料庫啟動，值只放在程序環境、測完刪除暫存）：沒有設定時全部放行；直接呼叫 API 同一 email 第 6 次 `rate_limited`、被擋後正確密碼也擋、換 email 不受影響；註冊第 4 次 429 + `Retry-After: 3373`；Playwright 驗證登入表單、忘記密碼、送出新密碼、變更密碼、重寄驗證信（`EMAIL_VERIFICATION_ENABLED=true`）皆在超過時顯示「Too many attempts. Please try again in X minutes.」；Redis 位址不存在時全部放行、log 記錄逾時、每次多約 1 秒；tsc、lint、build 通過，測試帳號已刪除。**已知情況**：（1）顯示的等待分鐘數偏短（sliding window 的 `reset` 是目前固定時段的結束時間）；（2）登入計入所有嘗試（含成功），變更密碼後的重新簽發也會用掉一次；（3）`KV_*`、`UPSTASH_REDIS_REST_*` 為 Config 類型，dashboard 可見明碼，建議改為 Sensitive（Development 不支援）；（4）另外發現 Vercel 函式在 `iad1`、Neon 在 `ap-southeast-1`，每次資料庫查詢都橫跨太平洋（未處理）；（5）沒有同一 email 跨 IP 的總量限制
 - Upstash 的 `KV_*` 改為 Sensitive：整合設定的 `KV_REST_API_URL`、`KV_REST_API_TOKEN`、`KV_REST_API_READ_ONLY_TOKEN`、`KV_URL`、`REDIS_URL`（Production+Preview 同一筆紀錄）原為 Config，dashboard 可見明碼。這些變數由整合管理（API 的 `contentHint` 為 `integration-store-secret`、`storeId` 指向 `devstash-ratelimit`），擔心覆寫會斷開連結、日後 token 輪換不再同步，所以先以程式未使用的 `KV_REST_API_READ_ONLY_TOKEN` 試驗。`vercel env update --sensitive` 以 stdin 傳值時必須指定單一環境（會把共用紀錄拆開），改用 `vercel api /v9/projects/dev-stash/env/{id} -X PATCH --input body.json`，body 為 `{ type: "sensitive", value }`、值取自 scratchpad 的 `vercel env pull`，未顯示於畫面；Git Bash 會把 `/v9/...` 轉成 Windows 路徑，需加 `MSYS_NO_PATHCONV=1`。試驗後 `type` 為 `sensitive`、target 仍為 production+preview、`contentHint` 保留，其餘 4 個以同樣方式處理，`vercel env ls` 皆為 `Hidden`／`Secret`，暫存檔已刪除。值未變更。Sensitive 無法讀回，經使用者同意以 `vercel redeploy dev-stash-9kwrs2fkx… --target production` 重新部署（`dev-stash-cgmpg22py`，Ready，無待套用 migration），送出一次格式錯誤的註冊請求回 400、log 無 `Rate limit check failed/timed out`，確認值完整且連得上 Upstash。Development 的 `UPSTASH_REDIS_REST_*` 維持 Config（Development 環境不支援 Sensitive）
+- **修正可判斷 email 是否已註冊的途徑**（`12ea6e3`）：處理 `docs/audit-results/AUTH_SECURITY_REVIEW.md` 的 Low 項目；註冊回 409 為 Auth Phase 2 經使用者確認的設計，不處理。（1）登入：`src/lib/password.ts` 新增 `verifyAgainstDummyHash`（以 `hash(randomBytes(16), BCRYPT_ROUNDS)` 產生並快取的假雜湊），`authorize` 在查無帳號或沒有密碼時也跑一次 bcrypt；（2）申請重設密碼與重寄驗證信（後者稽核未列、但有同樣的時間差）：查帳號、建 token、寄信改在 `after()` 中於回應送出後執行，錯誤只記 log、畫面一律顯示成功訊息；（3）`verifyEmailToken` 找不到 token 時直接回 `invalid`，不再依 `emailVerified` 回 `already-verified`（該值只剩「同一有效 token 同時使用兩次」的競態路徑）。**行為變化**：已驗證的人再點舊驗證連結會看到「無效或已經用過」。驗證（Development，`EMAIL_VERIFICATION_ENABLED=true`）：登入回應時間已註冊密碼錯 0.68–0.73 秒、不存在 0.70–0.82 秒、只用 GitHub 0.65–0.73 秒；Playwright 以不同 `x-real-ip` 避開速率限制計時，申請重設 存在 240／225 ms、不存在 243／244 ms，重寄驗證信 存在 310／303 ms、不存在 310／302 ms，回應後資料庫確實建立對應 token；驗證端點已驗證帳號 + 任意 token 由 `verified=1` 改為 `VerificationInvalid`、正確 token 仍可驗證、同一連結第二次為 `VerificationInvalid`；正確密碼登入正常；tsc、lint、build 通過，測試資料已刪除。**意外發現**：本機 `.env` 已有使用者自行加入的 `UPSTASH_REDIS_REST_*`（修改時間 04:28，只看鍵名），自上一筆改為也讀 `UPSTASH_*` 後，本機 `npm run dev` 一直啟用速率限制（Development 的 `moving-mastodon`），上一筆「未設定時放行」的實測仍有效（當時只讀 `KV_*`）。**待辦**：重跑 auth-auditor 更新報告；確認 `.env.production` 是否也有 Upstash 的鍵（cleanup skill 第 7 項）
