@@ -15,6 +15,7 @@ import {
 import { getCurrentUser } from "@/lib/current-user";
 import { isEmailVerificationEnabled } from "@/lib/email-verification";
 import { getSafeRedirect } from "@/lib/redirect";
+import { firstParam } from "@/lib/search-params";
 
 export const metadata: Metadata = { title: "Sign in · DevStash" };
 
@@ -41,8 +42,12 @@ const EMAIL_NOT_SENT =
 function getNotice(params: {
   registered: boolean;
   verified: boolean;
+  passwordReset: boolean;
   verificationEnabled: boolean;
 }) {
+  if (params.passwordReset) {
+    return "Password updated. You can now sign in.";
+  }
   if (params.verified) {
     return "Email verified. You can now sign in.";
   }
@@ -52,10 +57,6 @@ function getNotice(params: {
       : "Account created. You can now sign in.";
   }
   return undefined;
-}
-
-function firstParam(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value;
 }
 
 export default async function SignInPage({
@@ -77,6 +78,7 @@ export default async function SignInPage({
     isVerificationError && !verificationEnabled ? undefined : rawErrorCode;
   const registered = firstParam(params.registered) === "1";
   const verified = firstParam(params.verified) === "1";
+  const passwordReset = firstParam(params.reset) === "1";
   // 註冊 API 回報驗證信寄送失敗
   const emailNotSent =
     verificationEnabled && registered && firstParam(params.sent) === "0";
@@ -98,7 +100,12 @@ export default async function SignInPage({
         <SignInForm
           callbackUrl={callbackUrl}
           defaultEmail={firstParam(params.email) ?? ""}
-          notice={getNotice({ registered, verified, verificationEnabled })}
+          notice={getNotice({
+            registered,
+            verified,
+            passwordReset,
+            verificationEnabled,
+          })}
           initialError={initialError}
           initialNeedsVerification={initialNeedsVerification}
         />

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useState } from "react";
 
 import {
@@ -11,6 +12,7 @@ import {
 import { FormField } from "@/components/auth/FormField";
 import { FormMessage } from "@/components/auth/FormMessage";
 import { Button } from "@/components/ui/button";
+import { withEmailParam } from "@/lib/search-params";
 
 interface SignInFormProps {
   callbackUrl: string;
@@ -43,6 +45,7 @@ export function SignInForm({
   );
   // 受控欄位：action 結束後 React 會重設表單，登入失敗時 email 不該被清掉
   const [email, setEmail] = useState(defaultEmail);
+  const forgotPasswordHref = withEmailParam("/forgot-password", email);
   const error = state.error ?? initialError;
   // 送出過登入後以結果為準，否則沿用 URL 帶來的狀態
   const needsVerification =
@@ -75,6 +78,14 @@ export function SignInForm({
         type="password"
         autoComplete="current-password"
         required
+        labelAction={
+          <Link
+            href={forgotPasswordHref}
+            className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          >
+            Forgot password?
+          </Link>
+        }
       />
       <Button type="submit" disabled={isPending}>
         {isPending ? "Signing in…" : "Sign in"}

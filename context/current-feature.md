@@ -1,16 +1,61 @@
-# Current Feature
+# Current Feature: 忘記密碼
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
-<!-- 以 /feature load 載入 spec 後填入；成功長什麼樣子 -->
+- `/sign-in` 的密碼欄位旁加上「Forgot password?」連結，連到 `/forgot-password`；連結帶上已輸入的 email
+- `/forgot-password`：輸入 email 後寄出重設連結。**不論帳號是否存在都顯示同一則訊息**，不透露 email 是否已註冊
+- 只寄給有 `passwordHash` 的帳號。只用 GitHub 登入的帳號不寄：替它設定密碼等於帳號連結，而先前已決定兩個方向都拒絕
+- 重設 token 沿用 `VerificationToken`：
+  - `identifier` 為 `password-reset:{email}`，與 email 驗證 token（`identifier` 為純 email）分開，兩者互不刪除、互不通用
+  - 32 bytes 隨機值，資料庫只存 SHA-256；同一 email 重新申請時刪除舊 token
+  - 有效期 1 小時，只能使用一次（與 `verifyEmailToken` 相同，以 transaction 內 `deleteMany` 的 count 保證）
+- `/reset-password?email=…&token=…`：輸入新密碼與確認密碼，規則沿用註冊（至少 8 字元、至多 72 bytes、兩次一致）。成功後更新 `passwordHash` 並導向 `/sign-in?reset=1&email=…`，顯示「Password updated. You can now sign in.」
+- 連結過期或無效時，`/reset-password` 顯示錯誤並提供重新申請的連結
+- 表單以 Server Actions 處理、Zod 驗證，回傳 `{ success, data, error }`
+- 已登入的使用者開啟 `/forgot-password` 或 `/reset-password` 時導向 `/dashboard`（與 `/sign-in` 一致）
+- tsc、lint、build 通過；Playwright 實測申請、收信連結（從資料庫與 log 取得或以 gmail 實收）、重設、以新密碼登入、舊密碼失效、過期與重複使用
 
 ## Notes
 
-<!-- 來源、限制、實作方向、驗證結果、已知情況 -->
+- **來源**：inline 描述「create a forgot password link and functionality. Use the existing VerificationToken model for password reset tokens」
+- **無 migration**：沿用 `VerificationToken`（`identifier`、`token` unique、`expires`，`@@unique([identifier, token])`）
+- **寄信限制**：Resend 尚未驗證自有網域，`onboarding@resend.dev` 只能寄給 Resend 帳號本人（`today20050110@gmail.com`）。上線後其他使用者申請時會收不到信；因為對外訊息一律相同，他們也不會看到錯誤。這個功能要等網域驗證後才對所有人有效
+- **重用既有程式**：`getAppUrl()`、`hashToken()` 目前是 `email-verification.ts` 的私有函式，需要抽成共用（例如 `src/lib/tokens.ts`）；`src/lib/email.ts` 新增 `sendPasswordResetEmail`；密碼規則從 `registerSchema` 抽出共用
+- **未決定事項 1，是否受 `EMAIL_VERIFICATION_ENABLED` 控制**：建議**不受控制**，一律可用。理由是重設密碼本來就只能靠 email，關閉它等於沒有忘記密碼的功能；而目前 Resend 的限制只讓信寄不出去，不會造成錯誤
+- **未決定事項 2，重設成功時是否一併設定 `emailVerified`**：建議**是**（只在原本為 null 時寫入）。能收到重設信就證明擁有這個信箱，效力與驗證信相同，也能讓驗證關閉期間註冊的帳號日後不必再驗證一次
+- **未決定事項 3，重設後要不要讓其他裝置登出**：本專案 session 採 JWT，伺服器端無法撤銷已發出的 token；要做到必須在 `User` 加欄位（例如 `passwordChangedAt`）並在 `jwt` callback 比對，需要 migration。建議 **v1 不做**，列為已知情況
+- **不做**：速率限制（§3.4 延後 Redis，與註冊、重寄驗證信一致）；重設後自動登入（要求使用者以新密碼登入一次，確認新密碼有效）
+- `scripts/prune-users.ts` 以 `identifier: { not: KEEP_EMAIL }` 刪除 token，demo 帳號的重設 token（`password-reset:demo@devstash.io`）也會被刪；token 本來就短期有效，不影響
+- 郵件安全掃描器預先打開連結不會消耗 token：`/reset-password` 是 GET 頁面，只在送出新密碼（POST）時才驗證並刪除 token。這點和驗證信不同（驗證信的 GET 就會完成驗證）
+- **使用者決定**：三個未決定事項都採建議做法（不受 `EMAIL_VERIFICATION_ENABLED` 控制；重設成功時補上 `emailVerified`；v1 不讓其他裝置登出）
+- **實作**：
+  - `src/lib/tokens.ts`：從 `email-verification.ts` 抽出 `generateToken`、`hashToken`、`getAppUrl`，兩種 token 共用
+  - `src/lib/email.ts`：抽出共用的 `sendEmail` 與 `escapeHref`，新增 `sendPasswordResetEmail`
+  - `src/lib/password-reset.ts`：
+    - `requestPasswordReset`：寄信失敗只記 log
+    - `getResetTokenStatus`：只讀不消耗，給頁面開啟時用
+    - `resetPassword`：先檢查 token，bcrypt 放在 transaction 外；transaction 內刪除 token 後更新密碼，`emailVerified` 為 null 時補上
+    - `RESET_LINK_ERRORS`：`"use server"` 檔案只能匯出 async 函式，所以錯誤文案放在 lib，頁面與 action 共用
+  - `src/actions/password-reset.ts`：`requestPasswordResetAction`、`resetPasswordAction`；email 或 token 格式不合法時視同連結無效；成功後 `redirect` 到 `/sign-in?reset=1&email=…`
+  - `resetPasswordSchema` 沿用 `newPasswordSchema`
+  - `FormField` 新增 `labelAction`，放「Forgot password?」連結
+  - `src/lib/search-params.ts`：`firstParam` 由 `/sign-in` 頁抽出共用，另加 `withEmailParam`
+  - 重設表單的 email 欄位改為 `autoComplete="username"` 的 `hidden` input：實測時 Chrome 提示密碼表單缺少 username 欄位，加上後密碼管理器才知道新密碼屬於哪個帳號
+  - README 補上忘記密碼與寄件限制的說明
+- **驗證**（Development `ep-lucky-frost`，Playwright 1920px 與直接呼叫 lib 的腳本）：
+  - 申請：從 `/sign-in` 輸入 `Reset@Test.com` 後點「Forgot password?」，email 帶到忘記密碼頁；送出後 token 的 `identifier` 為 `password-reset:reset@test.com`（已轉小寫），有效 1 小時；不存在的 email 顯示相同訊息、不建立 token；寄到 `@test.com` 失敗只記在 server log
+  - 重設：兩次密碼不一致、少於 8 字元皆顯示欄位錯誤；成功後導向 `/sign-in?reset=1&email=reset%40test.com`，顯示「Password updated」並預填 email；舊密碼回「Invalid email or password」、新密碼登入進入 `/dashboard`；token 已刪除，`emailVerified` 由 null 變為重設時間
+  - 已登入時開啟 `/reset-password` 導向 `/dashboard`
+  - 連結失效：重複使用、亂碼 token、缺參數、email 格式錯誤皆顯示「invalid or has already been used」；過期顯示「has expired」；兩者都附「Request a new reset link」，連結帶上 email
+  - 表單開著時 token 被新申請取代，送出後換成錯誤訊息與重新申請按鈕，表單消失
+  - 腳本：申請重設不影響同一 email 的驗證 token；驗證 token 不能拿來重設（`invalid`）；沒有密碼的帳號不建立 token；同一 token 同時送出兩次結果為 `["invalid","reset"]`
+  - 主控台 0 errors / 0 warnings；tsc、lint、build 通過，build 新增 `ƒ /forgot-password`、`ƒ /reset-password`
+  - 測試帳號 `reset@test.com`、`oauthonly@test.com` 與其 token 已從 Development 刪除
+  - **未實測**：以 gmail 實際收到重設信（Resend 只能寄給帳號本人）
 
 ## History
 

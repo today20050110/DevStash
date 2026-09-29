@@ -1,7 +1,6 @@
-import { createHash, randomBytes } from "node:crypto";
-
 import { sendVerificationEmail } from "@/lib/email";
 import { prisma } from "@/lib/prisma";
+import { generateToken, getAppUrl, hashToken } from "@/lib/tokens";
 
 // 信件內文也以這個值顯示期限
 const TOKEN_TTL_HOURS = 24;
@@ -23,29 +22,9 @@ export function isEmailVerificationEnabled(): boolean {
   return process.env.EMAIL_VERIFICATION_ENABLED === "true";
 }
 
-// 資料庫只存雜湊：資料外洩時拿不到可用的連結
-function hashToken(token: string): string {
-  return createHash("sha256").update(token).digest("hex");
-}
-
-/**
- * 驗證連結的網址根。不從請求的 Host header 推導：Host 可被偽造，
- * 會讓驗證信裡的連結指向攻擊者的網域而洩漏 token。
- * 優先用 APP_URL，其次是 Vercel 自動提供的正式網域，最後是本機。
- */
-function getAppUrl(): string {
-  if (process.env.APP_URL) {
-    return process.env.APP_URL;
-  }
-  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
-    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
-  }
-  return "http://localhost:3000";
-}
-
 /** 建立新 token 並取代該 email 既有的 token，回傳帶原文 token 的連結 */
 async function createVerifyUrl(email: string): Promise<string> {
-  const token = randomBytes(32).toString("hex");
+  const token = generateToken();
   await prisma.$transaction([
     prisma.verificationToken.deleteMany({ where: { identifier: email } }),
     prisma.verificationToken.create({

@@ -42,7 +42,11 @@ email 驗證預設關閉：`EMAIL_VERIFICATION_ENABLED` 不是 `true` 時不寄�
 `onboarding@resend.dev`：在 Resend 驗證自有網域之前，**只能寄給 Resend 帳號本人的 email**，
 寄給其他地址時帳號仍會建立，但登入頁會提示驗證信寄送失敗。這類信件常被 Gmail 分到垃圾郵件。
 
-驗證連結的網址根依序取 `APP_URL` → Vercel 自動提供的 `VERCEL_PROJECT_PRODUCTION_URL`
+忘記密碼（`/forgot-password`）不受 `EMAIL_VERIFICATION_ENABLED` 影響，一律可用，但同樣受上述寄件限制：
+寄給其他地址時信件寄不出去，而畫面為了不透露 email 是否已註冊，仍顯示同一則訊息，失敗只記在 server log。
+重設連結有效 1 小時、只能使用一次；只有以帳號密碼註冊的帳號會收到信。
+
+驗證信與重設信連結的網址根依序取 `APP_URL` → Vercel 自動提供的 `VERCEL_PROJECT_PRODUCTION_URL`
 → `http://localhost:3000`，不從請求的 Host header 推導（可被偽造而把 token 送到別的網域）。
 本機與 Vercel production 通常不需要設定 `APP_URL`；Preview 部署的連結會指向正式網域。
 

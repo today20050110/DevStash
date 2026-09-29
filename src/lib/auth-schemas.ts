@@ -42,6 +42,21 @@ export const registerSchema = z
     path: ["confirmPassword"],
   });
 
+// 重設密碼沿用註冊的密碼規則；email 與 token 來自連結的 hidden 欄位
+export const resetPasswordSchema = z
+  .object({
+    email: emailSchema,
+    token: z
+      .string({ error: "Invalid reset link" })
+      .min(1, "Invalid reset link"),
+    password: newPasswordSchema,
+    confirmPassword: z.string({ error: "Please confirm your password" }),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
+
 // 登入不套用密碼規則：規則日後調整時，既有使用者仍要能登入
 export const signInSchema = z.object({
   email: emailSchema,
