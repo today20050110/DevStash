@@ -1,16 +1,17 @@
 # Test Action
 
-0. Prerequisite: this project has no test runner yet — there is no `test` script in
-   `package.json` and Vitest is not installed, and `context/ai-interaction.md` defers
-   unit testing ("Implement unit testing later"). If the runner is missing, tell the
-   user and **ask before installing Vitest / adding the `test` script**. Stop there if
-   they decline.
+Vitest is set up (`vitest.config.mts`, `vitest.setup.mts`). Follow the Testing section
+of `context/coding-standards.md`; `src/actions/password-reset.test.ts` is the reference
+for mocking a server action's dependencies.
+
 1. Read current-feature.md to understand what was implemented
-2. Identify server actions and utility functions added/modified for this feature
-3. Check if tests already exist for these functions
+2. Identify server actions (`src/actions/`) and utility functions (`src/lib/`)
+   added/modified for this feature — not components, pages, or route handlers
+3. Check if tests already exist for these functions (colocated `*.test.ts`)
 4. For functions without tests that have testable logic, write unit tests:
-   - Create unit tests using Vitest
-   - Focus on server actions and utilities (not components)
+   - Colocate as `src/.../name.test.ts`
+   - Mock the database, Upstash, Resend and Next.js request APIs — tests must never
+     reach a real service
    - Test happy path and error cases
    - Do not write tests just to write them. Use your best judgement
 5. Run `npm test` to verify all tests pass

@@ -353,6 +353,7 @@ Schema 中以 `Unsupported("tsvector")` 宣告，實際欄位由 migration 建�
 | 樣式      | Tailwind CSS v4 + shadcn/ui |                                |
 | 快取      | 無（v1）                    | Redis 不當快取                 |
 | 速率限制  | Upstash Redis               | `@upstash/ratelimit`，fail open |
+| 單元測試  | Vitest                      | 只測 server actions 與工具函式 |
 
 ### Prisma 版本注意事項
 

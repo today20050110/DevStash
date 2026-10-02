@@ -46,6 +46,7 @@ Example v4 configuration:
 @theme {
   --color-primary: oklch(50% 0.2 250);
 }
+```
 
 ## File Organization
 
@@ -89,9 +90,18 @@ Example v4 configuration:
 - Return `{ success, data, error }` pattern from actions
 - Display user-friendly error messages via toast
 
+## Testing
+
+- Unit tests use Vitest (`npm test`, or `npm run test:watch` while developing)
+- Only test **server actions** (`src/actions/`) and **utilities** (`src/lib/`) — not components, pages, or route handlers
+- Colocate tests next to the source: `src/lib/redirect.ts` → `src/lib/redirect.test.ts`; only `src/**/*.test.ts` is collected (no `.tsx`)
+- Tests run in the `node` environment and never touch real services: mock `@/lib/prisma`, Upstash, Resend, `next/navigation`, `next/server`, and `next/headers` with `vi.mock`. `vitest.setup.mts` clears the database/Redis/Resend env vars, and `@/lib/prisma` throws without `DATABASE_URL`, so an unmocked database import fails the test instead of connecting
+- Server action tests cover the action's own flow — input validation, rate limiting, error mapping, redirects; the database logic behind them belongs in `src/lib/` and is tested there or against Development with `npm run test:db`
+- Cover the happy path plus the edge cases that matter (security boundaries, limits, error branches). Don't write tests just to raise the count
+- Use `vi.stubEnv` for environment variables; mocks and env stubs are reset between tests by the config
+
 ## Code Quality
 
 - No commented-out code unless specified
 - No unused imports or variables
 - Keep functions under 50 lines when possible
-```

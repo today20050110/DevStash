@@ -106,6 +106,8 @@ seed 可重複執行；帶 `SEED_DEMO=1` 重跑會清掉並重建 demo 帳號底
 | `npm run build` | production build |
 | `npm run start` | production 伺服器 |
 | `npm run lint` | ESLint |
+| `npm test` | Vitest 單元測試（server actions 與 `src/lib` 工具函式，不連任何外部服務） |
+| `npm run test:watch` | Vitest watch 模式 |
 | `npm run test:db` | 唯讀檢查連線、migration、`pg_trgm`、系統型別、資料列數 |
 | `npm run db:studio` | Prisma Studio |
 
