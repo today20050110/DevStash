@@ -70,7 +70,7 @@ export default async function ItemsByTypePage({
       </div>
 
       {items.length > 0 ? (
-        <div className="grid gap-4 @3xl:grid-cols-2">
+        <div className="grid gap-4 @3xl:grid-cols-2 @5xl:grid-cols-3">
           {items.map((item) => (
             <ItemCard key={item.id} item={item} />
           ))}

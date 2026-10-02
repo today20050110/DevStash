@@ -1,16 +1,28 @@
-# Current Feature
+# Current Feature: Item List Three Columns
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
-<!-- 以 /feature load 載入 spec 後填入；成功長什麼樣子 -->
+- `/items/[type]` 的 item 網格在較寬的畫面改為三欄（目前最多兩欄）
+- 維持響應式：窄畫面單欄、中等寬度兩欄、較寬時三欄
+- 三欄時卡片仍可閱讀（標題、描述、tags、日期不擠壓到難以辨識），任何寬度都沒有水平捲動
+- 側邊欄展開與收合兩種狀態都正確切換欄數
 
 ## Notes
 
-<!-- 來源、限制、實作方向、驗證結果、已知情況 -->
+- 來源：inline 描述「change the item listing view to be a three column row instead of two on larger screens. Keep it responsive.」
+- 現況：`src/app/(app)/items/[type]/page.tsx` 以頁面為容器的 container query（`@container` + `@3xl:grid-cols-2`），上一個 feature 經使用者確認不用視窗的 `md`，因為側邊欄佔 256px。三欄沿用同一做法，加上一個更寬的 `@…:grid-cols-3`
+- 斷點待實作時量測決定：視窗 1440px、側邊欄展開時頁面寬約 1120px，`@5xl`（64rem = 1024px）每欄約 362px，`@6xl`（72rem = 1152px）在 1440px 展開時仍是兩欄。上一個 feature 量到每欄 382px 時較長標題已會截斷，三欄的可讀性要實際截圖確認
+- `ItemCard` 為橫向版面（左圖示方塊 + 文字 + 右側日期），欄寬變窄時日期會擠壓標題；若三欄下截斷嚴重，可能需要調整卡片（例如日期移到下方），屆時先確認再改，因為 dashboard 也用同一個元件
+- 範圍只限 `/items/[type]`；dashboard 的 Recent／Pinned 維持單欄
+- 驗證：390／768／1024／1440／1920 與側邊欄收合，量欄數、欄寬、截斷數、水平捲動
+- **實作**：grid 改為 `@3xl:grid-cols-2 @5xl:grid-cols-3`（頁面寬 ≥ 48rem 兩欄、≥ 64rem 三欄），`ItemCard` 未改
+- **量測結果**（demo 帳號，頁面寬／欄寬／標題截斷數）：390 → 單欄 326px、snippets 3/4（與先前相同）；768、1024 → 單欄；1280 → 兩欄 472px、0；1366 → 三欄 338px、snippets 3/4、links 2/6；1440 → 三欄 363px、snippets 2/4、links 0/6；1600 → 三欄 416px、0；1920 → 三欄 523px、0；側邊欄收合時 1024 → 兩欄 472px、1280 → 三欄 395px、0。所有寬度皆無水平捲動
+- 斷點選擇：`@6xl`（72rem）會讓最常見的 1440px 筆電在側邊欄展開時仍是兩欄，等於沒做；`@5xl` 在 1366／1440 有長標題截斷，但截圖確認描述、tags、日期完整，標題只少幾個字，可接受，因此未改 `ItemCard`（改日期位置會連動 dashboard）
+- 驗證：主控台 0 errors；tsc、lint、`npm test` 40/40、build 通過
 
 ## History
 
