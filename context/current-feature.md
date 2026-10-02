@@ -1,37 +1,16 @@
-# Current Feature: Items List View
+# Current Feature
 
 ## Status
 
-In Progress
+Not Started
 
 ## Goals
 
-- 新增動態路由 `/items/[type]`（如 `/items/snippets`、`/items/notes`），側邊欄型別連結不再 404
-- 依型別篩選並顯示目前使用者的 items（排除軟刪除）
-- 以 `ItemCard` 組成響應式網格：手機單欄、`md` 以上兩欄
-- 每張卡片左邊框為該型別色（沿用現有 `ItemCard`）
-- 不存在的型別 slug 回 `notFound()`
-- 未登入存取 `/items/*` 導向 `/sign-in` 並保留 `callbackUrl`
-- 沿用既有模式：放在 `(app)` route group、查詢在 `src/lib/db/items.ts`、userId 必填
+<!-- 以 /feature load 載入 spec 後填入；成功長什麼樣子 -->
 
 ## Notes
 
-- 來源：`context/features/item-list-view-spec.md`；設計參考 `docs/item-crud-architecture.md`（本次只做其中「讀取」的列表部分）
-- spec 未寫但必須做：
-  - `src/proxy.ts` 的 matcher 加入 `"/items/:path*"`
-  - 頁面放 `src/app/(app)/items/[type]/page.tsx`，共用側邊欄、頂部列與 layout 的 session 版本檢查
-  - 頁面呼叫 `await connection()`，與 dashboard 一致維持動態渲染
-  - `params` 在 Next.js 16 為 Promise，props 型別用 `PageProps<"/items/[type]">`
-- 查詢：`src/lib/db/items.ts` 新增 `getItemTypeBySlug`（系統型別，或 `userId` 為目前使用者的自訂型別）與 `getItemsByType`（沿用 `findItemSummaries`，不載入 `content`）
-- 待實作時決定：頁首內容（建議型別圖示、名稱、數量）；空狀態（建議沿用 dashboard 的「No items yet.」）
-- 注意：`ItemCard` 原為單欄設計，兩欄時右側日期會壓縮標題寬度，需實際檢查
-- `ItemCard` 暫留在 `components/dashboard/`，不在本次搬移
-- demo 資料沒有 notes、files、images，這三頁只會看到空狀態
-- 刻意不做：點擊卡片開 drawer、新增／編輯／刪除、分頁、語法高亮
-- **與 spec 的差異（經使用者確認）**：兩欄改以頁面本身為容器的 container query（`@container` + `@3xl:grid-cols-2`，頁面寬度 ≥ 48rem 才兩欄），不用視窗的 `md`。原因：視窗 768px 時側邊欄佔 256px，`md:grid-cols-2` 每欄只剩 216px，標題全被截斷、描述每行兩三個字。結果：側邊欄展開時約視窗 1100px 起兩欄（每欄 382px），收合時視窗 900px 即兩欄（410px）
-- 實作：`getItemTypeBySlug` 以 `orderBy: { userId: { sort: "asc", nulls: "first" } }` 讓系統型別優先；頁面的型別查詢以 `cache()` 包起來，`generateMetadata`（標題如「Snippets — DevStash」）與頁面共用一次查詢；頁首為型別圖示 + 名稱 + 數量
-- 曾試將 `ItemCard` 標題由 `truncate` 改為 `line-clamp-2`，改用 container query 後已不需要，還原未動
-- 驗證：curl 未登入 `/items/snippets?x=1` → 307 `/sign-in?callbackUrl=%2Fitems%2Fsnippets%3Fx%3D1`；Playwright 以 demo 登入，7 種型別數量與側邊欄一致（4／3／5／0／0／0／6），notes／files／images 顯示空狀態，`/items/foo` 404 且保留側邊欄；390／768／1024／1100／1440 與 900 收合側邊欄皆無水平捲動；主控台 0 errors（截圖時 Playwright 注入 `caret-color` 造成的 hydration 警告除外，未截圖時重測為 0）；tsc、lint、build 通過，build 新增 `ƒ /items/[type]`
+<!-- 來源、限制、實作方向、驗證結果、已知情況 -->
 
 ## History
 
@@ -89,3 +68,4 @@ In Progress
 - **修正可判斷 email 是否已註冊的途徑**（`12ea6e3`）：處理 `docs/audit-results/AUTH_SECURITY_REVIEW.md` 的 Low 項目；註冊回 409 為 Auth Phase 2 經使用者確認的設計，不處理。（1）登入：`src/lib/password.ts` 新增 `verifyAgainstDummyHash`（以 `hash(randomBytes(16), BCRYPT_ROUNDS)` 產生並快取的假雜湊），`authorize` 在查無帳號或沒有密碼時也跑一次 bcrypt；（2）申請重設密碼與重寄驗證信（後者稽核未列、但有同樣的時間差）：查帳號、建 token、寄信改在 `after()` 中於回應送出後執行，錯誤只記 log、畫面一律顯示成功訊息；（3）`verifyEmailToken` 找不到 token 時直接回 `invalid`，不再依 `emailVerified` 回 `already-verified`（該值只剩「同一有效 token 同時使用兩次」的競態路徑）。**行為變化**：已驗證的人再點舊驗證連結會看到「無效或已經用過」。驗證（Development，`EMAIL_VERIFICATION_ENABLED=true`）：登入回應時間已註冊密碼錯 0.68–0.73 秒、不存在 0.70–0.82 秒、只用 GitHub 0.65–0.73 秒；Playwright 以不同 `x-real-ip` 避開速率限制計時，申請重設 存在 240／225 ms、不存在 243／244 ms，重寄驗證信 存在 310／303 ms、不存在 310／302 ms，回應後資料庫確實建立對應 token；驗證端點已驗證帳號 + 任意 token 由 `verified=1` 改為 `VerificationInvalid`、正確 token 仍可驗證、同一連結第二次為 `VerificationInvalid`；正確密碼登入正常；tsc、lint、build 通過，測試資料已刪除。**意外發現**：本機 `.env` 已有使用者自行加入的 `UPSTASH_REDIS_REST_*`（修改時間 04:28，只看鍵名），自上一筆改為也讀 `UPSTASH_*` 後，本機 `npm run dev` 一直啟用速率限制（Development 的 `moving-mastodon`），上一筆「未設定時放行」的實測仍有效（當時只讀 `KV_*`）。**待辦**：重跑 auth-auditor 更新報告；確認 `.env.production` 是否也有 Upstash 的鍵（cleanup skill 第 7 項）
 - 第二次 auth-auditor 稽核（2026-09-30，`c5d9b24`）：Critical 0／High 0／Medium 0／Low 1，報告隨下一筆 commit 提交。上次三項的查證皆為修正正確：`sessionVersion` 只在登入時讀取、不處理 `trigger === "update"`，所有登入後的進入點都經 `getCurrentUser()` 比對；六個端點都有速率限制、登入的檢查在 `authorize`、production 的 IP 無法偽造；列舉途徑已消除（註冊 409 為已確認的設計）。唯一的新問題（Low，經人工對照程式碼確認）：登入與重寄驗證信只以 IP + email 為鍵，同一 IP 換 email 就是新的計數，可對大量帳號各試常見密碼；以隨機 email 大量呼叫重寄驗證信（不跑 bcrypt）約 50 萬次可用完 Upstash 免費方案每月 50 萬個指令，額度耗盡後 Redis 回錯誤，`@upstash/ratelimit` 的 `limit()` 不捕捉（已讀原始碼），`checkRateLimit` 會放行，當月所有限制失效。未能確認：Vercel 是否接受 IPv6（若接受可在 /64 內輪換位址）、Upstash 的 `EVALSHA` 計幾個指令
 - **速率限制加上只看 IP 的上限**（`e9633d8`）：修正上述 Low。`LIMITS` 新增 `signInIp`（30／15 分鐘）與 `resendVerificationIp`（10／15 分鐘）；新增 `checkRateLimits(checks)` 依序檢查、第一道被擋就停止且後面不再計數；`authorize` 與 `resendVerification` 改為先只看 IP、再看 IP + email。驗證（Development，`.env` 的 Upstash、`EMAIL_VERIFICATION_ENABLED=true`，以 `x-real-ip` 指定測試 IP）：登入同一 IP 換 32 個 email，前 30 次 `credentials`、之後 `rate_limited`；另一 IP 不受影響；同一 IP 同一 email 第 6 次仍被擋；重寄驗證信同一 IP 換 11 個 email，第 11 次被擋；tsc、lint、build 通過。**已知情況**：同一 email 每次換 IP 仍不受限（沒有跨 IP 的總量限制）；IPv6 輪換未確認；額度耗盡時仍 fail open，但單一 IP 會先被 IP 上限擋下。另：使用者詢問課程的 `github-oauth-redirect-fix.md`（GitHub 登入要按兩次），對照後本專案自 Auth Phase 3 起已是建議的寫法（Server Action 呼叫 `@/auth` 的 `signIn`、`<form action>`、`redirectTo`、無 `next-auth/react`），不需修改
+- **Items 型別列表頁完成**（`188d7fd`）：依 `context/features/item-list-view-spec.md`（隨本次 commit 加入版控），新增 `/items/[type]`，側邊欄型別連結不再 404。前置研究：`/research` skill（`.claude/skills/research/`、`context/research/` 的兩個 prompt）產出 `docs/item-types.md` 與 `docs/item-crud-architecture.md`（`4c3de15`），本次為後者「讀取」部分中的列表，不含 drawer。**無 migration**。`src/lib/db/items.ts` 新增 `getItemTypeBySlug(userId, slug)`（系統型別或該使用者的自訂型別，以 `orderBy: { userId: { sort: "asc", nulls: "first" } }` 讓系統型別優先，其他使用者的自訂型別查不到）與 `getItemsByType`（沿用 `findItemSummaries`，不載入 `content`、無分頁）；`src/types/items.ts` 新增 `ItemTypeDetail`；`src/proxy.ts` matcher 加入 `/items/:path*`。頁面 `src/app/(app)/items/[type]/page.tsx`：型別查詢以 `cache()` 包起來供 `generateMetadata`（「Snippets — DevStash」）與頁面共用，內含 `connection()`、查無使用者時帶 `callbackUrl` 導向登入、查無型別 `notFound()`；頁首為型別圖示 + 名稱 + 數量，空狀態「No items yet.」，`ItemCard` 原樣重用（留在 `components/dashboard/`）。**與 spec 的差異（經使用者確認）**：spec 寫 `md` 以上兩欄，但視窗 768px 時側邊欄佔 256px，每欄只剩 216px、標題全被截斷；改以頁面為容器的 container query（`@container` + `@3xl:grid-cols-2`，頁面寬 ≥ 48rem），側邊欄展開時約視窗 1100px 起兩欄、收合時 900px 即兩欄。曾試將 `ItemCard` 標題改為 `line-clamp-2`，改用 container query 後還原。驗證：curl 未登入 `/items/snippets?x=1` → 307 並完整保留 `callbackUrl`；Playwright 以 demo 登入，7 種型別數量與側邊欄一致（4／3／5／0／0／0／6），`/items/foo` 404 且保留側邊欄，390／768／1024／1100／1440 與 900 收合側邊欄皆無水平捲動，主控台 0 errors；tsc、lint、build 通過，build 新增 `ƒ /items/[type]`。**已知情況**：（1）剛切成兩欄的寬度（每欄約 382px）較長標題仍會截斷，與手機上的 dashboard 相同；（2）demo 資料沒有 notes／files／images，這三頁只有空狀態；（3）Playwright 截圖時注入 `caret-color` 會在主控台產生 hydration 警告，非應用程式問題。**同期處理（不在版控）**：本機 dev 開發浮層出現 `pg` 的 `SECURITY WARNING`（`sslmode=require` 目前被視為 `verify-full`，下一主版本將改為 libpq 語意），經使用者同意把 `.env` 兩個連線字串改為 `sslmode=verify-full`（行為不變），`test:db` 6/6、重啟 dev server 後警告消失；`.env.production` 與 Vercel production 的連線字串仍為 `require`（未處理，改 Vercel 後須 Redeploy，值不可加引號）
