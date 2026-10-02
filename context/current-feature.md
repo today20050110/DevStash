@@ -1,28 +1,16 @@
-# Current Feature: Item List Three Columns
+# Current Feature
 
 ## Status
 
-In Progress
+Not Started
 
 ## Goals
 
-- `/items/[type]` 的 item 網格在較寬的畫面改為三欄（目前最多兩欄）
-- 維持響應式：窄畫面單欄、中等寬度兩欄、較寬時三欄
-- 三欄時卡片仍可閱讀（標題、描述、tags、日期不擠壓到難以辨識），任何寬度都沒有水平捲動
-- 側邊欄展開與收合兩種狀態都正確切換欄數
+<!-- 以 /feature load 載入 spec 後填入；成功長什麼樣子 -->
 
 ## Notes
 
-- 來源：inline 描述「change the item listing view to be a three column row instead of two on larger screens. Keep it responsive.」
-- 現況：`src/app/(app)/items/[type]/page.tsx` 以頁面為容器的 container query（`@container` + `@3xl:grid-cols-2`），上一個 feature 經使用者確認不用視窗的 `md`，因為側邊欄佔 256px。三欄沿用同一做法，加上一個更寬的 `@…:grid-cols-3`
-- 斷點待實作時量測決定：視窗 1440px、側邊欄展開時頁面寬約 1120px，`@5xl`（64rem = 1024px）每欄約 362px，`@6xl`（72rem = 1152px）在 1440px 展開時仍是兩欄。上一個 feature 量到每欄 382px 時較長標題已會截斷，三欄的可讀性要實際截圖確認
-- `ItemCard` 為橫向版面（左圖示方塊 + 文字 + 右側日期），欄寬變窄時日期會擠壓標題；若三欄下截斷嚴重，可能需要調整卡片（例如日期移到下方），屆時先確認再改，因為 dashboard 也用同一個元件
-- 範圍只限 `/items/[type]`；dashboard 的 Recent／Pinned 維持單欄
-- 驗證：390／768／1024／1440／1920 與側邊欄收合，量欄數、欄寬、截斷數、水平捲動
-- **實作**：grid 改為 `@3xl:grid-cols-2 @5xl:grid-cols-3`（頁面寬 ≥ 48rem 兩欄、≥ 64rem 三欄），`ItemCard` 未改
-- **量測結果**（demo 帳號，頁面寬／欄寬／標題截斷數）：390 → 單欄 326px、snippets 3/4（與先前相同）；768、1024 → 單欄；1280 → 兩欄 472px、0；1366 → 三欄 338px、snippets 3/4、links 2/6；1440 → 三欄 363px、snippets 2/4、links 0/6；1600 → 三欄 416px、0；1920 → 三欄 523px、0；側邊欄收合時 1024 → 兩欄 472px、1280 → 三欄 395px、0。所有寬度皆無水平捲動
-- 斷點選擇：`@6xl`（72rem）會讓最常見的 1440px 筆電在側邊欄展開時仍是兩欄，等於沒做；`@5xl` 在 1366／1440 有長標題截斷，但截圖確認描述、tags、日期完整，標題只少幾個字，可接受，因此未改 `ItemCard`（改日期位置會連動 dashboard）
-- 驗證：主控台 0 errors；tsc、lint、`npm test` 40/40、build 通過
+<!-- 來源、限制、實作方向、驗證結果、已知情況 -->
 
 ## History
 
@@ -83,3 +71,4 @@ In Progress
 - **Items 型別列表頁完成**（`188d7fd`）：依 `context/features/item-list-view-spec.md`（隨本次 commit 加入版控），新增 `/items/[type]`，側邊欄型別連結不再 404。前置研究：`/research` skill（`.claude/skills/research/`、`context/research/` 的兩個 prompt）產出 `docs/item-types.md` 與 `docs/item-crud-architecture.md`（`4c3de15`），本次為後者「讀取」部分中的列表，不含 drawer。**無 migration**。`src/lib/db/items.ts` 新增 `getItemTypeBySlug(userId, slug)`（系統型別或該使用者的自訂型別，以 `orderBy: { userId: { sort: "asc", nulls: "first" } }` 讓系統型別優先，其他使用者的自訂型別查不到）與 `getItemsByType`（沿用 `findItemSummaries`，不載入 `content`、無分頁）；`src/types/items.ts` 新增 `ItemTypeDetail`；`src/proxy.ts` matcher 加入 `/items/:path*`。頁面 `src/app/(app)/items/[type]/page.tsx`：型別查詢以 `cache()` 包起來供 `generateMetadata`（「Snippets — DevStash」）與頁面共用，內含 `connection()`、查無使用者時帶 `callbackUrl` 導向登入、查無型別 `notFound()`；頁首為型別圖示 + 名稱 + 數量，空狀態「No items yet.」，`ItemCard` 原樣重用（留在 `components/dashboard/`）。**與 spec 的差異（經使用者確認）**：spec 寫 `md` 以上兩欄，但視窗 768px 時側邊欄佔 256px，每欄只剩 216px、標題全被截斷；改以頁面為容器的 container query（`@container` + `@3xl:grid-cols-2`，頁面寬 ≥ 48rem），側邊欄展開時約視窗 1100px 起兩欄、收合時 900px 即兩欄。曾試將 `ItemCard` 標題改為 `line-clamp-2`，改用 container query 後還原。驗證：curl 未登入 `/items/snippets?x=1` → 307 並完整保留 `callbackUrl`；Playwright 以 demo 登入，7 種型別數量與側邊欄一致（4／3／5／0／0／0／6），`/items/foo` 404 且保留側邊欄，390／768／1024／1100／1440 與 900 收合側邊欄皆無水平捲動，主控台 0 errors；tsc、lint、build 通過，build 新增 `ƒ /items/[type]`。**已知情況**：（1）剛切成兩欄的寬度（每欄約 382px）較長標題仍會截斷，與手機上的 dashboard 相同；（2）demo 資料沒有 notes／files／images，這三頁只有空狀態；（3）Playwright 截圖時注入 `caret-color` 會在主控台產生 hydration 警告，非應用程式問題。**同期處理（不在版控）**：本機 dev 開發浮層出現 `pg` 的 `SECURITY WARNING`（`sslmode=require` 目前被視為 `verify-full`，下一主版本將改為 libpq 語意），經使用者同意把 `.env` 兩個連線字串改為 `sslmode=verify-full`（行為不變），`test:db` 6/6、重啟 dev server 後警告消失；`.env.production` 與 Vercel production 的連線字串仍為 `require`（未處理，改 Vercel 後須 Redeploy，值不可加引號）
 - **Vitest 單元測試設定**（`chore/vitest-setup`，與本筆同一個 commit）：使用者要求只測 server actions 與工具函式、不測元件。新增 `vitest` ^5.0.3 與 `npm test`（`vitest run`）／`npm run test:watch`；Vitest 5 要求 `@types/node` ≥ 22，由 `^20` 升為 `^24`（對齊 Vercel 預設的 Node 24，本機為 26），tsc 無型別問題。`vitest.config.mts`：`node` 環境、只收 `src/**/*.test.ts`（不含 `.tsx`）、`@` 別名同 tsconfig、`mockReset`／`restoreMocks`／`unstubEnvs`；用 `.mts` 是因為 `package.json` 沒有 `"type": "module"`，`.ts` 會出現 Vite 的 CommonJS 警告。`vitest.setup.mts` 清除資料庫、Upstash、Resend 的環境變數 —— 漏 mock 時 `@/lib/prisma` 因缺 `DATABASE_URL` 直接丟錯，而不是連到真的資料庫（shell 若載入過 `.env.production` 就是 production）。範例測試共 40 個、與原始碼同資料夾：`redirect.test.ts`（Auth Phase 3 重現過的 open redirect 繞過手法）、`auth-schemas.test.ts`（email 正規化、72 bytes 上限含中文）、`tokens.test.ts`（SHA-256、`getAppUrl` 優先順序，以 `vi.stubEnv`）、`src/actions/password-reset.test.ts`（server action 的 mock 範例：`@/lib/prisma`、`@/lib/password-reset`、`@/lib/rate-limit` 以 `importOriginal` 部分 mock，`next/navigation` 的 `redirect` 保留丟例外的行為，`next/server` 的 `after` 收集後手動執行，驗證申請重設在回應送出後才查帳號）。以故意改壞 `getSafeRedirect` 確認有 5 個測試失敗後還原。文件：`ai-interaction.md` Workflow 第 4 步改為補測試並跑 `npm test` 與 build、commit 前提加上測試通過；`coding-standards.md` 新增 Testing 章節，並修正 Tailwind 範例未關閉的 code fence（原本 File Organization 之後整段被渲染成程式碼）；`/feature test` 的 action 移除「尚未安裝 Vitest」的前置步驟；`CLAUDE.md`、README 指令表、`project-overview.md` §7 技術棧補上 Vitest。驗證：`npm test` 40/40、tsc、lint、build 通過。**已知情況**：`npm audit` 顯示 `next` 16.3.3 有 critical 漏洞（影響 16.2.0–16.3.5），與 Vitest 無關，建議另開 fix branch 升級；其餘 high 多來自 prisma CLI 的傳遞相依
 - **Next.js 升級至 16.3.8**（`fix/next-upgrade`，與本筆同一個 commit）：Vitest 設定時 `npm audit` 發現 `next` 16.3.3 有 critical 漏洞 GHSA-vcvr-r3jv-pc5j（`next/og` 的 `ImageResponse` 遠端程式碼執行，影響 `>=16.2.0 <16.3.6`）。專案未使用 `next/og`，實際未受影響，但仍升級：`next` 與 `eslint-config-next` 由 16.3.3 升為 16.3.8（`latest`，同一小版本內的 patch），維持 `--save-exact` 鎖定確切版本；`next-auth` 的 peer 相依 dedupe 到同一版本。之後 `npm audit` 無 critical（剩 moderate 2／high 5，多為 prisma CLI 的傳遞相依）。驗證：tsc、lint、`npm test` 40/40、build 通過，所有路由仍為 `ƒ`；以 16.3.8 重啟 dev server 後 Playwright 實測未登入導向並保留 `callbackUrl`、demo 登入回原頁、dashboard／`/items/snippets`／`/items/notes`／`/profile` 200、`/items/foo` 404、側邊欄連結、登出與登出後再導回登入頁，主控台除預期的 404 外無錯誤
+- **Items 列表頁三欄**（`e07c6d0`）：inline 描述載入（「change the item listing view to be a three column row instead of two on larger screens. Keep it responsive.」）。`src/app/(app)/items/[type]/page.tsx` 的 grid 由 `@3xl:grid-cols-2` 改為 `@3xl:grid-cols-2 @5xl:grid-cols-3`，沿用上一個 feature 以頁面為容器的 container query（頁面寬 ≥ 48rem 兩欄、≥ 64rem 三欄），`ItemCard` 未改、dashboard 不受影響。**斷點選擇**：`@6xl`（72rem）會讓最常見的 1440px 筆電在側邊欄展開時（頁面寬 1120px）仍是兩欄；`@5xl` 在 1366／1440 有長標題截斷，截圖確認描述、tags、日期完整、標題只少幾個字，可接受。量測（demo 帳號，側邊欄展開，欄寬／snippets 與 links 的標題截斷數）：390 單欄 326px 3/4、2/6（與先前相同）；768、1024 單欄 0；1280 兩欄 472px 0；1366 三欄 338px 3/4、2/6；1440 三欄 363px 2/4、0/6；1600 三欄 416px、1920 三欄 523px 皆 0；側邊欄收合時 1024 兩欄 472px、1280 三欄 395px、0。所有寬度無水平捲動、主控台 0 errors；tsc、lint、`npm test` 40/40、build 通過。**已知情況**：1366／1440 三欄時較長標題截斷；若要完整顯示，需把 `ItemCard` 右上的日期移到下方，會連動 dashboard 的外觀（未處理）
