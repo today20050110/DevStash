@@ -1,16 +1,37 @@
-# Current Feature
+# Current Feature: Items List View
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
-<!-- 以 /feature load 載入 spec 後填入；成功長什麼樣子 -->
+- 新增動態路由 `/items/[type]`（如 `/items/snippets`、`/items/notes`），側邊欄型別連結不再 404
+- 依型別篩選並顯示目前使用者的 items（排除軟刪除）
+- 以 `ItemCard` 組成響應式網格：手機單欄、`md` 以上兩欄
+- 每張卡片左邊框為該型別色（沿用現有 `ItemCard`）
+- 不存在的型別 slug 回 `notFound()`
+- 未登入存取 `/items/*` 導向 `/sign-in` 並保留 `callbackUrl`
+- 沿用既有模式：放在 `(app)` route group、查詢在 `src/lib/db/items.ts`、userId 必填
 
 ## Notes
 
-<!-- 來源、限制、實作方向、驗證結果、已知情況 -->
+- 來源：`context/features/item-list-view-spec.md`；設計參考 `docs/item-crud-architecture.md`（本次只做其中「讀取」的列表部分）
+- spec 未寫但必須做：
+  - `src/proxy.ts` 的 matcher 加入 `"/items/:path*"`
+  - 頁面放 `src/app/(app)/items/[type]/page.tsx`，共用側邊欄、頂部列與 layout 的 session 版本檢查
+  - 頁面呼叫 `await connection()`，與 dashboard 一致維持動態渲染
+  - `params` 在 Next.js 16 為 Promise，props 型別用 `PageProps<"/items/[type]">`
+- 查詢：`src/lib/db/items.ts` 新增 `getItemTypeBySlug`（系統型別，或 `userId` 為目前使用者的自訂型別）與 `getItemsByType`（沿用 `findItemSummaries`，不載入 `content`）
+- 待實作時決定：頁首內容（建議型別圖示、名稱、數量）；空狀態（建議沿用 dashboard 的「No items yet.」）
+- 注意：`ItemCard` 原為單欄設計，兩欄時右側日期會壓縮標題寬度，需實際檢查
+- `ItemCard` 暫留在 `components/dashboard/`，不在本次搬移
+- demo 資料沒有 notes、files、images，這三頁只會看到空狀態
+- 刻意不做：點擊卡片開 drawer、新增／編輯／刪除、分頁、語法高亮
+- **與 spec 的差異（經使用者確認）**：兩欄改以頁面本身為容器的 container query（`@container` + `@3xl:grid-cols-2`，頁面寬度 ≥ 48rem 才兩欄），不用視窗的 `md`。原因：視窗 768px 時側邊欄佔 256px，`md:grid-cols-2` 每欄只剩 216px，標題全被截斷、描述每行兩三個字。結果：側邊欄展開時約視窗 1100px 起兩欄（每欄 382px），收合時視窗 900px 即兩欄（410px）
+- 實作：`getItemTypeBySlug` 以 `orderBy: { userId: { sort: "asc", nulls: "first" } }` 讓系統型別優先；頁面的型別查詢以 `cache()` 包起來，`generateMetadata`（標題如「Snippets — DevStash」）與頁面共用一次查詢；頁首為型別圖示 + 名稱 + 數量
+- 曾試將 `ItemCard` 標題由 `truncate` 改為 `line-clamp-2`，改用 container query 後已不需要，還原未動
+- 驗證：curl 未登入 `/items/snippets?x=1` → 307 `/sign-in?callbackUrl=%2Fitems%2Fsnippets%3Fx%3D1`；Playwright 以 demo 登入，7 種型別數量與側邊欄一致（4／3／5／0／0／0／6），notes／files／images 顯示空狀態，`/items/foo` 404 且保留側邊欄；390／768／1024／1100／1440 與 900 收合側邊欄皆無水平捲動；主控台 0 errors（截圖時 Playwright 注入 `caret-color` 造成的 hydration 警告除外，未截圖時重測為 0）；tsc、lint、build 通過，build 新增 `ƒ /items/[type]`
 
 ## History
 

@@ -5,6 +5,12 @@ export interface ItemTypeSummary {
   color: string;
 }
 
+/** 型別列表頁的頁首與查詢用 */
+export interface ItemTypeDetail extends ItemTypeSummary {
+  id: string;
+  slug: string;
+}
+
 export interface ItemTypeWithCount {
   id: string;
   name: string;

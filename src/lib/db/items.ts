@@ -1,6 +1,10 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import type { ItemSummary, ItemTypeWithCount } from "@/types/items";
+import type {
+  ItemSummary,
+  ItemTypeDetail,
+  ItemTypeWithCount,
+} from "@/types/items";
 
 const RECENT_ITEMS_LIMIT = 10;
 const PINNED_ITEMS_LIMIT = 10;
@@ -67,6 +71,21 @@ export async function getSystemItemTypesWithCounts(
   }));
 }
 
+/**
+ * 系統型別，或該使用者自訂的型別。自訂型別的 slug 可能與系統型別相同，
+ * 此時以系統型別優先；其他使用者的自訂型別一律查不到。
+ */
+export function getItemTypeBySlug(
+  userId: string,
+  slug: string,
+): Promise<ItemTypeDetail | null> {
+  return prisma.itemType.findFirst({
+    where: { slug, OR: [{ isSystem: true, userId: null }, { userId }] },
+    orderBy: { userId: { sort: "asc", nulls: "first" } },
+    select: { id: true, name: true, slug: true, icon: true, color: true },
+  });
+}
+
 export async function getItemCounts(
   userId: string,
 ): Promise<{ items: number; favoriteItems: number }> {
@@ -130,6 +149,16 @@ export function getPinnedItems(
     where: { pinnedAt: { not: null } },
     orderBy: { pinnedAt: "desc" },
     take: limit,
+  });
+}
+
+export function getItemsByType(
+  userId: string,
+  itemTypeId: string,
+): Promise<ItemSummary[]> {
+  return findItemSummaries(userId, {
+    where: { itemTypeId },
+    orderBy: { createdAt: "desc" },
   });
 }
 
