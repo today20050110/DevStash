@@ -1,34 +1,16 @@
-# Current Feature: Item Drawer
+# Current Feature
 
 ## Status
 
-In Progress
+Not Started
 
 ## Goals
 
-- 點擊 `ItemCard` 時，從右側滑出 shadcn `Sheet` drawer，顯示該 item 的完整資料；這就是 item 的詳細檢視，不另做 item 頁面
-- dashboard（Pinned、Recent Items）與 `/items/[type]` 列表頁都能開啟 drawer
-- 頁面維持 server component，以一個 client wrapper 元件管理 drawer 的開關狀態與目前選取的 item
-- 點擊時才抓取資料、不換頁：`GET /api/items/[id]` 回傳完整資料（content、collections、language 等），抓取期間 drawer 顯示 skeleton
-- 查詢函式放在 `src/lib/db/items.ts`，必填 `userId`、排除 `deletedAt`；API route 先驗證 session 再呼叫，查不到或不屬於該使用者時回 404
-- 頂部：型別圖示方塊、標題、型別 badge、language badge
-- 操作列：Favorite（星號，啟用時為黃色）、Pin、Copy、Edit（鉛筆）、Delete（垃圾桶，靠右、紅色），版面依截圖
-- 內容區：Description、Content、Tags、Collections、Details（Created／Updated）
-- 卡片資料（標題、描述、tags 等）仍由 server component 抓取，不改變現有列表行為
+<!-- 以 /feature load 載入 spec 後填入；成功長什麼樣子 -->
 
 ## Notes
 
-- 規格來源：`context/features/item-drawer-spec.md`；視覺參考：`context/screenshots/dashboard-ui-drawer.png`（截圖中 Content 為帶行號、語法上色的程式碼區塊）
-- spec 明說程式碼編輯器與各型別專屬的顯示「之後再做」，本次只做 drawer 的詳細資料顯示；Content 先以等寬字體的純文字區塊呈現
-- spec 未說明操作列按鈕是否要有實際功能（Favorite／Pin 切換、Copy 複製內容、Edit、Delete），開始實作前需確認範圍（Edit／Delete 對應 CRUD 的後續 feature）
-- 讀取用 API route 而非 server action，是 spec 的明確指定（`coding-standards.md` 預設 client 元件用 server action）；回應沿用 `{ success, data, error }` 格式
-- `src/proxy.ts` 的 matcher 目前只涵蓋頁面路由；`/api/items/[id]` 由 route 自行驗證（沿用 `getCurrentUser()`，含 `sessionVersion` 比對），未登入回 401
-- URL kind（links）的 drawer 應顯示 `url`；FILE kind 目前沒有資料（R2 上傳尚未實作）
-- 參考 `docs/item-crud-architecture.md` 的讀取設計
-- 操作列範圍（使用者採建議）：Copy 實作（TEXT 複製 content、URL 複製 url，2 秒內顯示「Copied」）；Favorite／Pin 只顯示狀態；Edit／Delete 只放按鈕。未接功能的按鈕用 `aria-disabled` + `title="Coming soon"` 而非 `disabled`，保留 Favorite 的黃色
-- 實作：`getItemDetail(userId, id)`（tags 與 collections 另限 `userId`，collection 排除軟刪除）、`GET /api/items/[id]`（401／404／500，別人的 item 與不存在同為 404）、`useItemDetail` hook（AbortController 中止前一個請求；每次開啟以遞增的 `key` 重新載入，失敗後再開可重試）、`ItemDrawerProvider`（放在 `(app)/layout.tsx` 的 `<main>` 內）、`ItemDrawer`、`ItemDrawerActions`、`ItemCardTrigger`（覆蓋整張卡片的透明按鈕，卡片仍是 server component；Card 有 `overflow-hidden`，焦點框用 `inset-ring`）
-- URL 只有 `http:`／`https:` 才渲染成連結，其他 scheme（如 `javascript:`）以純文字顯示
-- 驗證：未登入 curl `/api/items/x` 401；登入後不存在的 id 404；Playwright 在 dashboard 與 `/items/commands` 開啟 snippet／link／command，各區塊、Copy 寫入剪貼簿、Escape 關閉、延遲時的 skeleton、非 JSON 的 5xx 顯示「Failed to load item」且再開可重試、390px 手機寬度；主控台 0 errors（除測試 404 時預期的錯誤）；`npm test` 44/44（新增 `src/lib/db/items.test.ts`）、tsc、lint、build 通過，build 新增 `ƒ /api/items/[id]`
+<!-- 來源、限制、實作方向、驗證結果、已知情況 -->
 
 ## History
 
@@ -90,3 +72,4 @@ In Progress
 - **Vitest 單元測試設定**（`chore/vitest-setup`，與本筆同一個 commit）：使用者要求只測 server actions 與工具函式、不測元件。新增 `vitest` ^5.0.3 與 `npm test`（`vitest run`）／`npm run test:watch`；Vitest 5 要求 `@types/node` ≥ 22，由 `^20` 升為 `^24`（對齊 Vercel 預設的 Node 24，本機為 26），tsc 無型別問題。`vitest.config.mts`：`node` 環境、只收 `src/**/*.test.ts`（不含 `.tsx`）、`@` 別名同 tsconfig、`mockReset`／`restoreMocks`／`unstubEnvs`；用 `.mts` 是因為 `package.json` 沒有 `"type": "module"`，`.ts` 會出現 Vite 的 CommonJS 警告。`vitest.setup.mts` 清除資料庫、Upstash、Resend 的環境變數 —— 漏 mock 時 `@/lib/prisma` 因缺 `DATABASE_URL` 直接丟錯，而不是連到真的資料庫（shell 若載入過 `.env.production` 就是 production）。範例測試共 40 個、與原始碼同資料夾：`redirect.test.ts`（Auth Phase 3 重現過的 open redirect 繞過手法）、`auth-schemas.test.ts`（email 正規化、72 bytes 上限含中文）、`tokens.test.ts`（SHA-256、`getAppUrl` 優先順序，以 `vi.stubEnv`）、`src/actions/password-reset.test.ts`（server action 的 mock 範例：`@/lib/prisma`、`@/lib/password-reset`、`@/lib/rate-limit` 以 `importOriginal` 部分 mock，`next/navigation` 的 `redirect` 保留丟例外的行為，`next/server` 的 `after` 收集後手動執行，驗證申請重設在回應送出後才查帳號）。以故意改壞 `getSafeRedirect` 確認有 5 個測試失敗後還原。文件：`ai-interaction.md` Workflow 第 4 步改為補測試並跑 `npm test` 與 build、commit 前提加上測試通過；`coding-standards.md` 新增 Testing 章節，並修正 Tailwind 範例未關閉的 code fence（原本 File Organization 之後整段被渲染成程式碼）；`/feature test` 的 action 移除「尚未安裝 Vitest」的前置步驟；`CLAUDE.md`、README 指令表、`project-overview.md` §7 技術棧補上 Vitest。驗證：`npm test` 40/40、tsc、lint、build 通過。**已知情況**：`npm audit` 顯示 `next` 16.3.3 有 critical 漏洞（影響 16.2.0–16.3.5），與 Vitest 無關，建議另開 fix branch 升級；其餘 high 多來自 prisma CLI 的傳遞相依
 - **Next.js 升級至 16.3.8**（`fix/next-upgrade`，與本筆同一個 commit）：Vitest 設定時 `npm audit` 發現 `next` 16.3.3 有 critical 漏洞 GHSA-vcvr-r3jv-pc5j（`next/og` 的 `ImageResponse` 遠端程式碼執行，影響 `>=16.2.0 <16.3.6`）。專案未使用 `next/og`，實際未受影響，但仍升級：`next` 與 `eslint-config-next` 由 16.3.3 升為 16.3.8（`latest`，同一小版本內的 patch），維持 `--save-exact` 鎖定確切版本；`next-auth` 的 peer 相依 dedupe 到同一版本。之後 `npm audit` 無 critical（剩 moderate 2／high 5，多為 prisma CLI 的傳遞相依）。驗證：tsc、lint、`npm test` 40/40、build 通過，所有路由仍為 `ƒ`；以 16.3.8 重啟 dev server 後 Playwright 實測未登入導向並保留 `callbackUrl`、demo 登入回原頁、dashboard／`/items/snippets`／`/items/notes`／`/profile` 200、`/items/foo` 404、側邊欄連結、登出與登出後再導回登入頁，主控台除預期的 404 外無錯誤
 - **Items 列表頁三欄**（`e07c6d0`）：inline 描述載入（「change the item listing view to be a three column row instead of two on larger screens. Keep it responsive.」）。`src/app/(app)/items/[type]/page.tsx` 的 grid 由 `@3xl:grid-cols-2` 改為 `@3xl:grid-cols-2 @5xl:grid-cols-3`，沿用上一個 feature 以頁面為容器的 container query（頁面寬 ≥ 48rem 兩欄、≥ 64rem 三欄），`ItemCard` 未改、dashboard 不受影響。**斷點選擇**：`@6xl`（72rem）會讓最常見的 1440px 筆電在側邊欄展開時（頁面寬 1120px）仍是兩欄；`@5xl` 在 1366／1440 有長標題截斷，截圖確認描述、tags、日期完整、標題只少幾個字，可接受。量測（demo 帳號，側邊欄展開，欄寬／snippets 與 links 的標題截斷數）：390 單欄 326px 3/4、2/6（與先前相同）；768、1024 單欄 0；1280 兩欄 472px 0；1366 三欄 338px 3/4、2/6；1440 三欄 363px 2/4、0/6；1600 三欄 416px、1920 三欄 523px 皆 0；側邊欄收合時 1024 兩欄 472px、1280 三欄 395px、0。所有寬度無水平捲動、主控台 0 errors；tsc、lint、`npm test` 40/40、build 通過。**已知情況**：1366／1440 三欄時較長標題截斷；若要完整顯示，需把 `ItemCard` 右上的日期移到下方，會連動 dashboard 的外觀（未處理）
+- **Item drawer 完成**（`d8813bc`）：依 `context/features/item-drawer-spec.md`（隨本次 commit 加入版控），點擊 `ItemCard` 從右側滑出 shadcn `Sheet` 顯示完整資料，即 item 的詳細檢視，不另做 item 頁面；dashboard 與 `/items/[type]` 皆可開啟。**無 migration**。讀取：`src/lib/db/items.ts` 新增 `getItemDetail(userId, id)`（`findFirst` 限 `userId`、排除軟刪除；tags 另限 `tag.userId`、collections 另限 `collection.userId` 並排除已刪除的 collection），`src/types/items.ts` 新增 `ItemDetail`（型別帶 `kind`）；`GET /api/items/[id]` 回 `{ success, data, error }`，以 `getCurrentUserId()` 驗證（含 `sessionVersion` 比對，proxy 不涵蓋 `/api`），未登入 401、不存在／別人的／已刪除一律 404、例外 500。讀取用 API route 而非 server action 是 spec 指定。前端：`ItemDrawerProvider`（client wrapper，放在 `(app)/layout.tsx` 的 `<main>` 內）以 context 提供 `openItem`；`ItemCardTrigger` 是覆蓋整張卡片的透明按鈕，`ItemCard` 仍為 server component（button 內不能放區塊元素，所以不把卡片包進 button；Card 有 `overflow-hidden`，焦點框改用 `inset-ring`）；`src/hooks/use-item-detail.ts` 點擊時才 fetch，以 AbortController 中止前一個請求，結果以遞增的 request `key` 對應（每次開啟都重新載入、失敗後再開可重試，也避免在 effect 內同步 setState），非 JSON 的錯誤回應顯示通用訊息；`ItemDrawer` 依截圖排版：型別圖示、標題、型別與 language badge，內容區為 Description、Content（等寬純文字，`max-h-[50vh]` 捲動）或 URL、Tags、Collections、Details（`formatLongDate`），載入中為 skeleton，寬度 `sm:max-w-xl`。URL 只有 `http:`／`https:` 才渲染為連結（`noopener noreferrer`），其他 scheme 以純文字顯示，避免 `javascript:` 進 `href`。操作列範圍經使用者確認採建議：Copy 實作（TEXT 複製 content、URL 複製 url，2 秒內顯示「Copied」，寫入失敗不顯示）；Favorite／Pin 只顯示狀態（收藏為黃色星號、釘選顯示「Pinned」）；Edit／Delete 只放按鈕；未接功能的按鈕用 `aria-disabled` + `title="Coming soon"` 而非 `disabled`，保留啟用時的顏色。實測時發現原本結果以 id 快取，載入失敗後再開同一個 item 只會看到舊錯誤，改為上述的 request `key`。驗證：未登入 curl `/api/items/x` 401；登入後不存在的 id 404；Playwright 在 dashboard 與 `/items/commands` 開啟 snippet／link／command，各區塊正確、Copy 寫入剪貼簿、Escape 關閉、延遲 3 秒時顯示 skeleton、模擬 502 非 JSON 顯示「Failed to load item」且再開可重試、390px 手機寬度；主控台除刻意測試的 404 外 0 errors；新增 `src/lib/db/items.test.ts`（4 個：where 帶 `userId`／`deletedAt`、tags 與 collections 的擁有者限制、攤平形狀、查無回 null），`npm test` 44/44、tsc、lint、build 通過，build 新增 `ƒ /api/items/[id]`。**已知情況**：（1）Favorite／Pin／Edit／Delete 尚未接上功能；（2）Content 沒有行號與語法上色（spec 延後到程式碼編輯器）；（3）FILE kind 沒有專屬顯示（R2 上傳尚未實作）；（4）沒有 sonner／toast，Copy 以按鈕文字回饋；（5）網址不會反映開啟的 item，無法分享或以上一頁關閉 drawer
