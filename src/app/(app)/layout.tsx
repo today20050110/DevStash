@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { SIGN_IN_PATH } from "@/auth.config";
 import { AppSidebar } from "@/components/dashboard/AppSidebar";
 import { Topbar } from "@/components/dashboard/Topbar";
+import { ItemDrawerProvider } from "@/components/items/ItemDrawerProvider";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { getCurrentUser } from "@/lib/current-user";
 
@@ -19,7 +20,9 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       <AppSidebar />
       <SidebarInset>
         <Topbar />
-        <main className="flex-1 overflow-y-auto p-8">{children}</main>
+        <main className="flex-1 overflow-y-auto p-8">
+          <ItemDrawerProvider>{children}</ItemDrawerProvider>
+        </main>
       </SidebarInset>
     </SidebarProvider>
   );

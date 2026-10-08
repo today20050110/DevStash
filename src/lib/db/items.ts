@@ -1,6 +1,7 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import type {
+  ItemDetail,
   ItemSummary,
   ItemTypeDetail,
   ItemTypeWithCount,
@@ -171,4 +172,52 @@ export function getRecentItems(
     orderBy: { createdAt: "desc" },
     take: limit,
   });
+}
+
+/**
+ * drawer 用的單筆完整資料。不屬於該使用者或已刪除時回傳 null，
+ * 呼叫端一律當作不存在（404），不透露 item 是否屬於別人。
+ */
+export async function getItemDetail(
+  userId: string,
+  id: string,
+): Promise<ItemDetail | null> {
+  const item = await prisma.item.findFirst({
+    where: { id, userId, deletedAt: null },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      content: true,
+      url: true,
+      language: true,
+      isFavorite: true,
+      pinnedAt: true,
+      createdAt: true,
+      updatedAt: true,
+      itemType: { select: { name: true, icon: true, color: true, kind: true } },
+      tags: {
+        // join table 本身不帶擁有者，tag 與 collection 都要另外限制 userId
+        where: { tag: { userId } },
+        orderBy: { tag: { name: "asc" } },
+        select: { tag: { select: { name: true } } },
+      },
+      collections: {
+        where: { collection: { userId, deletedAt: null } },
+        orderBy: { collection: { name: "asc" } },
+        select: { collection: { select: { id: true, name: true } } },
+      },
+    },
+  });
+  if (!item) {
+    return null;
+  }
+
+  const { itemType, tags, collections, ...rest } = item;
+  return {
+    ...rest,
+    type: itemType,
+    tags: tags.map(({ tag }) => tag.name),
+    collections: collections.map(({ collection }) => collection),
+  };
 }

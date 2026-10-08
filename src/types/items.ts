@@ -1,3 +1,5 @@
+import type { ItemKind } from "@/generated/prisma/enums";
+
 export interface ItemTypeSummary {
   name: string;
   /** lucide-react icon name */
@@ -35,4 +37,28 @@ export interface ItemSummary {
   type: ItemTypeSummary;
   /** 標籤名稱，依名稱排序 */
   tags: string[];
+}
+
+export interface ItemCollectionSummary {
+  id: string;
+  name: string;
+}
+
+/** drawer 用的完整資料，點擊卡片時才經 /api/items/[id] 載入 */
+export interface ItemDetail {
+  id: string;
+  title: string;
+  description: string | null;
+  content: string | null;
+  url: string | null;
+  language: string | null;
+  isFavorite: boolean;
+  pinnedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  type: ItemTypeSummary & { kind: ItemKind };
+  /** 標籤名稱，依名稱排序 */
+  tags: string[];
+  /** 依名稱排序，不含已刪除的 collection */
+  collections: ItemCollectionSummary[];
 }

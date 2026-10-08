@@ -1,16 +1,34 @@
-# Current Feature
+# Current Feature: Item Drawer
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
-<!-- 以 /feature load 載入 spec 後填入；成功長什麼樣子 -->
+- 點擊 `ItemCard` 時，從右側滑出 shadcn `Sheet` drawer，顯示該 item 的完整資料；這就是 item 的詳細檢視，不另做 item 頁面
+- dashboard（Pinned、Recent Items）與 `/items/[type]` 列表頁都能開啟 drawer
+- 頁面維持 server component，以一個 client wrapper 元件管理 drawer 的開關狀態與目前選取的 item
+- 點擊時才抓取資料、不換頁：`GET /api/items/[id]` 回傳完整資料（content、collections、language 等），抓取期間 drawer 顯示 skeleton
+- 查詢函式放在 `src/lib/db/items.ts`，必填 `userId`、排除 `deletedAt`；API route 先驗證 session 再呼叫，查不到或不屬於該使用者時回 404
+- 頂部：型別圖示方塊、標題、型別 badge、language badge
+- 操作列：Favorite（星號，啟用時為黃色）、Pin、Copy、Edit（鉛筆）、Delete（垃圾桶，靠右、紅色），版面依截圖
+- 內容區：Description、Content、Tags、Collections、Details（Created／Updated）
+- 卡片資料（標題、描述、tags 等）仍由 server component 抓取，不改變現有列表行為
 
 ## Notes
 
-<!-- 來源、限制、實作方向、驗證結果、已知情況 -->
+- 規格來源：`context/features/item-drawer-spec.md`；視覺參考：`context/screenshots/dashboard-ui-drawer.png`（截圖中 Content 為帶行號、語法上色的程式碼區塊）
+- spec 明說程式碼編輯器與各型別專屬的顯示「之後再做」，本次只做 drawer 的詳細資料顯示；Content 先以等寬字體的純文字區塊呈現
+- spec 未說明操作列按鈕是否要有實際功能（Favorite／Pin 切換、Copy 複製內容、Edit、Delete），開始實作前需確認範圍（Edit／Delete 對應 CRUD 的後續 feature）
+- 讀取用 API route 而非 server action，是 spec 的明確指定（`coding-standards.md` 預設 client 元件用 server action）；回應沿用 `{ success, data, error }` 格式
+- `src/proxy.ts` 的 matcher 目前只涵蓋頁面路由；`/api/items/[id]` 由 route 自行驗證（沿用 `getCurrentUser()`，含 `sessionVersion` 比對），未登入回 401
+- URL kind（links）的 drawer 應顯示 `url`；FILE kind 目前沒有資料（R2 上傳尚未實作）
+- 參考 `docs/item-crud-architecture.md` 的讀取設計
+- 操作列範圍（使用者採建議）：Copy 實作（TEXT 複製 content、URL 複製 url，2 秒內顯示「Copied」）；Favorite／Pin 只顯示狀態；Edit／Delete 只放按鈕。未接功能的按鈕用 `aria-disabled` + `title="Coming soon"` 而非 `disabled`，保留 Favorite 的黃色
+- 實作：`getItemDetail(userId, id)`（tags 與 collections 另限 `userId`，collection 排除軟刪除）、`GET /api/items/[id]`（401／404／500，別人的 item 與不存在同為 404）、`useItemDetail` hook（AbortController 中止前一個請求；每次開啟以遞增的 `key` 重新載入，失敗後再開可重試）、`ItemDrawerProvider`（放在 `(app)/layout.tsx` 的 `<main>` 內）、`ItemDrawer`、`ItemDrawerActions`、`ItemCardTrigger`（覆蓋整張卡片的透明按鈕，卡片仍是 server component；Card 有 `overflow-hidden`，焦點框用 `inset-ring`）
+- URL 只有 `http:`／`https:` 才渲染成連結，其他 scheme（如 `javascript:`）以純文字顯示
+- 驗證：未登入 curl `/api/items/x` 401；登入後不存在的 id 404；Playwright 在 dashboard 與 `/items/commands` 開啟 snippet／link／command，各區塊、Copy 寫入剪貼簿、Escape 關閉、延遲時的 skeleton、非 JSON 的 5xx 顯示「Failed to load item」且再開可重試、390px 手機寬度；主控台 0 errors（除測試 404 時預期的錯誤）；`npm test` 44/44（新增 `src/lib/db/items.test.ts`）、tsc、lint、build 通過，build 新增 `ƒ /api/items/[id]`
 
 ## History
 

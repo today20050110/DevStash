@@ -1,6 +1,7 @@
 import { Pin, Star } from "lucide-react";
 
 import { TypeIcon } from "@/components/dashboard/TypeIcon";
+import { ItemCardTrigger } from "@/components/items/ItemCardTrigger";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate } from "@/lib/format";
@@ -15,9 +16,10 @@ export function ItemCard({ item }: ItemCardProps) {
 
   return (
     <Card
-      className="border-l-4 transition-colors hover:bg-muted/40"
+      className="relative border-l-4 transition-colors hover:bg-muted/40"
       style={{ borderLeftColor: color }}
     >
+      <ItemCardTrigger id={item.id} title={item.title} />
       <CardContent className="flex gap-4">
         <div
           className="flex size-10 shrink-0 items-center justify-center rounded-lg"
