@@ -1,9 +1,11 @@
 import type { ReactNode } from "react";
 
 import type { UpdateItemField } from "@/actions/items";
+import { CodeEditor } from "@/components/items/CodeEditor";
 import { Section } from "@/components/items/ItemDrawerSections";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { getEditorLanguage } from "@/lib/code-language";
 import type { ItemTypeFields } from "@/lib/item-fields";
 
 export type ItemFormValues = Record<UpdateItemField, string>;
@@ -21,6 +23,8 @@ export const EMPTY_ITEM_FORM_VALUES: ItemFormValues = {
 interface ItemFormFieldsProps {
   /** 依型別決定要顯示的欄位（getItemTypeFields） */
   fields: ItemTypeFields;
+  /** 型別的 slug，決定程式碼編輯器沒填語言時的預設（commands 為 shell） */
+  typeSlug: string;
   values: ItemFormValues;
   errors: ItemFormErrors;
   setValue: (field: UpdateItemField, value: string) => void;
@@ -30,15 +34,19 @@ interface ItemFormFieldsProps {
 
 /**
  * Title、Description、型別專屬欄位、Tags。drawer 的編輯模式與新增 dialog 共用；
+ * snippets／commands 的 Content 用程式碼編輯器，其他型別用 Textarea。
  * 只顯示該型別適用的欄位，伺服器端以同一個 getItemTypeFields 忽略其他欄位。
  */
 export function ItemFormFields({
   fields,
+  typeSlug,
   values,
   errors,
   setValue,
   urlRequired = false,
 }: ItemFormFieldsProps) {
+  const editorLanguage = getEditorLanguage(typeSlug, values.language);
+
   return (
     <>
       <ItemFormField id="item-title" label="Title" error={errors.title}>
@@ -64,7 +72,25 @@ export function ItemFormFields({
           rows={2}
         />
       </ItemFormField>
-      {fields.content && (
+      {fields.content && fields.language && (
+        // Monaco 的輸入框無法以 <label htmlFor> 對應，標題不渲染成 label，改以 ariaLabel 命名
+        <ItemFormField
+          id="item-content"
+          label="Content"
+          error={errors.content}
+          asLabel={false}
+        >
+          <CodeEditor
+            value={values.content}
+            onChange={(value) => setValue("content", value)}
+            language={editorLanguage}
+            languageLabel={values.language.trim() || editorLanguage}
+            ariaLabel="Content"
+            invalid={Boolean(errors.content)}
+          />
+        </ItemFormField>
+      )}
+      {fields.content && !fields.language && (
         <ItemFormField id="item-content" label="Content" error={errors.content}>
           <Textarea
             id="item-content"
@@ -121,6 +147,8 @@ interface ItemFormFieldProps {
   id: string;
   label: string;
   error?: string;
+  /** 標題渲染成對應 id 的 <label>；欄位不是原生輸入框時設為 false */
+  asLabel?: boolean;
   children: ReactNode;
 }
 
@@ -128,10 +156,11 @@ export function ItemFormField({
   id,
   label,
   error,
+  asLabel = true,
   children,
 }: ItemFormFieldProps) {
   return (
-    <Section title={label} htmlFor={id}>
+    <Section title={label} htmlFor={asLabel ? id : undefined}>
       {children}
       {error && (
         <p id={`${id}-error`} role="alert" className="text-sm text-destructive">

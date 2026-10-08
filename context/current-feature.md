@@ -1,16 +1,32 @@
-# Current Feature
+# Current Feature: Code Editor
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
-<!-- 以 /feature load 載入 spec 後填入；成功長什麼樣子 -->
+- 新增以 Monaco Editor 實作的 `CodeEditor` 元件，使用深色主題
+- snippets 與 commands 的 content 改用 `CodeEditor`；notes、prompts 等非程式碼型別維持 `Textarea`
+- 編輯器頂部有 macOS 風格的視窗圓點（紅／黃／綠）
+- 編輯器標頭有快速複製按鈕，旁邊顯示語言
+- 支援唯讀（drawer 檢視）與編輯（drawer 編輯模式、新增 dialog）兩種模式
+- 高度隨內容伸縮、最高 400px，捲軸樣式配合主題
 
 ## Notes
 
-<!-- 來源、限制、實作方向、驗證結果、已知情況 -->
+- Spec：`context/features/code-editor-spec.md`
+- 套用位置：drawer 檢視模式的 `ItemDrawerContent`（`src/components/items/ItemDrawerSections.tsx`，目前為 `<pre>` 純文字，註解已預告「程式碼編輯器之後再做」）、編輯模式與新增 dialog 共用的 `ItemFormFields`（目前為 `Textarea`）
+- 「是否為程式碼型別」可沿用 `src/lib/item-fields.ts` 的 `getItemTypeFields(...).language`（slug 為 snippets／commands），不另寫一份 slug 清單
+- 複製：`ItemDrawerActions.tsx` 已有 `useCopyToClipboard`（2 秒內顯示 Copied），可抽成共用 hook 給編輯器標頭使用
+- Monaco 只能在瀏覽器執行：需 `"use client"` 並以 `next/dynamic` 搭配 `ssr: false` 載入，載入中顯示骨架；套件體積大，只在需要時載入
+- 語言欄位是自由輸入的文字（例如 `typescript`、`bash`），需對應到 Monaco 的語言 id，不認得的語言退回 `plaintext`
+- 使用者決定：採用 `@monaco-editor/react`；新增 dialog 也改用編輯器（snippets／commands）。**實作後使用者要求改為把 Monaco 打包進專案**，不再由 jsDelivr CDN 載入（見下方「改為本機打包」）
+- 實作：`@monaco-editor/react` 4.7.0（exact）。`src/components/items/CodeEditor.tsx`：標頭為三個圓點、語言名稱、複製按鈕（`icon-xs`，複製後 2 秒顯示勾）；自訂主題 `devstash-dark`（背景 `#171717` 對齊 `--card`，捲軸為半透明白、8px、無陰影）；高度以 `onDidContentSizeChange` 隨內容伸縮、最高 400px，唯讀無下限、編輯模式最低 160px（同原 Textarea 的 `min-h-40`）；`alwaysConsumeMouseWheel: false` 讓捲到頂／底時滾輪交還給 drawer。`src/lib/code-language.ts`：`toMonacoLanguage`（別名對照，如 `bash`／`sh` → `shell`、`ts` → `typescript`，不認得 → `plaintext`）與 `getEditorLanguage`（沒填語言時 commands 預設 `shell`）。`useCopyToClipboard` 由 `ItemDrawerActions` 抽到 `src/hooks/use-copy-to-clipboard.ts` 共用。`ItemFormFields` 新增 `typeSlug`，`getItemTypeFields(...).language` 為 true 時 Content 用編輯器（標題不渲染成 `<label>`，以 Monaco 的 `ariaLabel` 命名；`ItemFormField` 新增 `asLabel`），其他型別維持 Textarea；drawer 檢視的 `ItemDrawerContent` 同樣判斷，用唯讀編輯器
+- **實測發現並修正**：編輯模式原本以 `value` 受控，快速輸入時字元被吃掉（「echo typed-in-monaco」變成「echotpdi-oaco」）—— 每次按鍵經 state 再傳回 `value`，下一個按鍵比重新渲染早到時，套件以舊的 `value` 覆寫編輯器內容。改為編輯模式只給 `defaultValue`（不受控）、唯讀模式才給 `value`；父層在編輯中不會從外部改內容（新增 dialog 關閉時整個卸載，切換型別時保留同一份內容）
+- 驗證：`npm test` 118/118（新增 `code-language.test.ts`）、tsc、lint、build 通過，所有資料頁仍為 `ƒ`。Playwright（demo 帳號，Development）：snippet 檢視（TypeScript 上色、長內容封頂 400px 並出現捲軸、標頭複製寫入剪貼簿並顯示勾）；command 檢視（bash 以 shell 上色、5 行高 124px 無捲軸）；編輯模式（最低 160px、修正後快速輸入完整、Language 改為 powershell 時標頭即時更新、標頭複製取得表單中的最新內容），按 Cancel 未存檔，以 Neon 確認資料未變；新增 dialog（Snippets 預設 plaintext、輸入後切到 Commands 內容保留且標頭變 shell、切到 Notes 變回 Textarea 並帶著內容）；390px 手機寬度無水平溢出；主控台 0 errors
+- 改為本機打包：`monaco-editor` 0.55.1（exact）由 devDependency 移到 dependency。`src/components/items/monaco-setup.ts` 只引入核心入口 `monaco-editor/esm/vs/editor/edcore.main`（不含主入口的 TypeScript／JSON／CSS／HTML 語言服務，它們各需額外 worker 與數 MB 程式碼），加上 30 個 Monarch 上色模組（`basic-languages/*/*.contribution`，與 `code-language.ts` 的 `MONACO_LANGUAGES` 一一對應，兩邊註解互相提醒；cpp 同時註冊 c），設定 `self.MonacoEnvironment.getWorker` 以 `new Worker(new URL("./monaco.worker.ts", import.meta.url), { type: "module" })` 建立本機打包的 editor worker（`monaco.worker.ts` 只 import `editor.worker`），最後 `loader.config({ monaco })` 讓 `@monaco-editor/react` 使用本機的 monaco。monaco-editor 載入時就存取 `window`，**這次需要 `next/dynamic`**：`MonacoEditor.tsx` 先 import 設定檔再 re-export `Editor`，`CodeEditor` 以 `dynamic(..., { ssr: false })` 載入，載入中為 `Skeleton`；外層 `<div style={{ height }}>` 讓骨架與編輯器同高（高度由內容決定，屬於 inline style 的有意識例外）。`src/types/monaco-editor.d.ts` 替沒有附型別的 `edcore.main` 宣告為與 `editor.api` 相同。JSON 改借用 javascript 的上色（`json`／`jsonc` 別名，並從 `MONACO_LANGUAGES` 移除 json）。驗證：Playwright 開啟 snippet drawer 時 Monaco 的 JS、CSS、codicon 字型與 worker（`monaco_worker_ts`）全部由 localhost 提供，0 個 jsDelivr 請求；`/dashboard` 載入時沒有任何 monaco 請求（只在第一次顯示編輯器時下載）；TypeScript 與 dockerfile 上色正常、編輯模式快速輸入完整（按 Cancel 未存檔）、主控台 0 errors；`npm test` 119/119、tsc、lint、build 通過。production build 的 monaco chunk 為 3.6 MB（gzip 約 870 KB），另一個 363 KB（gzip 約 109 KB）
+- 已知情況：（1）monaco chunk gzip 後約 870 KB，第一次開啟程式碼編輯器時需下載，之後由瀏覽器快取；（2）Windows 上讀回剪貼簿時換行為 `\r\n`，是作業系統行為，drawer 原有的 Copy 相同；（3）編輯器內按 Tab 會縮排而非移到下一個欄位（Monaco 預設，Ctrl+M 可切換）；（4）程式碼型別的 Content 標題不是 `<label>`，點標題不會聚焦編輯器
 
 ## History
 

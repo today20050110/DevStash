@@ -1,8 +1,11 @@
 import type { ReactNode } from "react";
 import { CalendarDays, Folder, Tag } from "lucide-react";
 
+import { CodeEditor } from "@/components/items/CodeEditor";
 import { Badge } from "@/components/ui/badge";
+import { getEditorLanguage } from "@/lib/code-language";
 import { formatLongDate } from "@/lib/format";
+import { getItemTypeFields } from "@/lib/item-fields";
 import { isHttpUrl } from "@/lib/url";
 import type { ItemDetail } from "@/types/items";
 
@@ -66,7 +69,7 @@ export function ItemDrawerBody({ item }: { item: ItemDetail }) {
   );
 }
 
-/** 程式碼編輯器與各型別專屬的顯示之後再做；目前 TEXT 以等寬純文字、URL 以連結呈現 */
+/** snippets／commands 以唯讀的程式碼編輯器顯示，其他 TEXT 以等寬純文字、URL 以連結呈現 */
 function ItemDrawerContent({ item }: { item: ItemDetail }) {
   if (item.type.kind === "URL") {
     if (!item.url) {
@@ -92,6 +95,19 @@ function ItemDrawerContent({ item }: { item: ItemDetail }) {
 
   if (!item.content) {
     return null;
+  }
+  if (getItemTypeFields(item.type).language) {
+    const language = getEditorLanguage(item.type.slug, item.language);
+    return (
+      <Section title="Content">
+        <CodeEditor
+          value={item.content}
+          language={language}
+          languageLabel={item.language ?? language}
+          ariaLabel="Content"
+        />
+      </Section>
+    );
   }
   return (
     <Section title="Content">

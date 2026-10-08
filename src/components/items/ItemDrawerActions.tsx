@@ -1,14 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import { Check, Copy, Pencil, Pin, Star } from "lucide-react";
 
 import { DeleteItemDialog } from "@/components/items/DeleteItemDialog";
 import { Button } from "@/components/ui/button";
+import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
 import type { ItemDetail } from "@/types/items";
-
-const COPIED_RESET_MS = 2000;
 
 /** Favorite、Pin 尚未接上功能，先顯示狀態；以 aria-disabled 而非 disabled，保留啟用時的顏色 */
 const NOT_YET_AVAILABLE = {
@@ -68,25 +66,4 @@ export function ItemDrawerActions({
       </div>
     </div>
   );
-}
-
-function useCopyToClipboard() {
-  const [copied, setCopied] = useState(false);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-
-  useEffect(() => () => clearTimeout(timeoutRef.current), []);
-
-  async function copy(text: string) {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      // 非安全來源或使用者拒絕權限時寫入失敗，不顯示「Copied」
-      return;
-    }
-    setCopied(true);
-    clearTimeout(timeoutRef.current);
-    timeoutRef.current = setTimeout(() => setCopied(false), COPIED_RESET_MS);
-  }
-
-  return { copied, copy };
 }

@@ -132,6 +132,7 @@ export function NewItemDialog({ itemTypes }: NewItemDialogProps) {
               fields={fields}
               values={values}
               errors={errors}
+              typeSlug={selectedType?.slug ?? ""}
               setValue={setValue}
               urlRequired
             />

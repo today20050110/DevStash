@@ -101,6 +101,7 @@ export function ItemEditForm({ item, onCancel, onSaved }: ItemEditFormProps) {
           fields={fields}
           values={values}
           errors={errors}
+          typeSlug={item.type.slug}
           setValue={setValue}
         />
 
