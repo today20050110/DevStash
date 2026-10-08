@@ -56,7 +56,7 @@ export interface ItemDetail {
   pinnedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
-  type: ItemTypeSummary & { kind: ItemKind };
+  type: ItemTypeSummary & { kind: ItemKind; slug: string };
   /** 標籤名稱，依名稱排序 */
   tags: string[];
   /** 依名稱排序，不含已刪除的 collection */

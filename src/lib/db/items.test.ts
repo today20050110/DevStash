@@ -1,13 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { getItemDetail } from "@/lib/db/items";
+import { getItemDetail, updateItem } from "@/lib/db/items";
+import { updateItemSchema } from "@/lib/item-schemas";
 import { prisma } from "@/lib/prisma";
 
+// transaction 內的查詢另用一組 mock，與 transaction 外的 getItemDetail 分開檢查
+const tx = {
+  item: { findFirst: vi.fn(), update: vi.fn() },
+  tag: { upsert: vi.fn() },
+};
+
 vi.mock("@/lib/prisma", () => ({
-  prisma: { item: { findFirst: vi.fn() } },
+  prisma: { item: { findFirst: vi.fn() }, $transaction: vi.fn() },
 }));
 
 const findFirst = vi.mocked(prisma.item.findFirst);
+const transaction = vi.mocked(prisma.$transaction);
 
 const ROW = {
   id: "item-1",
@@ -70,5 +78,98 @@ describe("getItemDetail", () => {
     findFirst.mockResolvedValue(null);
 
     await expect(getItemDetail("user-1", "item-2")).resolves.toBeNull();
+  });
+});
+
+describe("updateItem", () => {
+  const input = updateItemSchema.parse({
+    title: "Renamed",
+    description: "",
+    content: "new content",
+    language: "ts",
+    url: "https://example.com",
+    tags: ["React", "react", "auth"],
+  });
+
+  beforeEach(() => {
+    transaction.mockImplementation(((
+      callback: (client: typeof tx) => unknown,
+    ) => callback(tx)) as never);
+    tx.item.findFirst.mockResolvedValue({
+      itemType: { kind: "TEXT", slug: "snippets" },
+    });
+    tx.tag.upsert.mockImplementation(
+      async ({ create }: { create: { slug: string } }) => ({
+        id: `tag-${create.slug}`,
+      }),
+    );
+    findFirst.mockResolvedValue(ROW as never);
+  });
+
+  it("在 transaction 內以 userId 與 deletedAt 確認擁有者", async () => {
+    await updateItem("user-1", "item-1", input);
+
+    expect(tx.item.findFirst.mock.calls[0][0].where).toEqual({
+      id: "item-1",
+      userId: "user-1",
+      deletedAt: null,
+    });
+  });
+
+  it("查不到時不更新並回傳 null", async () => {
+    tx.item.findFirst.mockResolvedValue(null);
+
+    await expect(updateItem("user-1", "item-1", input)).resolves.toBeNull();
+    expect(tx.item.update).not.toHaveBeenCalled();
+    expect(tx.tag.upsert).not.toHaveBeenCalled();
+  });
+
+  it("標籤依 slug 去重後 upsert，並整批替換 item 的標籤", async () => {
+    await updateItem("user-1", "item-1", input);
+
+    expect(tx.tag.upsert).toHaveBeenCalledTimes(2);
+    expect(tx.tag.upsert.mock.calls[0][0]).toMatchObject({
+      where: { userId_slug: { userId: "user-1", slug: "react" } },
+      create: { userId: "user-1", name: "React", slug: "react" },
+    });
+    expect(tx.item.update.mock.calls[0][0].data.tags).toEqual({
+      deleteMany: {},
+      create: [
+        { tagId: "tag-react", source: "USER" },
+        { tagId: "tag-auth", source: "USER" },
+      ],
+    });
+  });
+
+  it("只寫入該型別適用的欄位", async () => {
+    await updateItem("user-1", "item-1", input);
+
+    const { data } = tx.item.update.mock.calls[0][0];
+    expect(data).toMatchObject({
+      title: "Renamed",
+      description: null,
+      content: "new content",
+      language: "ts",
+    });
+    expect(data).not.toHaveProperty("url");
+  });
+
+  it("link 只寫入 url，不寫 content 與 language", async () => {
+    tx.item.findFirst.mockResolvedValue({
+      itemType: { kind: "URL", slug: "links" },
+    });
+
+    await updateItem("user-1", "item-1", input);
+
+    const { data } = tx.item.update.mock.calls[0][0];
+    expect(data.url).toBe("https://example.com");
+    expect(data).not.toHaveProperty("content");
+    expect(data).not.toHaveProperty("language");
+  });
+
+  it("回傳更新後的完整資料", async () => {
+    const item = await updateItem("user-1", "item-1", input);
+
+    expect(item).toMatchObject({ id: "item-1", tags: ["auth", "react"] });
   });
 });

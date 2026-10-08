@@ -4,6 +4,7 @@ import "dotenv/config";
 
 import { PrismaClient, type Prisma } from "../src/generated/prisma/client";
 import type { ItemKind } from "../src/generated/prisma/enums";
+import { toTagSlug } from "../src/lib/tags";
 
 const connectionString =
   process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;
@@ -521,11 +522,6 @@ function resolveTypeId(typeIds: Map<string, string>, slug: string): string {
     throw new Error(`Unknown system item type: ${slug}`);
   }
   return id;
-}
-
-/** 標籤名稱正規化為 slug：「React Hooks」與「react hooks」視為同一個標籤 */
-function toTagSlug(name: string): string {
-  return name.trim().toLowerCase().replace(/\s+/g, "-");
 }
 
 function resolveTagId(tagIds: Map<string, string>, name: string): string {

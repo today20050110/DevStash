@@ -1,16 +1,39 @@
-# Current Feature
+# Current Feature: Item Drawer Edit Mode
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
-<!-- 以 /feature load 載入 spec 後填入；成功長什麼樣子 -->
+- 按下 drawer 操作列的 Edit（鉛筆）後，同一個 drawer 內切換為編輯模式，欄位變成輸入框
+- 編輯模式下操作列換成 Save 與 Cancel；Cancel 捨棄變更回到檢視模式
+- Save 經 server action 儲存，回到檢視模式並以回傳的 `ItemDetail` 更新 drawer（不再 fetch 一次），之後 `router.refresh()` 讓底下的卡片列表同步
+- 儲存成功或失敗都有 toast 通知
+- 所有型別可編輯：Title（必填）、Description（textarea，可空）、Tags（逗號分隔，儲存時轉成陣列）
+- 依型別顯示：Content（textarea）給 snippet／prompt／command／note；Language（text input）給 snippet／command；URL（text input）給 link
+- 只顯示不可編輯：型別、Collections、Created／Updated
+- Title 為空時 Save 停用（前端的基本防呆）；伺服器端以 Zod 驗證所有欄位，錯誤以 `{ success: false, error }` 回傳並顯示
+- `src/actions/items.ts` 的 `updateItem(itemId, data)`：Zod 驗證 → 取得 session → 確認擁有者 → 呼叫 `src/lib/db/items.ts` 的 `updateItem`
+- 標籤更新：移除該 item 現有的所有標籤，再 connect-or-create 新的
 
 ## Notes
 
-<!-- 來源、限制、實作方向、驗證結果、已知情況 -->
+- 規格來源：`context/features/item-drawer-edit-spec.md`
+- Zod 規則（spec）：`title` trim 後非空；`description`、`content`、`language` 為字串或 null；`url` 為合法 URL 或 null；`tags` 為 trim 後非空字串的陣列。不用表單函式庫，以受控輸入 + local state
+- **toast 尚未安裝**：專案目前沒有 sonner，先前的 feature 都以頁面上的文字顯示錯誤（Auth Phase 3 經使用者確認不引入 toast）。這次 spec 明確要求 toast，`coding-standards.md` 也寫「Display user-friendly error messages via toast」，預計 `shadcn add sonner` 並在 root layout 放 `<Toaster />`
+- **型別判斷方式待確認**：spec 以型別名稱列出欄位。系統型別 slug 為複數（`snippets`、`commands`…），而自訂型別日後也會出現。建議 Content 依 `kind === "TEXT"`、URL 依 `kind === "URL"`、Language 依 slug 為 `snippets`／`commands`；`ItemDetail.type` 需補上 `slug`
+- **登入驗證**：spec 寫以 `auth()` 取得 session，專案慣例是 `getCurrentUserId()`（另外比對 `sessionVersion`，重設密碼後的舊 token 會被擋），沿用後者
+- **擁有者檢查**：在 lib 的 `updateItem` 內以 `where: { id, userId, deletedAt: null }` 確認，查不到時回「Item not found」，不區分不存在與屬於別人（與 `GET /api/items/[id]` 的 404 一致）；更新與標籤替換放在同一個 transaction
+- **標籤正規化**：`Tag` 以 `@@unique([userId, slug])` 去重，slug 沿用 `prisma/seed.ts` 的 `toTagSlug`（trim、轉小寫、空白換 `-`），應抽成共用函式；同一次輸入中 slug 相同的標籤只留一個；新建立的 `ItemTag.source` 為 `USER`
+- 空字串一律轉為 null（description、content、language、url）
+- URL 建議只接受 `http:`／`https:`，與 drawer 顯示時的連結檢查一致（`z.url()` 預設接受 `javascript:` 等 scheme）
+- spec 未提但可能需要決定：（1）`content` 的長度上限（`project-overview.md` §9 第 4 題建議 free 100KB、pro 1MB，尚未決定）；（2）移除標籤後沒有 item 使用的孤兒 Tag 是否刪除（建議保留，之後做 tag 管理時再處理）；（3）是否加速率限制（目前只有認證端點有）
+- 測試：`updateItem` action 的 Zod 驗證、未登入、找不到 item 的錯誤對應；lib 的標籤 slug 正規化與去重
+- 使用者決定（皆採建議）：安裝 sonner；欄位依 kind／slug 判斷；URL 只收 http(s)；content 上限、孤兒 Tag 清理、速率限制先不做
+- 實作：`shadcn add sonner textarea`；shadcn 一併安裝的 `next-themes` 已移除（專案沒有 ThemeProvider，`useTheme()` 會回 `system` 而跟著作業系統變成淺色），`Toaster` 固定 `theme="dark"`，放在 root layout。新增 `src/lib/tags.ts`（`toTagSlug` 由 seed 移入、`parseTagInput`、`dedupeTagNames`，純函式供 seed 以相對路徑引用）、`src/lib/item-fields.ts`（`getItemTypeFields`，表單與伺服器端共用）、`src/lib/item-schemas.ts`（`updateItemSchema`：空字串轉 null、content 不 trim）、`src/lib/url.ts`（`isHttpUrl` 由 `ItemDrawer` 抽出，與 schema 共用）；`src/lib/db/items.ts` 的 `updateItem`（transaction 內確認擁有者、依型別只寫入適用欄位、標籤 `upsert` 後 `deleteMany` + `create`，source 為 `USER`）；`src/actions/items.ts` 的 `updateItem`（回 `{ success, data, error, fieldErrors }`）。前端：`ItemDrawer` 拆出 `ItemDrawerPanel`（以 request key 為 key，重開時回到檢視模式）、`ItemDrawerSections.tsx`（Section、檢視內容、Collections、Details 共用）、`ItemEditForm.tsx`（受控輸入、`noValidate` 讓 URL 錯誤由 Zod 顯示、欄位錯誤帶 `aria-invalid`／`aria-describedby`）；`useItemDetail` 新增 `replaceItem`；`ItemDetail.type` 補 `slug`
+- 驗證：Playwright 在 `/items/commands` 編輯 command（Content／Language 欄位出現、URL 不出現）、Cancel 捨棄變更、標題只有空白時 Save 停用、儲存後 drawer 更新、標籤「Edit Test, edit test」去重為一個、toast「Item saved」、Updated 日期更新、底下卡片標題經 `router.refresh()` 同步；link 只有 Title／Description／URL／Tags，輸入 `javascript:alert(1)` 顯示欄位錯誤與 toast；主控台 0 errors。測試後已把該 item 改回原值（Neon 查詢確認 title、language、tags 皆還原）。`npm test` 69/69（新增 `src/lib/tags.test.ts`、`src/lib/item-schemas.test.ts`、`src/actions/items.test.ts`，`src/lib/db/items.test.ts` 補 `updateItem`）、tsc、lint、build 通過
+- 測試時建立的孤兒 Tag「Edit Test」（`edit-test`，demo 使用者）經使用者同意已從 Development 刪除，demo 使用者的標籤回到 26 個
 
 ## History
 

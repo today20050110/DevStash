@@ -9,7 +9,7 @@ import type { ItemDetail } from "@/types/items";
 
 const COPIED_RESET_MS = 2000;
 
-/** Favorite、Pin、Edit、Delete 尚未接上功能，先顯示狀態；以 aria-disabled 而非 disabled，保留啟用時的顏色 */
+/** Favorite、Pin、Delete 尚未接上功能，先顯示狀態；以 aria-disabled 而非 disabled，保留啟用時的顏色 */
 const NOT_YET_AVAILABLE = {
   "aria-disabled": true,
   title: "Coming soon",
@@ -18,9 +18,10 @@ const NOT_YET_AVAILABLE = {
 
 interface ItemDrawerActionsProps {
   item: ItemDetail;
+  onEdit: () => void;
 }
 
-export function ItemDrawerActions({ item }: ItemDrawerActionsProps) {
+export function ItemDrawerActions({ item, onEdit }: ItemDrawerActionsProps) {
   const copyValue = item.type.kind === "URL" ? item.url : item.content;
   const { copied, copy } = useCopyToClipboard();
 
@@ -49,7 +50,7 @@ export function ItemDrawerActions({ item }: ItemDrawerActionsProps) {
       </Button>
 
       <div className="ml-auto flex items-center gap-1">
-        <Button variant="ghost" size="sm" {...NOT_YET_AVAILABLE}>
+        <Button variant="ghost" size="sm" onClick={onEdit}>
           <Pencil />
           Edit
         </Button>

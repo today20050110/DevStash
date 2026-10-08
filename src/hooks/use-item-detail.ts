@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import type { ItemDetail } from "@/types/items";
 
@@ -28,6 +28,8 @@ interface ItemDetailState {
   item: ItemDetail | null;
   error: string | null;
   isLoading: boolean;
+  /** 儲存後以 server action 回傳的資料更新 drawer，不必再載入一次 */
+  replaceItem: (item: ItemDetail) => void;
 }
 
 function parseItemDetail(json: ItemDetailJson): ItemDetail {
@@ -88,8 +90,27 @@ export function useItemDetail(
     return () => controller.abort();
   }, [id, key]);
 
+  const replaceItem = useCallback(
+    (item: ItemDetail) => {
+      if (key !== undefined) {
+        setResult({ key, item, error: null });
+      }
+    },
+    [key],
+  );
+
   if (key === undefined || result?.key !== key) {
-    return { item: null, error: null, isLoading: key !== undefined };
+    return {
+      item: null,
+      error: null,
+      isLoading: key !== undefined,
+      replaceItem,
+    };
   }
-  return { item: result.item, error: result.error, isLoading: false };
+  return {
+    item: result.item,
+    error: result.error,
+    isLoading: false,
+    replaceItem,
+  };
 }

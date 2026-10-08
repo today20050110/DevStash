@@ -1,5 +1,8 @@
 import type { Prisma } from "@/generated/prisma/client";
+import { getItemTypeFields } from "@/lib/item-fields";
+import type { UpdateItemData } from "@/lib/item-schemas";
 import { prisma } from "@/lib/prisma";
+import { dedupeTagNames, toTagSlug } from "@/lib/tags";
 import type {
   ItemDetail,
   ItemSummary,
@@ -195,7 +198,9 @@ export async function getItemDetail(
       pinnedAt: true,
       createdAt: true,
       updatedAt: true,
-      itemType: { select: { name: true, icon: true, color: true, kind: true } },
+      itemType: {
+        select: { name: true, icon: true, color: true, kind: true, slug: true },
+      },
       tags: {
         // join table 本身不帶擁有者，tag 與 collection 都要另外限制 userId
         where: { tag: { userId } },
@@ -220,4 +225,66 @@ export async function getItemDetail(
     tags: tags.map(({ tag }) => tag.name),
     collections: collections.map(({ collection }) => collection),
   };
+}
+
+/**
+ * 更新 item 的可編輯欄位並整批替換標籤，回傳更新後的完整資料。
+ * 不屬於該使用者或已刪除時回傳 null（與 getItemDetail 相同，不區分兩者）。
+ * 不屬於該型別的欄位（例如替 snippet 寫入 url）直接忽略，不寫入資料庫。
+ */
+export async function updateItem(
+  userId: string,
+  itemId: string,
+  data: UpdateItemData,
+): Promise<ItemDetail | null> {
+  const updated = await prisma.$transaction(async (tx) => {
+    const existing = await tx.item.findFirst({
+      where: { id: itemId, userId, deletedAt: null },
+      select: { itemType: { select: { kind: true, slug: true } } },
+    });
+    if (!existing) {
+      return false;
+    }
+
+    const fields = getItemTypeFields(existing.itemType);
+    const tagIds = await upsertTags(tx, userId, data.tags);
+    await tx.item.update({
+      where: { id: itemId },
+      data: {
+        title: data.title,
+        description: data.description,
+        ...(fields.content && { content: data.content }),
+        ...(fields.language && { language: data.language }),
+        ...(fields.url && { url: data.url }),
+        // 先移除所有標籤再連上新的；不再使用的 Tag 保留，之後做標籤管理時處理
+        tags: {
+          deleteMany: {},
+          create: tagIds.map((tagId) => ({ tagId, source: "USER" })),
+        },
+      },
+    });
+    return true;
+  });
+
+  return updated ? getItemDetail(userId, itemId) : null;
+}
+
+/** 依 slug 找到或建立該使用者的標籤；slug 相同的名稱只算一個 */
+async function upsertTags(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  names: string[],
+): Promise<string[]> {
+  const tagIds: string[] = [];
+  for (const name of dedupeTagNames(names)) {
+    const slug = toTagSlug(name);
+    const tag = await tx.tag.upsert({
+      where: { userId_slug: { userId, slug } },
+      update: {},
+      create: { userId, name, slug },
+      select: { id: true },
+    });
+    tagIds.push(tag.id);
+  }
+  return tagIds;
 }
