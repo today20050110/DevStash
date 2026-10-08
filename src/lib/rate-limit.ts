@@ -22,6 +22,8 @@ const LIMITS = {
   resendVerification: { tokens: 3, window: "15 m" },
   // userId：已登入的人可以用它猜目前的密碼
   changePassword: { tokens: 5, window: "15 m" },
+  // userId：手動新增不會這麼快，擋的是腳本大量寫入
+  createItem: { tokens: 30, window: "1 m" },
 } satisfies Record<string, { tokens: number; window: Duration }>;
 
 export type RateLimitAction = keyof typeof LIMITS;

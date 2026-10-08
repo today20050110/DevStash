@@ -1,3 +1,4 @@
+import { isPro } from "@/lib/plan";
 import { prisma } from "@/lib/prisma";
 import type { UserProfile } from "@/types/user";
 
@@ -21,4 +22,13 @@ export async function getUserProfile(
   }
   const { passwordHash, ...profile } = user;
   return { ...profile, hasPassword: passwordHash !== null };
+}
+
+/** 是否為有效的 Pro 訂閱；查無使用者時視為 Free */
+export async function getUserIsPro(userId: string): Promise<boolean> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { plan: true, subscriptionStatus: true, currentPeriodEnd: true },
+  });
+  return user ? isPro(user) : false;
 }

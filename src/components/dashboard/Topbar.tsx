@@ -1,14 +1,21 @@
-import { FolderPlus, Plus, Search } from "lucide-react";
+import { FolderPlus, Search } from "lucide-react";
 
+import { NewItemDialog } from "@/components/items/NewItemDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import type { CreatableItemType } from "@/types/items";
+
+interface TopbarProps {
+  /** New Item dialog 可選的型別 */
+  itemTypes: CreatableItemType[];
+}
 
 /**
- * Dashboard top bar. Search and the two action buttons are display only —
- * the sidebar trigger is the one control that works.
+ * Dashboard top bar. Search and New Collection are display only;
+ * the sidebar trigger and New Item work.
  */
-export function Topbar() {
+export function Topbar({ itemTypes }: TopbarProps) {
   return (
     <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4">
       <SidebarTrigger />
@@ -30,10 +37,7 @@ export function Topbar() {
           <FolderPlus />
           New Collection
         </Button>
-        <Button size="lg">
-          <Plus />
-          New Item
-        </Button>
+        <NewItemDialog itemTypes={itemTypes} />
       </div>
     </header>
   );

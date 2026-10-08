@@ -6,6 +6,7 @@ import { Topbar } from "@/components/dashboard/Topbar";
 import { ItemDrawerProvider } from "@/components/items/ItemDrawerProvider";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { getCurrentUser } from "@/lib/current-user";
+import { getCreatableItemTypes } from "@/lib/db/items";
 
 // 登入後的頁面（/dashboard、/profile）共用側邊欄與頂部列；route group 不影響網址
 export default async function AppLayout({ children }: LayoutProps<"/">) {
@@ -14,12 +15,13 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   if (!(await getCurrentUser())) {
     redirect(SIGN_IN_PATH);
   }
+  const itemTypes = await getCreatableItemTypes();
 
   return (
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
-        <Topbar />
+        <Topbar itemTypes={itemTypes} />
         <main className="flex-1 overflow-y-auto p-8">
           <ItemDrawerProvider>{children}</ItemDrawerProvider>
         </main>

@@ -1,9 +1,10 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { getItemTypeFields } from "@/lib/item-fields";
-import type { UpdateItemData } from "@/lib/item-schemas";
+import type { CreateItemData, UpdateItemData } from "@/lib/item-schemas";
 import { prisma } from "@/lib/prisma";
 import { dedupeTagNames, toTagSlug } from "@/lib/tags";
 import type {
+  CreatableItemType,
   ItemDetail,
   ItemSummary,
   ItemTypeDetail,
@@ -304,4 +305,88 @@ export async function softDeleteItem(
     data: { deletedAt: new Date() },
   });
   return count > 0;
+}
+
+const CREATABLE_TYPE_SELECT = {
+  id: true,
+  name: true,
+  slug: true,
+  icon: true,
+  color: true,
+  kind: true,
+} as const;
+
+/**
+ * 新增 item 時可選的型別：系統型別中不需上傳檔案的（FILE kind 要等 R2 上傳完成）。
+ * 自訂型別尚未實作，日後在此加入該使用者的型別。
+ */
+export async function getCreatableItemTypes(): Promise<CreatableItemType[]> {
+  const types = await prisma.itemType.findMany({
+    where: { isSystem: true, userId: null, kind: { not: "FILE" } },
+    select: CREATABLE_TYPE_SELECT,
+  });
+  return types.sort((a, b) => typeOrder(a.slug) - typeOrder(b.slug));
+}
+
+/** 與 getCreatableItemTypes 同樣的條件；別人的自訂型別與 FILE kind 一律查不到 */
+export function findCreatableItemType(
+  userId: string,
+  itemTypeId: string,
+): Promise<CreatableItemType | null> {
+  return prisma.itemType.findFirst({
+    where: {
+      id: itemTypeId,
+      kind: { not: "FILE" },
+      OR: [{ isSystem: true, userId: null }, { userId }],
+    },
+    select: CREATABLE_TYPE_SELECT,
+  });
+}
+
+export type CreateItemResult =
+  | { status: "created"; item: { id: string; title: string } }
+  | { status: "limit-reached"; limit: number };
+
+/**
+ * 在 transaction 內檢查額度並建立 item（§4.1、§6）。itemLimit 為 null 代表不限。
+ * 先取得以 userId 為鍵的 advisory lock：同一使用者同時送出兩個請求時，
+ * 第二個要等第一個 commit 後才計數，不會兩個都以 49 筆通過檢查。
+ * 不屬於該型別的欄位不寫入，與 updateItem 相同。
+ */
+export async function createItem(
+  userId: string,
+  itemType: Pick<CreatableItemType, "id" | "kind" | "slug">,
+  data: Omit<CreateItemData, "itemTypeId">,
+  itemLimit: number | null,
+): Promise<CreateItemResult> {
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;
+    if (itemLimit !== null) {
+      const count = await tx.item.count({
+        where: { userId, deletedAt: null },
+      });
+      if (count >= itemLimit) {
+        return { status: "limit-reached", limit: itemLimit } as const;
+      }
+    }
+
+    const fields = getItemTypeFields(itemType);
+    const tagIds = await upsertTags(tx, userId, data.tags);
+    const item = await tx.item.create({
+      data: {
+        userId,
+        itemTypeId: itemType.id,
+        title: data.title,
+        description: data.description,
+        ...(fields.content && { content: data.content }),
+        ...(fields.language && { language: data.language }),
+        ...(fields.url && { url: data.url }),
+        tags: {
+          create: tagIds.map((tagId) => ({ tagId, source: "USER" })),
+        },
+      },
+      select: { id: true, title: true },
+    });
+    return { status: "created", item } as const;
+  });
 }

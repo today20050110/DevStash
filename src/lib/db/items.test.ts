@@ -1,18 +1,31 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { getItemDetail, softDeleteItem, updateItem } from "@/lib/db/items";
-import { updateItemSchema } from "@/lib/item-schemas";
+import {
+  createItem,
+  findCreatableItemType,
+  getItemDetail,
+  softDeleteItem,
+  updateItem,
+} from "@/lib/db/items";
+import { createItemSchema, updateItemSchema } from "@/lib/item-schemas";
 import { prisma } from "@/lib/prisma";
 
 // transaction 內的查詢另用一組 mock，與 transaction 外的 getItemDetail 分開檢查
 const tx = {
-  item: { findFirst: vi.fn(), update: vi.fn() },
+  item: {
+    findFirst: vi.fn(),
+    update: vi.fn(),
+    count: vi.fn(),
+    create: vi.fn(),
+  },
   tag: { upsert: vi.fn() },
+  $executeRaw: vi.fn(),
 };
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     item: { findFirst: vi.fn(), updateMany: vi.fn() },
+    itemType: { findFirst: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -197,5 +210,98 @@ describe("softDeleteItem", () => {
     updateMany.mockResolvedValue({ count: 0 });
 
     await expect(softDeleteItem("user-1", "item-1")).resolves.toBe(false);
+  });
+});
+
+describe("findCreatableItemType", () => {
+  it("只查系統型別或自己的型別，排除 FILE kind", async () => {
+    const itemTypeFindFirst = vi.mocked(prisma.itemType.findFirst);
+    itemTypeFindFirst.mockResolvedValue(null);
+
+    await findCreatableItemType("user-1", "type-1");
+
+    expect(itemTypeFindFirst.mock.calls[0][0]?.where).toEqual({
+      id: "type-1",
+      kind: { not: "FILE" },
+      OR: [{ isSystem: true, userId: null }, { userId: "user-1" }],
+    });
+  });
+});
+
+describe("createItem", () => {
+  const input = createItemSchema.omit({ itemTypeId: true }).parse({
+    title: "useDebounce",
+    content: "const x = 1;",
+    language: "ts",
+    url: "https://example.com",
+    tags: ["React", "react"],
+  });
+  const snippets = {
+    id: "type-snippets",
+    kind: "TEXT",
+    slug: "snippets",
+  } as const;
+
+  beforeEach(() => {
+    transaction.mockImplementation(((
+      callback: (client: typeof tx) => unknown,
+    ) => callback(tx)) as never);
+    tx.item.count.mockResolvedValue(49);
+    tx.item.create.mockResolvedValue({ id: "item-9", title: "useDebounce" });
+    tx.tag.upsert.mockImplementation(
+      async ({ create }: { create: { slug: string } }) => ({
+        id: `tag-${create.slug}`,
+      }),
+    );
+  });
+
+  it("先取得該使用者的 advisory lock，再計數未刪除的 item", async () => {
+    await createItem("user-1", snippets, input, 50);
+
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
+    expect(tx.$executeRaw.mock.calls[0].slice(1)).toEqual(["user-1"]);
+    expect(tx.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.item.count.mock.invocationCallOrder[0],
+    );
+    expect(tx.item.count).toHaveBeenCalledWith({
+      where: { userId: "user-1", deletedAt: null },
+    });
+  });
+
+  it("達到上限時不建立", async () => {
+    tx.item.count.mockResolvedValue(50);
+
+    await expect(createItem("user-1", snippets, input, 50)).resolves.toEqual({
+      status: "limit-reached",
+      limit: 50,
+    });
+    expect(tx.item.create).not.toHaveBeenCalled();
+    expect(tx.tag.upsert).not.toHaveBeenCalled();
+  });
+
+  it("不限額度時不計數", async () => {
+    await createItem("user-1", snippets, input, null);
+
+    expect(tx.item.count).not.toHaveBeenCalled();
+    expect(tx.item.create).toHaveBeenCalled();
+  });
+
+  it("以 userId 與型別建立，只寫入該型別適用的欄位並連上去重後的標籤", async () => {
+    const result = await createItem("user-1", snippets, input, 50);
+
+    expect(result).toEqual({
+      status: "created",
+      item: { id: "item-9", title: "useDebounce" },
+    });
+    const { data } = tx.item.create.mock.calls[0][0];
+    expect(data).toMatchObject({
+      userId: "user-1",
+      itemTypeId: "type-snippets",
+      title: "useDebounce",
+      content: "const x = 1;",
+      language: "ts",
+      tags: { create: [{ tagId: "tag-react", source: "USER" }] },
+    });
+    expect(data).not.toHaveProperty("url");
   });
 });

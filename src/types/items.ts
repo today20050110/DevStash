@@ -62,3 +62,8 @@ export interface ItemDetail {
   /** 依名稱排序，不含已刪除的 collection */
   collections: ItemCollectionSummary[];
 }
+
+/** 新增 item 的 dialog 可選的型別 */
+export interface CreatableItemType extends ItemTypeDetail {
+  kind: ItemKind;
+}

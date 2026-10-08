@@ -1,16 +1,36 @@
-# Current Feature
+# Current Feature: Item Create
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
-<!-- 以 /feature load 載入 spec 後填入；成功長什麼樣子 -->
+- 頂部列的「New Item」按鈕開啟 shadcn `Dialog`（新增 item 的 modal）
+- 型別選擇器：snippet、prompt、command、note、link（files／images 不在範圍內）
+- 依選擇的型別顯示欄位：
+  - 所有型別：title（必填）、description、tags
+  - snippet／command：content、language
+  - prompt／note：content
+  - link：URL（必填）
+- Server action `createItem`（`src/actions/items.ts`）以 Zod 驗證輸入
+- 查詢函式 `createItem` 放在 `src/lib/db/items.ts`
+- 成功時顯示 toast、關閉 modal 並 refresh 頁面資料
 
 ## Notes
 
-<!-- 來源、限制、實作方向、驗證結果、已知情況 -->
+- Spec：`context/features/item-create-spec.md`
+- 可沿用編輯模式已有的部分：`src/lib/item-fields.ts` 的 `getItemTypeFields`（依 `kind`／slug 決定 content、language、url）、`src/lib/item-schemas.ts` 的 `optionalText`（content 不 trim、URL 只收 `http(s)`）、`src/lib/tags.ts` 的標籤解析與 slug、`ItemEditForm` 的欄位排版、root layout 已掛的 sonner `Toaster`
+- `Topbar.tsx` 目前是 server component，「New Item」為純顯示按鈕，需要一個 client 元件包住 Dialog
+- 寫入時須以 `userId` 限定型別（系統型別或該使用者的自訂型別）；spec 只列 5 種，伺服器端也要擋 files／images（FILE kind，R2 上傳尚未實作）
+- link 的 URL 必填只對 link 成立，schema 需依型別做條件驗證；`updateItemSchema` 的 URL 為選填，不能直接共用
+- 標籤沿用 `updateItem` 的 slug `upsert`（`source: "USER"`）
+- 使用者決定：額度檢查現在做、`createItem` 加速率限制、content 上限採建議值（Free 100 KB／Pro 1 MB，以 UTF-8 bytes 計）
+- 實作：`src/lib/plan.ts`（`isPro` 依 §3.3 公式集中判斷、`getItemLimit`、`checkContentSize`）；`src/lib/db/users.ts` 的 `getUserIsPro`；`createItemSchema` 與 `updateItemSchema` 共用欄位定義；`src/lib/db/items.ts` 的 `getCreatableItemTypes`（系統型別、排除 FILE kind，layout 查詢後傳給 `Topbar`）、`findCreatableItemType`（系統或自己的型別、排除 FILE）、`createItem`（transaction 內先以 `pg_advisory_xact_lock(hashtext(userId))` 鎖住同一使用者，再計數未刪除的 item 並建立，避免兩個同時送出的請求都以 49 筆通過）；`createItem` action 順序為 Zod → 登入 → 速率限制（`createItem` 30／1 分鐘，userId）→ 型別 → URL 型別的 url 必填 → content 上限 → 建立；達上限時回升級提示。`updateItem` action 也加上 content 上限，避免以編輯繞過。`ItemEditForm` 的欄位抽成 `ItemFormFields`，與 `NewItemDialog` 共用；型別選擇器為原生 radio（方向鍵可切換）
+- **與先前做法的差異**：§6 說開發期讓 `isPro` 回傳 true，但使用者要求現在就檢查額度，所以照 §3.3 的公式實際判斷；目前所有使用者都是 FREE，正式網站也會套用 50 筆上限
+- 驗證：`npm test` 104/104（新增 `plan.test.ts`，`actions/items.test.ts` 與 `db/items.test.ts` 補 create 與 content 上限）、tsc、lint、build 通過。Playwright（demo 帳號，Development）：建立 snippet 後 toast、dialog 關閉、列表與側邊欄 4 → 5；資料庫確認標題去除前後空白、content 保留縮排與結尾換行、標籤「Create Test, create test, react」去重為兩個、`source` 為 USER，advisory lock 在 Postgres 實際執行無誤；切換為 Links 時只剩 Title／Description／URL／Tags、標題保留、URL 空白時 Create 停用；`javascript:alert(1)` 顯示欄位錯誤與錯誤 toast、dialog 不關閉；有效 URL 建立後 Links 6 → 7；390px 手機寬度型別按鈕為 3 欄、重新開啟時表單已重設；Esc 關閉；主控台 0 errors
+- 未在瀏覽器實測（由單元測試涵蓋）：達到 50 筆上限、FILE 型別被擋、速率限制、content 超過上限
+- 測試資料：Development 上 demo 帳號新增了「Create Test Snippet」「Create Test Link」兩筆與標籤「Create Test」，待清除
 
 ## History
 
