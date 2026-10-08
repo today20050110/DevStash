@@ -1,14 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { updateItem } from "@/actions/items";
+import { deleteItem, updateItem } from "@/actions/items";
 import { getCurrentUserId } from "@/lib/current-user";
-import { updateItem as updateItemInDb } from "@/lib/db/items";
+import { softDeleteItem, updateItem as updateItemInDb } from "@/lib/db/items";
 import type { ItemDetail } from "@/types/items";
 
 // action 的測試只驗證流程（驗證、登入、錯誤對應），資料庫邏輯在 src/lib/db/items.test.ts
 vi.mock("@/lib/prisma", () => ({ prisma: {} }));
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
-vi.mock("@/lib/db/items", () => ({ updateItem: vi.fn() }));
+vi.mock("@/lib/db/items", () => ({
+  softDeleteItem: vi.fn(),
+  updateItem: vi.fn(),
+}));
 
 const VALID = {
   title: "  Renamed  ",
@@ -90,6 +93,55 @@ describe("updateItem action", () => {
     const result = await updateItem("item-1", VALID);
 
     expect(result).toEqual({
+      success: false,
+      error: "Something went wrong, please try again",
+    });
+  });
+});
+
+describe("deleteItem action", () => {
+  beforeEach(() => {
+    vi.mocked(getCurrentUserId).mockResolvedValue("user-1");
+    vi.mocked(softDeleteItem).mockResolvedValue(true);
+  });
+
+  it("以目前使用者軟刪除 item", async () => {
+    await expect(deleteItem("item-1")).resolves.toEqual({ success: true });
+    expect(softDeleteItem).toHaveBeenCalledWith("user-1", "item-1");
+  });
+
+  it.each([42, "", null])("item id 不合法（%s）時當作找不到", async (id) => {
+    await expect(deleteItem(id)).resolves.toEqual({
+      success: false,
+      error: "Item not found",
+    });
+    expect(softDeleteItem).not.toHaveBeenCalled();
+  });
+
+  it("未登入時不刪除", async () => {
+    vi.mocked(getCurrentUserId).mockResolvedValue(null);
+
+    const result = await deleteItem("item-1");
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/no longer signed in/);
+    expect(softDeleteItem).not.toHaveBeenCalled();
+  });
+
+  it("不屬於目前使用者、不存在或已刪除時回傳 Item not found", async () => {
+    vi.mocked(softDeleteItem).mockResolvedValue(false);
+
+    await expect(deleteItem("item-1")).resolves.toEqual({
+      success: false,
+      error: "Item not found",
+    });
+  });
+
+  it("資料庫錯誤時回傳通用訊息", async () => {
+    vi.mocked(softDeleteItem).mockRejectedValue(new Error("connection lost"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(deleteItem("item-1")).resolves.toEqual({
       success: false,
       error: "Something went wrong, please try again",
     });

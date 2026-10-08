@@ -288,3 +288,20 @@ async function upsertTags(
   }
   return tagIds;
 }
+
+/**
+ * 軟刪除：只設定 deletedAt，資料列與標籤、collection 關聯都保留（誤刪時可從資料庫還原，
+ * 也不再佔 free tier 額度）。所有讀取查詢都已排除 deletedAt 不為 null 的資料列。
+ * 擁有者與「尚未刪除」放在同一個 updateMany 條件裡，一次查詢完成，不需要 transaction。
+ * 回傳 false 代表不存在、屬於別人或已經刪除過。
+ */
+export async function softDeleteItem(
+  userId: string,
+  itemId: string,
+): Promise<boolean> {
+  const { count } = await prisma.item.updateMany({
+    where: { id: itemId, userId, deletedAt: null },
+    data: { deletedAt: new Date() },
+  });
+  return count > 0;
+}

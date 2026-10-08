@@ -36,6 +36,7 @@ export function ItemDrawer({ request, open, onOpenChange }: ItemDrawerProps) {
             key={request.key}
             item={item}
             onItemChange={replaceItem}
+            onDeleted={() => onOpenChange(false)}
           />
         ) : (
           <SheetHeader className="pr-12">
@@ -63,10 +64,15 @@ export function ItemDrawer({ request, open, onOpenChange }: ItemDrawerProps) {
 interface ItemDrawerPanelProps {
   item: ItemDetail;
   onItemChange: (item: ItemDetail) => void;
+  onDeleted: () => void;
 }
 
 /** 檢視與編輯模式的切換；編輯模式下操作列換成 Save／Cancel */
-function ItemDrawerPanel({ item, onItemChange }: ItemDrawerPanelProps) {
+function ItemDrawerPanel({
+  item,
+  onItemChange,
+  onDeleted,
+}: ItemDrawerPanelProps) {
   const [isEditing, setIsEditing] = useState(false);
 
   function handleSaved(updated: ItemDetail) {
@@ -85,7 +91,11 @@ function ItemDrawerPanel({ item, onItemChange }: ItemDrawerPanelProps) {
         />
       ) : (
         <>
-          <ItemDrawerActions item={item} onEdit={() => setIsEditing(true)} />
+          <ItemDrawerActions
+            item={item}
+            onEdit={() => setIsEditing(true)}
+            onDeleted={onDeleted}
+          />
           <ItemDrawerBody item={item} />
         </>
       )}

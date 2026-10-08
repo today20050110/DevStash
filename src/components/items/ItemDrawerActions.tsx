@@ -1,15 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, Copy, Pencil, Pin, Star, Trash2 } from "lucide-react";
+import { Check, Copy, Pencil, Pin, Star } from "lucide-react";
 
+import { DeleteItemDialog } from "@/components/items/DeleteItemDialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ItemDetail } from "@/types/items";
 
 const COPIED_RESET_MS = 2000;
 
-/** Favorite、Pin、Delete 尚未接上功能，先顯示狀態；以 aria-disabled 而非 disabled，保留啟用時的顏色 */
+/** Favorite、Pin 尚未接上功能，先顯示狀態；以 aria-disabled 而非 disabled，保留啟用時的顏色 */
 const NOT_YET_AVAILABLE = {
   "aria-disabled": true,
   title: "Coming soon",
@@ -19,9 +20,14 @@ const NOT_YET_AVAILABLE = {
 interface ItemDrawerActionsProps {
   item: ItemDetail;
   onEdit: () => void;
+  onDeleted: () => void;
 }
 
-export function ItemDrawerActions({ item, onEdit }: ItemDrawerActionsProps) {
+export function ItemDrawerActions({
+  item,
+  onEdit,
+  onDeleted,
+}: ItemDrawerActionsProps) {
   const copyValue = item.type.kind === "URL" ? item.url : item.content;
   const { copied, copy } = useCopyToClipboard();
 
@@ -54,15 +60,11 @@ export function ItemDrawerActions({ item, onEdit }: ItemDrawerActionsProps) {
           <Pencil />
           Edit
         </Button>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          {...NOT_YET_AVAILABLE}
-          className="cursor-not-allowed text-destructive hover:text-destructive"
-        >
-          <Trash2 />
-          <span className="sr-only">Delete</span>
-        </Button>
+        <DeleteItemDialog
+          itemId={item.id}
+          title={item.title}
+          onDeleted={onDeleted}
+        />
       </div>
     </div>
   );

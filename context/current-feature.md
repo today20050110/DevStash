@@ -1,16 +1,30 @@
-# Current Feature
+# Current Feature: Item Delete
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
-<!-- 以 /feature load 載入 spec 後填入；成功長什麼樣子 -->
+- drawer 操作列的 Delete（紅色垃圾桶）接上功能，取代目前的「Coming soon」
+- 按下後以 shadcn `AlertDialog` 確認，對話框顯示 item 標題並說明刪除的後果；Cancel 不做任何事
+- 確認後經 server action 刪除：成功時關閉對話框與 drawer、顯示成功 toast、`router.refresh()` 讓 dashboard／列表頁的卡片、統計數字與側邊欄數量同步
+- 失敗時對話框維持開啟並顯示錯誤（toast 或對話框內文字），讓使用者可以重試
+- server action `deleteItem(itemId)` 放在 `src/actions/items.ts`，回 `{ success, error }`；Zod 驗證 id、`getCurrentUserId()` 驗證登入，只能刪除自己且未刪除的 item，查無與別人的同樣回「Item not found」
+- 資料庫邏輯放在 `src/lib/db/items.ts`，並補單元測試（action 與 lib）
 
 ## Notes
 
-<!-- 來源、限制、實作方向、驗證結果、已知情況 -->
+- 來源：inline 描述「建立項目刪除功能。操作完成後，應有 shadcn UI 確認訊息和成功提示。」
+- **刪除方式待確認**：`project-overview.md` §3.3 的設計是軟刪除（`Item.deletedAt`）——使用者會誤刪、已刪除的項目不佔 free tier 額度。所有讀取查詢（卡片、統計、側邊欄數量、`getItemDetail`、`updateItem`）都已排除 `deletedAt`，建議軟刪除：只設 `deletedAt = now()`，資料列與標籤、collection 關聯保留。代價：目前沒有垃圾桶或還原 UI，使用者看起來就是刪除了；永久清除的排程（§9 第 2 題建議 30 天，尚未決定）與 `PendingDeletion` sweeper 都還沒做
+- FILE kind（有 `storageKey`）的檔案：軟刪除時不寫 `PendingDeletion`，等永久清除時才處理；目前 R2 上傳尚未實作，沒有實際資料
+- `AlertDialog` 已安裝（Profile 的刪除帳號使用）；沿用該處做法，不用 `AlertDialogAction`（點擊即關閉，看不到伺服器錯誤），改用一般按鈕並在處理中停用；成功提示用上一個 feature 加入的 sonner
+- 對話框是 Radix Dialog，開在 drawer（也是 Dialog）之上；關閉對話框時焦點要回到 drawer，Esc 只關閉最上層
+- 刪除後 drawer 內的資料已不存在：關閉 drawer，不再顯示該 item；同一時間其他分頁再開這筆會得到 404（既有行為）
+- 不做的事：還原／Undo、垃圾桶頁面、批次刪除、永久刪除（皆未要求）
+- 使用者決定：軟刪除（採建議）
+- 實作：`src/lib/db/items.ts` 的 `softDeleteItem(userId, itemId)` 以單一 `updateMany`（`where: { id, userId, deletedAt: null }`）設定 `deletedAt`，回傳是否有資料列被更新，不需要 transaction；`src/actions/items.ts` 的 `deleteItem(itemId)`（Zod 驗 id → `getCurrentUserId()` → `softDeleteItem`，回 `{ success, error }`）；`src/components/items/DeleteItemDialog.tsx`（`AlertDialog` 由操作列的垃圾桶觸發，顯示標題；刪除用一般按鈕而非 `AlertDialogAction`，處理中停用 Cancel 並擋下 Esc／點外面關閉；失敗時對話框保持開啟並以 `FormMessage` 顯示錯誤；成功時關閉對話框、經 `onDeleted` 關閉 drawer、toast「Deleted "…"」、`router.refresh()`）；`ItemDrawerActions`／`ItemDrawer` 傳遞 `onDeleted`，Delete 不再是「Coming soon」
+- 驗證（Development，demo 帳號）：Cancel 後對話框關閉、drawer 保留、焦點回到 Delete 按鈕；開著對話框時以 SQL 先把 item 設為已刪除，再按 Delete 顯示「Item not found」且對話框不關閉；還原後同一個對話框再按 Delete 成功，toast「Deleted "Free up a port"」、drawer 關閉、列表 5 → 4 items、側邊欄 Commands 5 → 4；另一次刪除（18:38:30，使用者在瀏覽器視窗中親自點擊，已確認）後 dashboard 統計 18 → 17、卡片消失；主控台 0 errors。測試後以 SQL 還原，demo 帳號 18 筆有效、0 筆已刪除。`npm test` 78/78（`src/lib/db/items.test.ts` 補 `softDeleteItem`、`src/actions/items.test.ts` 補 `deleteItem`）、tsc、lint、build 通過
 
 ## History
 

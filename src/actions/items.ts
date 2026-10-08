@@ -3,7 +3,7 @@
 import { z } from "zod";
 
 import { getCurrentUserId } from "@/lib/current-user";
-import { updateItem as updateItemInDb } from "@/lib/db/items";
+import { softDeleteItem, updateItem as updateItemInDb } from "@/lib/db/items";
 import { updateItemSchema } from "@/lib/item-schemas";
 import type { ItemDetail } from "@/types/items";
 
@@ -73,4 +73,31 @@ function firstErrors(
       messages?.[0],
     ]),
   );
+}
+
+export interface DeleteItemResult {
+  success: boolean;
+  error?: string;
+}
+
+/** 軟刪除 item；不屬於目前使用者、不存在或已刪除時一律回「Item not found」 */
+export async function deleteItem(itemId: unknown): Promise<DeleteItemResult> {
+  const parsedId = itemIdSchema.safeParse(itemId);
+  if (!parsedId.success) {
+    return { success: false, error: ITEM_NOT_FOUND };
+  }
+
+  try {
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      return { success: false, error: NOT_SIGNED_IN };
+    }
+    if (!(await softDeleteItem(userId, parsedId.data))) {
+      return { success: false, error: ITEM_NOT_FOUND };
+    }
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to delete item", error);
+    return { success: false, error: GENERIC_ERROR };
+  }
 }

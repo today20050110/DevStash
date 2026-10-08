@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { getItemDetail, updateItem } from "@/lib/db/items";
+import { getItemDetail, softDeleteItem, updateItem } from "@/lib/db/items";
 import { updateItemSchema } from "@/lib/item-schemas";
 import { prisma } from "@/lib/prisma";
 
@@ -11,7 +11,10 @@ const tx = {
 };
 
 vi.mock("@/lib/prisma", () => ({
-  prisma: { item: { findFirst: vi.fn() }, $transaction: vi.fn() },
+  prisma: {
+    item: { findFirst: vi.fn(), updateMany: vi.fn() },
+    $transaction: vi.fn(),
+  },
 }));
 
 const findFirst = vi.mocked(prisma.item.findFirst);
@@ -171,5 +174,28 @@ describe("updateItem", () => {
     const item = await updateItem("user-1", "item-1", input);
 
     expect(item).toMatchObject({ id: "item-1", tags: ["auth", "react"] });
+  });
+});
+
+describe("softDeleteItem", () => {
+  const updateMany = vi.mocked(prisma.item.updateMany);
+
+  it("只對該使用者且尚未刪除的 item 設定 deletedAt", async () => {
+    updateMany.mockResolvedValue({ count: 1 });
+
+    await expect(softDeleteItem("user-1", "item-1")).resolves.toBe(true);
+    const args = updateMany.mock.calls[0][0];
+    expect(args?.where).toEqual({
+      id: "item-1",
+      userId: "user-1",
+      deletedAt: null,
+    });
+    expect(args?.data).toEqual({ deletedAt: expect.any(Date) });
+  });
+
+  it("沒有符合的資料列（別人的、不存在或已刪除）時回傳 false", async () => {
+    updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(softDeleteItem("user-1", "item-1")).resolves.toBe(false);
   });
 });
