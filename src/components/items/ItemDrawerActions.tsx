@@ -5,6 +5,7 @@ import { Check, Copy, Pencil, Pin, Star } from "lucide-react";
 import { DeleteItemDialog } from "@/components/items/DeleteItemDialog";
 import { Button } from "@/components/ui/button";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
+import { getCopyValue } from "@/lib/item-copy";
 import { cn } from "@/lib/utils";
 import type { ItemDetail } from "@/types/items";
 
@@ -26,7 +27,7 @@ export function ItemDrawerActions({
   onEdit,
   onDeleted,
 }: ItemDrawerActionsProps) {
-  const copyValue = item.type.kind === "URL" ? item.url : item.content;
+  const copyValue = getCopyValue(item);
   const { copied, copy } = useCopyToClipboard();
 
   return (

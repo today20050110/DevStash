@@ -1,6 +1,7 @@
 import { Pin, Star } from "lucide-react";
 
 import { TypeIcon } from "@/components/dashboard/TypeIcon";
+import { CopyItemButton } from "@/components/items/CopyItemButton";
 import { ItemCardTrigger } from "@/components/items/ItemCardTrigger";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -65,6 +66,8 @@ export function ItemCard({ item }: ItemCardProps) {
         >
           {formatDate(item.createdAt)}
         </time>
+        {/* 有檔案的 item（圖片、檔案）沒有文字可複製 */}
+        {!item.file && <CopyItemButton id={item.id} title={item.title} />}
       </CardContent>
     </Card>
   );
