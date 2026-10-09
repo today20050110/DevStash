@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import type { UpdateItemField } from "@/actions/items";
 import { CodeEditor } from "@/components/items/CodeEditor";
+import { MarkdownEditor } from "@/components/items/MarkdownEditor";
 import { Section } from "@/components/items/ItemDrawerSections";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -34,7 +35,8 @@ interface ItemFormFieldsProps {
 
 /**
  * Title、Description、型別專屬欄位、Tags。drawer 的編輯模式與新增 dialog 共用；
- * snippets／commands 的 Content 用程式碼編輯器，其他型別用 Textarea。
+ * snippets／commands 的 Content 用程式碼編輯器，notes／prompts 用 Markdown 編輯器，
+ * 其他型別用 Textarea。
  * 只顯示該型別適用的欄位，伺服器端以同一個 getItemTypeFields 忽略其他欄位。
  */
 export function ItemFormFields({
@@ -90,7 +92,18 @@ export function ItemFormFields({
           />
         </ItemFormField>
       )}
-      {fields.content && !fields.language && (
+      {fields.content && fields.markdown && (
+        <ItemFormField id="item-content" label="Content" error={errors.content}>
+          <MarkdownEditor
+            id="item-content"
+            value={values.content}
+            onChange={(value) => setValue("content", value)}
+            invalid={Boolean(errors.content)}
+            describedBy={errors.content ? "item-content-error" : undefined}
+          />
+        </ItemFormField>
+      )}
+      {fields.content && !fields.language && !fields.markdown && (
         <ItemFormField id="item-content" label="Content" error={errors.content}>
           <Textarea
             id="item-content"

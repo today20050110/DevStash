@@ -1,16 +1,45 @@
-# Current Feature
+# Current Feature: Markdown 編輯器
 
 ## Status
 
-Not Started
+Complete
 
 ## Goals
 
-<!-- 以 /feature load 載入 spec 後填入；成功長什麼樣子 -->
+- 新增 `MarkdownEditor` 元件，有 Write／Preview 兩個分頁，以 `react-markdown` + `remark-gfm` 渲染（GitHub Flavored Markdown）
+- notes 與 prompts 的 Content 由 `Textarea` 改為 `MarkdownEditor`；snippets／commands 的 `CodeEditor` 不變
+- 三個整合點：`NewItemDialog`、`ItemDrawer` 編輯模式（預設 Write 分頁、可切到 Preview）、`ItemDrawer` 檢視模式（唯讀，只顯示 Preview）
+- 標頭有複製按鈕，樣式與 `CodeEditor` 相同
+- 高度隨內容伸縮、最高 400px，與 `CodeEditor` 一致
+- Preview 以自訂的 `.markdown-preview` class 設定樣式：h1–h6 大小與字重有區別、code block 深色背景與等寬字型、inline code 淡底色、有序／無序清單的縮排與符號、blockquote 左邊框、連結為藍色且有 hover 狀態、表格有框線與表頭底色
 
 ## Notes
 
-<!-- 來源、限制、實作方向、驗證結果、已知情況 -->
+- 來源：`context/features/markdown-editor-spec.md`
+- 需新增相依 `react-markdown`、`remark-gfm`（目前都沒有安裝）
+- **與現況的差異（start 時要決定）**：
+  - spec 指定容器 `bg-[#1e1e1e]`、標頭 `bg-[#2d2d2d]`，但目前的 `CodeEditor` 用 `bg-card`（`#171717`，Monaco 主題背景也對齊它）與 `bg-muted/40`。spec 同時要求「與 CodeEditor 相同的樣式」，兩者矛盾；建議沿用 `CodeEditor` 的 token，讓兩種編輯器外觀一致
+  - 「只限 notes 與 prompts」要依 slug 判斷，還是依「TEXT kind 且非程式碼型別」判斷？後者會讓日後的自訂型別也用 Markdown 編輯器。欄位判斷集中在 `src/lib/item-fields.ts` 的 `getItemTypeFields`
+  - `CodeEditor` 標頭有 macOS 紅黃綠圓點與語言名稱；Markdown 編輯器標頭要放 Write／Preview 分頁，是否也放圓點 spec 未指定
+- 安全性：維持 `react-markdown` 預設不渲染原始 HTML（不加 `rehype-raw`）；連結比照 drawer 的 URL 只允許 `http:`／`https:`（預設的 `urlTransform` 已過濾 `javascript:`，實作時確認），外部連結加 `rel="noopener noreferrer"`
+- 可沿用：`useCopyToClipboard`（`src/hooks/use-copy-to-clipboard.ts`）、`ItemFormFields` 的 `typeSlug` 與 `asLabel`、`ItemDrawerSections` 的 `ItemDrawerContent`
+- Write 分頁用 `Textarea`，不需要 Monaco
+
+### 實作（start）
+
+- 三項待決定事項照建議（使用者未另外指定）：沿用 `CodeEditor` 的 `bg-card`／`bg-muted/40`、依 slug 限 notes 與 prompts、標頭保留紅黃綠圓點
+- 新增 `react-markdown` ^10.1.0、`remark-gfm` ^4.0.1
+- `src/lib/item-fields.ts` 的 `ItemTypeFields` 新增 `markdown`（TEXT kind 且 slug 為 `notes`／`prompts`），`NewItemDialog` 未選型別時的預設值補上此欄位
+- `src/components/items/MarkdownEditor.tsx`：唯讀時標頭顯示 `markdown`、只有 Preview；編輯時標頭為 Write／Preview 分頁（`role="tablist"`，預設 Write）。Write 分頁是 `field-sizing-content` 的原生 textarea（`min-h-40`、`max-h-[400px]`），沿用 `id="item-content"`，外層 `<label>` 照常對應；錯誤經 `aria-invalid`／`aria-describedby` 接上。連結與圖片只接受 `http(s)`，其他以純文字顯示；外部圖片用 `<img>`（無法事先設定 `next/image` 的網域，加 eslint-disable 並註明原因）
+- `globals.css` 新增 `@layer components` 的 `.markdown-preview` 與 `@utility scrollbar-subtle`（細捲軸，對齊 Monaco 主題，實測時發現預設捲軸是亮色而加上）
+- `ItemFormFields`（新增 dialog 與 drawer 編輯共用）與 `ItemDrawerContent` 依 `fields.markdown` 改用 `MarkdownEditor`
+
+### 驗證
+
+- Playwright（Development，demo 帳號）：drawer 檢視 prompt 的 Markdown 正確渲染；編輯模式預設 Write、`label[for=item-content]` 對應 textarea；貼上包含 h1–h4、inline code、粗體、刪除線、巢狀清單、有序清單、工作清單、blockquote、code block、表格的範例後切到 Preview，樣式都正確；`[bad](javascript:alert(1))` 渲染為純文字、`<script>` 以文字顯示不執行；超過 400px 時容器固定 400px 並捲動；之後按 Cancel，未存檔
+- 新增 dialog：Notes 輸入內容 → 切到 Snippets（Monaco）→ 切到 Prompts，內容保留且 Preview 正確
+- 390px 手機寬度 drawer 無水平溢出；主控台 0 errors
+- 新增 `src/lib/item-fields.test.ts`（4 個），`npm test` 123/123、tsc、lint、build 通過，所有資料頁仍為 `ƒ`
 
 ## History
 

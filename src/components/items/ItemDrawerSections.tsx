@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { CalendarDays, Folder, Tag } from "lucide-react";
 
 import { CodeEditor } from "@/components/items/CodeEditor";
+import { MarkdownEditor } from "@/components/items/MarkdownEditor";
 import { Badge } from "@/components/ui/badge";
 import { getEditorLanguage } from "@/lib/code-language";
 import { formatLongDate } from "@/lib/format";
@@ -96,7 +97,15 @@ function ItemDrawerContent({ item }: { item: ItemDetail }) {
   if (!item.content) {
     return null;
   }
-  if (getItemTypeFields(item.type).language) {
+  const fields = getItemTypeFields(item.type);
+  if (fields.markdown) {
+    return (
+      <Section title="Content">
+        <MarkdownEditor value={item.content} />
+      </Section>
+    );
+  }
+  if (fields.language) {
     const language = getEditorLanguage(item.type.slug, item.language);
     return (
       <Section title="Content">

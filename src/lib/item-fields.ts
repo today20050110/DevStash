@@ -2,10 +2,14 @@ import type { ItemKind } from "@/generated/prisma/enums";
 
 /** 有程式語言欄位的系統型別（依 slug） */
 const LANGUAGE_TYPE_SLUGS = ["snippets", "commands"];
+/** Content 以 Markdown 編輯與顯示的系統型別（依 slug） */
+const MARKDOWN_TYPE_SLUGS = ["notes", "prompts"];
 
 export interface ItemTypeFields {
   content: boolean;
   language: boolean;
+  /** Content 用 Markdown 編輯器（只影響畫面，伺服器端照樣存純文字） */
+  markdown: boolean;
   url: boolean;
 }
 
@@ -18,9 +22,11 @@ export function getItemTypeFields(type: {
   kind: ItemKind;
   slug: string;
 }): ItemTypeFields {
+  const content = type.kind === "TEXT";
   return {
-    content: type.kind === "TEXT",
+    content,
     language: LANGUAGE_TYPE_SLUGS.includes(type.slug),
+    markdown: content && MARKDOWN_TYPE_SLUGS.includes(type.slug),
     url: type.kind === "URL",
   };
 }

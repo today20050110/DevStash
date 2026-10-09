@@ -47,7 +47,7 @@ export function NewItemDialog({ itemTypes }: NewItemDialogProps) {
   const selectedType = itemTypes.find((type) => type.id === typeId);
   const fields = selectedType
     ? getItemTypeFields(selectedType)
-    : { content: false, language: false, url: false };
+    : { content: false, language: false, markdown: false, url: false };
   const canSubmit =
     selectedType !== undefined &&
     values.title.trim() !== "" &&

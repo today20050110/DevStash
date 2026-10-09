@@ -127,3 +127,106 @@
     @apply font-sans;
     }
 }
+/* MarkdownEditor 的 Preview：react-markdown 輸出不帶 class 的原生元素，在此集中設定樣式 */
+@layer components {
+  .markdown-preview {
+    @apply text-sm leading-relaxed break-words text-foreground;
+
+    & > :first-child {
+      @apply mt-0;
+    }
+    & > :last-child {
+      @apply mb-0;
+    }
+
+    & :where(p, ul, ol, blockquote, pre, table) {
+      @apply my-3;
+    }
+
+    & h1 {
+      @apply mt-6 mb-3 border-b pb-1.5 text-2xl font-bold;
+    }
+    & h2 {
+      @apply mt-6 mb-3 border-b pb-1 text-xl font-semibold;
+    }
+    & h3 {
+      @apply mt-5 mb-2 text-lg font-semibold;
+    }
+    & h4 {
+      @apply mt-4 mb-2 text-base font-semibold;
+    }
+    & h5 {
+      @apply mt-4 mb-2 text-sm font-semibold;
+    }
+    & h6 {
+      @apply mt-4 mb-2 text-sm font-semibold text-muted-foreground;
+    }
+
+    & ul {
+      @apply list-disc pl-6;
+    }
+    & ol {
+      @apply list-decimal pl-6;
+    }
+    & li + li {
+      @apply mt-1;
+    }
+    & li > :where(ul, ol) {
+      @apply my-1;
+    }
+    & ul ul {
+      @apply list-[circle];
+    }
+    /* GFM 的工作清單：核取方塊取代項目符號 */
+    & li:has(> input[type="checkbox"]) {
+      @apply list-none;
+    }
+    & input[type="checkbox"] {
+      @apply mr-2 -ml-5 align-middle;
+    }
+
+    & blockquote {
+      @apply border-l-4 border-muted-foreground/40 pl-4 text-muted-foreground;
+    }
+
+    & a {
+      @apply text-blue-400 underline underline-offset-4 hover:text-blue-300;
+    }
+
+    & code {
+      @apply rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em];
+    }
+    & pre {
+      @apply overflow-x-auto rounded-md border bg-background p-3 font-mono text-xs leading-relaxed;
+    }
+    & pre code {
+      @apply bg-transparent p-0 text-[inherit];
+    }
+
+    & table {
+      @apply block w-max max-w-full overflow-x-auto border-collapse text-sm;
+    }
+    & :where(th, td) {
+      @apply border px-3 py-1.5 text-left;
+    }
+    & th {
+      @apply bg-muted font-semibold;
+    }
+
+    & hr {
+      @apply my-5 border-border;
+    }
+    & img {
+      @apply max-w-full rounded-md;
+    }
+    & del {
+      @apply text-muted-foreground;
+    }
+  }
+}
+
+/* 細捲軸，對齊 CodeEditor 的 Monaco 主題（半透明白、無軌道） */
+@utility scrollbar-subtle {
+  scrollbar-width: thin;
+  scrollbar-color: oklch(1 0 0 / 15%) transparent;
+}
