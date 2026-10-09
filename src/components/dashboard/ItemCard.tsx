@@ -66,8 +66,10 @@ export function ItemCard({ item }: ItemCardProps) {
         >
           {formatDate(item.createdAt)}
         </time>
-        {/* 有檔案的 item（圖片、檔案）沒有文字可複製 */}
-        {!item.file && <CopyItemButton id={item.id} title={item.title} />}
+        {/* 圖片、檔案與沒有內容的 item 沒有東西可複製 */}
+        {item.hasCopyValue && (
+          <CopyItemButton id={item.id} title={item.title} />
+        )}
       </CardContent>
     </Card>
   );

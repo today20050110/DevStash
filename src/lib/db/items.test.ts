@@ -515,4 +515,37 @@ describe("getItemsByType", () => {
     const [item] = await getItemsByType("user-1", "type-1");
     expect(item.file).toBeNull();
   });
+
+  it("另以一次查詢判斷哪些 item 有 content 或 url 可複製，限定同一批 id 與擁有者", async () => {
+    findMany
+      .mockResolvedValueOnce([
+        { ...summaryRow(null), id: "with-content" },
+        { ...summaryRow(null), id: "empty-note" },
+      ] as never)
+      .mockResolvedValueOnce([{ id: "with-content" }] as never);
+
+    const items = await getItemsByType("user-1", "type-1");
+
+    expect(findMany).toHaveBeenCalledTimes(2);
+    expect(findMany.mock.calls[1][0]).toEqual({
+      where: {
+        id: { in: ["with-content", "empty-note"] },
+        userId: "user-1",
+        OR: [
+          { content: { not: null, notIn: [""] } },
+          { url: { not: null, notIn: [""] } },
+        ],
+      },
+      select: { id: true },
+    });
+    expect(items.map((item) => item.hasCopyValue)).toEqual([true, false]);
+  });
+
+  it("列表為空時不再查詢可複製的 item", async () => {
+    findMany.mockResolvedValueOnce([]);
+
+    await getItemsByType("user-1", "type-1");
+
+    expect(findMany).toHaveBeenCalledTimes(1);
+  });
 });

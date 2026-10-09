@@ -4,6 +4,7 @@ import "dotenv/config";
 
 import { PrismaClient, type Prisma } from "../src/generated/prisma/client";
 import type { ItemKind } from "../src/generated/prisma/enums";
+import { queueFileDeletions } from "../src/lib/db/user-deletion";
 import { toTagSlug } from "../src/lib/tags";
 
 const connectionString =
@@ -571,6 +572,8 @@ async function seedDemoCollections(
   // 包在同一個 transaction 裡，失敗時不會留下半套資料
   const tagCount = await prisma.$transaction(
     async (tx) => {
+      // demo 帳號內上傳過的檔案：硬刪除前先登記，否則 R2 物件會失去所有參照
+      await queueFileDeletions(tx, { userId });
       await tx.item.deleteMany({ where: { userId } });
       await tx.collection.deleteMany({ where: { userId } });
       await tx.tag.deleteMany({ where: { userId } });

@@ -39,6 +39,8 @@ export interface ItemSummary {
   tags: string[];
   /** 上傳的檔案資訊（FILE kind）；型別列表頁依此顯示圖片縮圖或檔案列 */
   file: ItemFile | null;
+  /** 有 content 或 url 可複製；列表不載入 content 本身，卡片依此決定是否顯示複製按鈕 */
+  hasCopyValue: boolean;
 }
 
 export interface ItemCollectionSummary {

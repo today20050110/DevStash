@@ -4,7 +4,7 @@
 - **稽核方式**：`code-scanner` agent 掃描，所有項目再由主 session 對照原始碼確認；排除尚未實作的功能、已確認的設計決定、NextAuth／Next.js 已處理的部分，以及 `AUTH_SECURITY_REVIEW.md` 已處理或已接受的項目
 - **稽核範圍**：`src/`（不含 `src/generated`）、`prisma/seed.ts`、`scripts/`
 - **結果摘要**：Critical 0／High 0／Medium 2／Low 7，另有 8 處重複程式碼
-- **處理狀態**：M1、M2、L1 已於 `fix/item-input-limits` 修正；其餘未處理
+- **處理狀態**：M1、M2、L1 已於 `fix/item-input-limits` 修正；L3、L6 已於 `fix/copy-button-and-seed-files` 修正；其餘未處理
 
 ## Medium
 
@@ -35,11 +35,11 @@
 - **情境**：選圖後在簽發網址的往返內關閉 dialog 或切換型別，之後仍會 PUT 到 R2 並 `onChange`，把結果寫回已重設的表單。伺服器端有驗證，不是安全問題
 - **建議**：effect 內以 `cancelled` ref 標記，`requestUploadUrl` 回來後先檢查；或讓 fetch 帶 `AbortController.signal`
 
-### L3. 沒有 content 的 TEXT item，卡片上的複製按鈕一定失敗
+### L3. 沒有 content 的 TEXT item，卡片上的複製按鈕一定失敗（已修正）
 
 - **位置**：`src/components/dashboard/ItemCard.tsx`（只依 `!item.file` 顯示）、`src/components/items/CopyItemButton.tsx`
 - **情境**：只有標題的 note／snippet 也顯示複製按鈕，點了多一次 API 請求後跳出「Couldn't copy …」；drawer 的 Copy 在沒有值時是停用的，兩邊不一致
-- **建議**：列表補一個 `hasCopyValue`（例如 `content IS NOT NULL` 的計算欄位，或補上短字串 `url`）
+- **修正**：`ItemSummary` 新增 `hasCopyValue`。Prisma 無法 select 計算欄位，`findItemSummaries` 另以一次只回傳 id 的查詢（同一批 id、同一位使用者、content 或 url 非空）判斷，整個列表只多一次查詢；卡片改依 `hasCopyValue` 顯示按鈕
 
 ### L4. 每個頁面請求都有重複或串列的查詢
 
@@ -54,11 +54,11 @@
 - **量測**：含 micromark 的 chunk 約 181 KB（gzip 約 55 KB），出現在 dashboard、`/items/[type]`、`/profile`
 - **建議**：比照 `CodeEditor`，以 `next/dynamic` 延後載入
 
-### L6. 重跑 demo seed 會讓 R2 物件成為孤兒
+### L6. 重跑 demo seed 會讓 R2 物件成為孤兒（已修正）
 
 - **位置**：`prisma/seed.ts` 的 `tx.item.deleteMany({ where: { userId } })`
 - **問題**：同樣是硬刪除，`deleteUsersAndContent`（`src/lib/db/user-deletion.ts`）會先把有 `storageKey` 的 item 寫進 `PendingDeletion`，seed 沒有。Development 的 demo 帳號目前保留 3 張圖片與 5 個檔案的測試物件，下一次 `SEED_DEMO=1` 就會失去所有參照
-- **建議**：deleteMany 之前比照 user-deletion 寫入 `pendingDeletion.createMany`
+- **修正**：把登記邏輯抽成 `src/lib/db/user-deletion.ts` 的 `queueFileDeletions(tx, where)`，`deleteUsersAndContent` 與 seed 共用；seed 在 deleteMany 之前呼叫
 
 ### L7. `src/lib/db/items.ts`（524 行）可以拆分
 

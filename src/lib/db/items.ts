@@ -109,6 +109,34 @@ interface ItemSummaryQuery {
   take?: number;
 }
 
+const NON_EMPTY: Prisma.StringNullableFilter<"Item"> = {
+  not: null,
+  notIn: [""],
+};
+
+/**
+ * 有 content 或 url 可複製的 item（卡片的複製按鈕依此顯示）。列表刻意不載入
+ * content（可能很大），Prisma 又無法 select 計算欄位，所以另以一次只回傳 id 的
+ * 查詢判斷；整個列表只多一次查詢，不是每張卡片一次
+ */
+async function findCopyableItemIds(
+  userId: string,
+  ids: string[],
+): Promise<Set<string>> {
+  if (ids.length === 0) {
+    return new Set();
+  }
+  const rows = await prisma.item.findMany({
+    where: {
+      id: { in: ids },
+      userId,
+      OR: [{ content: NON_EMPTY }, { url: NON_EMPTY }],
+    },
+    select: { id: true },
+  });
+  return new Set(rows.map((row) => row.id));
+}
+
 /**
  * 卡片用的 item 查詢。型別與標籤隨 item 一次載入，不是每張卡片各查一次。
  * userId 與 deletedAt 放在最後，呼叫端傳入的條件無法覆寫。
@@ -117,8 +145,9 @@ async function findItemSummaries(
   userId: string,
   { where, orderBy, take }: ItemSummaryQuery,
 ): Promise<ItemSummary[]> {
+  const owned = { userId, deletedAt: null };
   const items = await prisma.item.findMany({
-    where: { ...where, userId, deletedAt: null },
+    where: { ...where, ...owned },
     // 同一次巢狀 create 建立的 items 時間戳相同，以 id 決定同值時的順序，
     // 否則重新整理後列表順序可能改變
     orderBy: [orderBy, { id: "desc" }],
@@ -144,6 +173,11 @@ async function findItemSummaries(
     },
   });
 
+  const copyable = await findCopyableItemIds(
+    userId,
+    items.map((item) => item.id),
+  );
+
   return items.map(
     ({
       itemType,
@@ -157,6 +191,7 @@ async function findItemSummaries(
       ...item,
       type: itemType,
       tags: tags.map(({ tag }) => tag.name),
+      hasCopyValue: copyable.has(item.id),
       // storageKey 只用來判斷有沒有檔案，不送到前端
       file: storageKey ? toItemFile({ fileName, fileSize, mimeType }) : null,
     }),
