@@ -9,7 +9,8 @@ import { TypeIcon } from "@/components/dashboard/TypeIcon";
 import { FileList } from "@/components/items/FileList";
 import { ImageCard } from "@/components/items/ImageCard";
 import { getCurrentUserId } from "@/lib/current-user";
-import { getItemTypeBySlug, getItemsByType } from "@/lib/db/items";
+import { getItemTypeBySlug } from "@/lib/db/item-types";
+import { getItemsByType } from "@/lib/db/items";
 import { getUploadCategory, isImageMimeType } from "@/lib/file-types";
 
 /**

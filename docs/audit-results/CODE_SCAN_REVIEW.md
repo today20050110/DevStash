@@ -4,7 +4,7 @@
 - **稽核方式**：`code-scanner` agent 掃描，所有項目再由主 session 對照原始碼確認；排除尚未實作的功能、已確認的設計決定、NextAuth／Next.js 已處理的部分，以及 `AUTH_SECURITY_REVIEW.md` 已處理或已接受的項目
 - **稽核範圍**：`src/`（不含 `src/generated`）、`prisma/seed.ts`、`scripts/`
 - **結果摘要**：Critical 0／High 0／Medium 2／Low 7，另有 8 處重複程式碼
-- **處理狀態**：M1、M2、L1 已於 `fix/item-input-limits` 修正；L3、L6 已於 `fix/copy-button-and-seed-files` 修正；L2、L5 已於 `fix/upload-cancel-and-markdown-lazy` 修正；其餘未處理
+- **處理狀態**：M1、M2、L1 已於 `fix/item-input-limits` 修正；L3、L6 已於 `fix/copy-button-and-seed-files` 修正；L2、L5 已於 `fix/upload-cancel-and-markdown-lazy` 修正；L4、L7 已於 `refactor/queries-and-items-split` 處理；重複程式碼未處理
 
 ## Medium
 
@@ -41,12 +41,12 @@
 - **情境**：只有標題的 note／snippet 也顯示複製按鈕，點了多一次 API 請求後跳出「Couldn't copy …」；drawer 的 Copy 在沒有值時是停用的，兩邊不一致
 - **修正**：`ItemSummary` 新增 `hasCopyValue`。Prisma 無法 select 計算欄位，`findItemSummaries` 另以一次只回傳 id 的查詢（同一批 id、同一位使用者、content 或 url 非空）判斷，整個列表只多一次查詢；卡片改依 `hasCopyValue` 顯示按鈕
 
-### L4. 每個頁面請求都有重複或串列的查詢
+### L4. 每個頁面請求都有重複或串列的查詢（已修正）
 
 - `src/app/(app)/layout.tsx`：`getCurrentUser()`、`getUserIsPro()`、`getCreatableItemTypes()` 三個串列往返，User 表讀兩次
 - `/profile` 一次請求查了三次系統型別（layout、sidebar、page），`groupBy` 也重複一次
 - `src/lib/uploads.ts` 的 `prepareUpload` 呼叫 `getItemCounts`，多跑一次用不到的 favorites `count`
-- **建議**：`getCurrentUser` 一併 select 方案欄位、以 `isPro` 在記憶體判斷；`getSystemItemTypes`／`getSystemItemTypesWithCounts` 以 React `cache()` 包起來；`prepareUpload` 改用單一 `count`
+- **修正**：`getCurrentUser` 一併 select `plan`、`subscriptionStatus`、`currentPeriodEnd`，`CurrentUser` 新增 `isPro`，layout 不再呼叫 `getUserIsPro`（User 表每個請求只讀一次）；`getSystemItemTypes`、`getSystemItemTypesWithCounts` 以 React `cache()` 包起來，`/profile` 的系統型別與 `groupBy` 各只查一次；`prepareUpload` 改用新的 `countActiveItems`（單一 `count`）。server action 的 `getUserIsPro` 未改（報告未列，actions 不在 RSC 的 `cache()` 範圍內）
 
 ### L5. react-markdown 與 remark-gfm 在每個登入後的頁面一開始就載入（已修正）
 
@@ -60,9 +60,11 @@
 - **問題**：同樣是硬刪除，`deleteUsersAndContent`（`src/lib/db/user-deletion.ts`）會先把有 `storageKey` 的 item 寫進 `PendingDeletion`，seed 沒有。Development 的 demo 帳號目前保留 3 張圖片與 5 個檔案的測試物件，下一次 `SEED_DEMO=1` 就會失去所有參照
 - **修正**：把登記邏輯抽成 `src/lib/db/user-deletion.ts` 的 `queueFileDeletions(tx, where)`，`deleteUsersAndContent` 與 seed 共用；seed 在 deleteMany 之前呼叫
 
-### L7. `src/lib/db/items.ts`（524 行）可以拆分
+### L7. `src/lib/db/items.ts`（524 行）可以拆分（已處理）
 
-型別查詢、列表與單筆讀取、寫入、檔案相關四類職責放在同一檔。建議拆成 `db/item-types.ts`、`db/items.ts`（讀取）、`db/item-mutations.ts`，測試檔跟著拆。
+型別查詢、列表與單筆讀取、寫入、檔案相關四類職責放在同一檔。
+
+- **處理**：依建議拆成 `db/item-types.ts`（137 行：系統型別、`getItemTypeBySlug`、`getCreatableItemTypes`、`findCreatableItemType`）、`db/items.ts`（263 行：列表、drawer、下載代理、`isStorageKeyInUse`、`countActiveItems`）、`db/item-mutations.ts`（186 行：`createItem`、`updateItem`、`softDeleteItem`、`recordPendingDeletion`）。函式本體以腳本依標記原樣搬移，測試檔跟著拆成三個（32 個測試全數保留）
 
 ## 重複的程式碼
 

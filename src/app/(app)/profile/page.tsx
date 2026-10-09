@@ -16,7 +16,8 @@ import {
 } from "@/components/ui/card";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCollectionCounts } from "@/lib/db/collections";
-import { getItemCounts, getSystemItemTypesWithCounts } from "@/lib/db/items";
+import { getSystemItemTypesWithCounts } from "@/lib/db/item-types";
+import { getItemCounts } from "@/lib/db/items";
 import { getUserProfile } from "@/lib/db/users";
 import { firstParam } from "@/lib/search-params";
 

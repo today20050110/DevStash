@@ -5,12 +5,12 @@ import { z } from "zod";
 import { getCurrentUserId } from "@/lib/current-user";
 import {
   createItem as createItemInDb,
-  findCreatableItemType,
   recordPendingDeletion,
   softDeleteItem,
   updateItem as updateItemInDb,
   type NewItemFile,
-} from "@/lib/db/items";
+} from "@/lib/db/item-mutations";
+import { findCreatableItemType } from "@/lib/db/item-types";
 import { getUserIsPro } from "@/lib/db/users";
 import { createItemSchema, updateItemSchema } from "@/lib/item-schemas";
 import { canUploadFiles, checkContentSize, getItemLimit } from "@/lib/plan";

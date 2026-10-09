@@ -1,11 +1,8 @@
 import { randomUUID } from "node:crypto";
 
-import {
-  findCreatableItemType,
-  getItemCounts,
-  isStorageKeyInUse,
-  type NewItemFile,
-} from "@/lib/db/items";
+import type { NewItemFile } from "@/lib/db/item-mutations";
+import { findCreatableItemType } from "@/lib/db/item-types";
+import { countActiveItems, isStorageKeyInUse } from "@/lib/db/items";
 import { getUserIsPro } from "@/lib/db/users";
 import {
   buildStorageKey,
@@ -51,7 +48,7 @@ export async function prepareUpload(
     };
   }
   const limit = getItemLimit(pro);
-  if (limit !== null && (await getItemCounts(userId)).items >= limit) {
+  if (limit !== null && (await countActiveItems(userId)) >= limit) {
     return {
       ok: false,
       reason: "limit-reached",

@@ -4,11 +4,11 @@ import { createItem, deleteItem, updateItem } from "@/actions/items";
 import { getCurrentUserId } from "@/lib/current-user";
 import {
   createItem as createItemInDb,
-  findCreatableItemType,
   recordPendingDeletion,
   softDeleteItem,
   updateItem as updateItemInDb,
-} from "@/lib/db/items";
+} from "@/lib/db/item-mutations";
+import { findCreatableItemType } from "@/lib/db/item-types";
 import { getUserIsPro } from "@/lib/db/users";
 import { FREE_CONTENT_LIMIT_BYTES } from "@/lib/plan";
 import { deleteObject } from "@/lib/r2";
@@ -16,16 +16,16 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { verifyUploadedFile } from "@/lib/uploads";
 import type { CreatableItemType, ItemDetail } from "@/types/items";
 
-// action 的測試只驗證流程（驗證、登入、錯誤對應），資料庫邏輯在 src/lib/db/items.test.ts
+// action 的測試只驗證流程（驗證、登入、錯誤對應），資料庫邏輯在 src/lib/db/ 的測試
 vi.mock("@/lib/prisma", () => ({ prisma: {} }));
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
-vi.mock("@/lib/db/items", () => ({
+vi.mock("@/lib/db/item-mutations", () => ({
   createItem: vi.fn(),
-  findCreatableItemType: vi.fn(),
   recordPendingDeletion: vi.fn(),
   softDeleteItem: vi.fn(),
   updateItem: vi.fn(),
 }));
+vi.mock("@/lib/db/item-types", () => ({ findCreatableItemType: vi.fn() }));
 vi.mock("@/lib/db/users", () => ({ getUserIsPro: vi.fn() }));
 vi.mock("@/lib/r2", () => ({ deleteObject: vi.fn() }));
 // getFileCategory 是純函式，保留原本的實作；R2 與資料庫的確認另外 mock

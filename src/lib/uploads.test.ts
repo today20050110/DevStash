@@ -1,19 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  findCreatableItemType,
-  getItemCounts,
-  isStorageKeyInUse,
-} from "@/lib/db/items";
+import { findCreatableItemType } from "@/lib/db/item-types";
+import { countActiveItems, isStorageKeyInUse } from "@/lib/db/items";
 import { getUserIsPro } from "@/lib/db/users";
 import { createUploadUrl, deleteObject, headObject } from "@/lib/r2";
 import { prepareUpload, verifyUploadedFile } from "@/lib/uploads";
 import type { CreatableItemType } from "@/types/items";
 
 vi.mock("@/lib/prisma", () => ({ prisma: {} }));
+vi.mock("@/lib/db/item-types", () => ({ findCreatableItemType: vi.fn() }));
 vi.mock("@/lib/db/items", () => ({
-  findCreatableItemType: vi.fn(),
-  getItemCounts: vi.fn(),
+  countActiveItems: vi.fn(),
   isStorageKeyInUse: vi.fn(),
 }));
 vi.mock("@/lib/db/users", () => ({ getUserIsPro: vi.fn() }));
@@ -40,7 +37,7 @@ describe("prepareUpload", () => {
   beforeEach(() => {
     vi.mocked(findCreatableItemType).mockResolvedValue(IMAGES);
     vi.mocked(getUserIsPro).mockResolvedValue(false);
-    vi.mocked(getItemCounts).mockResolvedValue({ items: 10, favoriteItems: 0 });
+    vi.mocked(countActiveItems).mockResolvedValue(10);
     vi.mocked(createUploadUrl).mockResolvedValue("https://r2.example/signed");
   });
 
@@ -72,7 +69,7 @@ describe("prepareUpload", () => {
   });
 
   it("Free 方案達到項目上限時，上傳前就拒絕", async () => {
-    vi.mocked(getItemCounts).mockResolvedValue({ items: 50, favoriteItems: 0 });
+    vi.mocked(countActiveItems).mockResolvedValue(50);
 
     await expect(prepareUpload("user-1", input)).resolves.toMatchObject({
       ok: false,
@@ -83,10 +80,7 @@ describe("prepareUpload", () => {
 
   it("Pro 方案不檢查項目數", async () => {
     vi.mocked(getUserIsPro).mockResolvedValue(true);
-    vi.mocked(getItemCounts).mockResolvedValue({
-      items: 500,
-      favoriteItems: 0,
-    });
+    vi.mocked(countActiveItems).mockResolvedValue(500);
 
     await expect(prepareUpload("user-1", input)).resolves.toMatchObject({
       ok: true,

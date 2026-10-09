@@ -27,7 +27,7 @@ import {
 import {
   getSystemItemTypes,
   getSystemItemTypesWithCounts,
-} from "@/lib/db/items";
+} from "@/lib/db/item-types";
 import type { CollectionSummary } from "@/types/collections";
 import type { ItemTypeWithCount } from "@/types/items";
 import type { CurrentUser } from "@/types/user";

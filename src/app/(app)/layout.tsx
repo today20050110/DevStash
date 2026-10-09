@@ -6,8 +6,7 @@ import { Topbar } from "@/components/dashboard/Topbar";
 import { ItemDrawerProvider } from "@/components/items/ItemDrawerProvider";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { getCurrentUser } from "@/lib/current-user";
-import { getCreatableItemTypes } from "@/lib/db/items";
-import { getUserIsPro } from "@/lib/db/users";
+import { getCreatableItemTypes } from "@/lib/db/item-types";
 import { canUploadFiles } from "@/lib/plan";
 
 // 登入後的頁面（/dashboard、/profile）共用側邊欄與頂部列；route group 不影響網址
@@ -18,9 +17,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   if (!user) {
     redirect(SIGN_IN_PATH);
   }
-  const itemTypes = await getCreatableItemTypes(
-    canUploadFiles(await getUserIsPro(user.id)),
-  );
+  const itemTypes = await getCreatableItemTypes(canUploadFiles(user.isPro));
 
   return (
     <SidebarProvider>

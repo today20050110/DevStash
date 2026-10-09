@@ -1,6 +1,7 @@
 import { cache } from "react";
 
 import { auth } from "@/auth";
+import { isPro } from "@/lib/plan";
 import { prisma } from "@/lib/prisma";
 import type { CurrentUser } from "@/types/user";
 
@@ -27,12 +28,21 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
       email: true,
       image: true,
       sessionVersion: true,
+      plan: true,
+      subscriptionStatus: true,
+      currentPeriodEnd: true,
     },
   });
   if (!user || user.sessionVersion !== session.user.sessionVersion) {
     return null;
   }
-  return { id: user.id, name: user.name, email: user.email, image: user.image };
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    image: user.image,
+    isPro: isPro(user),
+  };
 });
 
 export async function getCurrentUserId(): Promise<string | null> {
