@@ -62,10 +62,12 @@ export function FileUpload({
   const [dragging, setDragging] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const xhrRef = useRef<XMLHttpRequest | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
-  // 關閉 dialog 或切換型別時中止進行中的上傳
-  useEffect(() => () => xhrRef.current?.abort(), []);
+  // 關閉 dialog 或切換型別時中止進行中的上傳。取得上傳網址與 PUT 兩段都要能中止：
+  // 只中止 XHR 的話，在等 /api/uploads 回應期間 unmount 時 XHR 還不存在，
+  // 上傳會照常完成並把結果寫回已重設的表單
+  useEffect(() => () => abortRef.current?.abort(), []);
   // 預覽用的 object URL 不再顯示時釋放
   useEffect(() => {
     const previewUrl = value?.previewUrl;
@@ -88,15 +90,21 @@ export function FileUpload({
       return;
     }
 
+    const controller = new AbortController();
+    abortRef.current = controller;
     setProgress(0);
     onUploadingChange(true);
     try {
-      const target = await requestUploadUrl(itemTypeId, file);
+      const target = await requestUploadUrl(
+        itemTypeId,
+        file,
+        controller.signal,
+      );
       await putFile(
         target.uploadUrl,
         target.mimeType,
         file,
-        xhrRef,
+        controller.signal,
         setProgress,
       );
       onChange({
@@ -117,7 +125,7 @@ export function FileUpload({
         );
       }
     } finally {
-      xhrRef.current = null;
+      abortRef.current = null;
       setProgress(null);
       onUploadingChange(false);
     }
@@ -251,11 +259,17 @@ function FileError({ id, message }: { id: string; message: string }) {
   );
 }
 
-async function requestUploadUrl(itemTypeId: string, file: File) {
+async function requestUploadUrl(
+  itemTypeId: string,
+  file: File,
+  signal: AbortSignal,
+) {
+  // 中止時 fetch 以 AbortError reject，呼叫端不顯示錯誤
   const response = await fetch("/api/uploads", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ itemTypeId, fileName: file.name, size: file.size }),
+    signal,
   });
   const body = (await response
     .json()
@@ -271,12 +285,17 @@ function putFile(
   url: string,
   mimeType: string,
   file: File,
-  xhrRef: { current: XMLHttpRequest | null },
+  signal: AbortSignal,
   onProgress: (percent: number) => void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
+    // 回應 json 解析完到這裡之間也可能已被中止
+    if (signal.aborted) {
+      reject(new DOMException("Upload aborted", "AbortError"));
+      return;
+    }
     const xhr = new XMLHttpRequest();
-    xhrRef.current = xhr;
+    signal.addEventListener("abort", () => xhr.abort(), { once: true });
     xhr.open("PUT", url);
     xhr.setRequestHeader("Content-Type", mimeType);
     xhr.upload.onprogress = (event) => {

@@ -1,14 +1,26 @@
 "use client";
 
 import { useId, useState } from "react";
-import ReactMarkdown, { type Components } from "react-markdown";
-import remarkGfm from "remark-gfm";
+import dynamic from "next/dynamic";
 import { Check, Copy } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
-import { isHttpUrl } from "@/lib/url";
 import { cn } from "@/lib/utils";
+
+// react-markdown 與 remark-gfm 只在顯示預覽時才下載；Write 分頁是一般 textarea，用不到
+const MarkdownPreview = dynamic(
+  () => import("@/components/items/MarkdownPreview"),
+  {
+    loading: () => (
+      <div className="space-y-2" aria-hidden>
+        <Skeleton className="h-4 w-3/4" />
+        <Skeleton className="h-4 w-1/2" />
+      </div>
+    ),
+  },
+);
 
 type Tab = "write" | "preview";
 
@@ -128,47 +140,6 @@ export function MarkdownEditor({
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-/**
- * 不渲染原始 HTML（未加 rehype-raw）；連結與圖片只接受 http(s)，
- * 相對路徑與其他 scheme 以純文字顯示，避免對本站發出請求或執行程式碼。
- */
-const MARKDOWN_COMPONENTS: Components = {
-  a: ({ href, children }) =>
-    href && isHttpUrl(href) ? (
-      <a href={href} target="_blank" rel="noopener noreferrer">
-        {children}
-      </a>
-    ) : (
-      <span>{children}</span>
-    ),
-  img: ({ src, alt }) =>
-    typeof src === "string" && isHttpUrl(src) ? (
-      // 使用者內容中的任意外部圖片，無法事先設定 next/image 的 remotePatterns
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={src}
-        alt={alt ?? ""}
-        loading="lazy"
-        referrerPolicy="no-referrer"
-      />
-    ) : (
-      <span>{alt}</span>
-    ),
-};
-
-function MarkdownPreview({ content }: { content: string }) {
-  return (
-    <div className="markdown-preview">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={MARKDOWN_COMPONENTS}
-      >
-        {content}
-      </ReactMarkdown>
     </div>
   );
 }

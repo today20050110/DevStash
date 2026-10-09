@@ -4,7 +4,7 @@
 - **稽核方式**：`code-scanner` agent 掃描，所有項目再由主 session 對照原始碼確認；排除尚未實作的功能、已確認的設計決定、NextAuth／Next.js 已處理的部分，以及 `AUTH_SECURITY_REVIEW.md` 已處理或已接受的項目
 - **稽核範圍**：`src/`（不含 `src/generated`）、`prisma/seed.ts`、`scripts/`
 - **結果摘要**：Critical 0／High 0／Medium 2／Low 7，另有 8 處重複程式碼
-- **處理狀態**：M1、M2、L1 已於 `fix/item-input-limits` 修正；L3、L6 已於 `fix/copy-button-and-seed-files` 修正；其餘未處理
+- **處理狀態**：M1、M2、L1 已於 `fix/item-input-limits` 修正；L3、L6 已於 `fix/copy-button-and-seed-files` 修正；L2、L5 已於 `fix/upload-cancel-and-markdown-lazy` 修正；其餘未處理
 
 ## Medium
 
@@ -29,11 +29,11 @@
 - **問題**：`where: { storageKey }` 沒有可用的索引（Item 的索引都以 `userId` 開頭），每建立一筆檔案 item 就對全站 Item 表做兩次循序掃描，其中一次在持有鎖時；也是 `project-overview.md` §4.3 的例外
 - **修正**：兩處都加上 `userId`。key 內含 userId 且呼叫端已以 `isOwnStorageKey` 確認，語意不變
 
-### L2. 取得上傳網址期間關閉 dialog 或切換型別，上傳不會中止
+### L2. 取得上傳網址期間關閉 dialog 或切換型別，上傳不會中止（已修正）
 
 - **位置**：`src/components/items/FileUpload.tsx`（unmount 時 `xhrRef.current?.abort()`；`await requestUploadUrl(...)` 期間 `xhrRef.current` 仍是 null）
 - **情境**：選圖後在簽發網址的往返內關閉 dialog 或切換型別，之後仍會 PUT 到 R2 並 `onChange`，把結果寫回已重設的表單。伺服器端有驗證，不是安全問題
-- **建議**：effect 內以 `cancelled` ref 標記，`requestUploadUrl` 回來後先檢查；或讓 fetch 帶 `AbortController.signal`
+- **修正**：每次上傳建立一個 `AbortController`，unmount 時 abort；`requestUploadUrl` 的 fetch 帶 `signal`，`putFile` 在 signal 已中止時直接 reject、否則於 abort 時呼叫 `xhr.abort()`，取代原本只能中止 XHR 的 `xhrRef`
 
 ### L3. 沒有 content 的 TEXT item，卡片上的複製按鈕一定失敗（已修正）
 
@@ -48,11 +48,11 @@
 - `src/lib/uploads.ts` 的 `prepareUpload` 呼叫 `getItemCounts`，多跑一次用不到的 favorites `count`
 - **建議**：`getCurrentUser` 一併 select 方案欄位、以 `isPro` 在記憶體判斷；`getSystemItemTypes`／`getSystemItemTypesWithCounts` 以 React `cache()` 包起來；`prepareUpload` 改用單一 `count`
 
-### L5. react-markdown 與 remark-gfm 在每個登入後的頁面一開始就載入
+### L5. react-markdown 與 remark-gfm 在每個登入後的頁面一開始就載入（已修正）
 
 - **位置**：`src/components/items/ItemFormFields.tsx`、`ItemDrawerSections.tsx` 靜態 import `MarkdownEditor`，經由 layout 的 `Topbar → NewItemDialog` 與 `ItemDrawerProvider → ItemDrawer` 引入
 - **量測**：含 micromark 的 chunk 約 181 KB（gzip 約 55 KB），出現在 dashboard、`/items/[type]`、`/profile`
-- **建議**：比照 `CodeEditor`，以 `next/dynamic` 延後載入
+- **修正**：預覽拆成 `src/components/items/MarkdownPreview.tsx`，`MarkdownEditor` 以 `next/dynamic` 載入（Write 分頁是一般 textarea，不需要它）。production build 中該 chunk（約 144 KB，gzip 約 43 KB）只出現在 `react-loadable-manifest.json`，不在任何頁面的 client reference manifest
 
 ### L6. 重跑 demo seed 會讓 R2 物件成為孤兒（已修正）
 
