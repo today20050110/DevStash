@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { createItem, type CreateItemField } from "@/actions/items";
 import { TypeIcon } from "@/components/dashboard/TypeIcon";
+import { FileUpload, type UploadedFile } from "@/components/items/FileUpload";
 import {
   EMPTY_ITEM_FORM_VALUES,
   ItemFormFields,
@@ -23,13 +24,14 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { getUploadCategory } from "@/lib/file-types";
 import { getItemTypeFields } from "@/lib/item-fields";
 import { cn } from "@/lib/utils";
 import { parseTagInput } from "@/lib/tags";
 import type { CreatableItemType } from "@/types/items";
 
 interface NewItemDialogProps {
-  /** 可新增的型別（不含 FILE kind），第一個為預設 */
+  /** 可新增的型別（方案不能上傳時不含 FILE kind），第一個為預設 */
   itemTypes: CreatableItemType[];
 }
 
@@ -42,27 +44,52 @@ export function NewItemDialog({ itemTypes }: NewItemDialogProps) {
   const [typeId, setTypeId] = useState(itemTypes[0]?.id ?? "");
   const [values, setValues] = useState(EMPTY_ITEM_FORM_VALUES);
   const [errors, setErrors] = useState<CreateErrors>({});
+  const [upload, setUpload] = useState<UploadedFile | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [isCreating, startCreating] = useTransition();
 
   const selectedType = itemTypes.find((type) => type.id === typeId);
   const fields = selectedType
     ? getItemTypeFields(selectedType)
-    : { content: false, language: false, markdown: false, url: false };
+    : {
+        content: false,
+        language: false,
+        markdown: false,
+        url: false,
+        file: false,
+      };
+  const uploadCategory =
+    fields.file && selectedType ? getUploadCategory(selectedType.slug) : null;
   const canSubmit =
     selectedType !== undefined &&
     values.title.trim() !== "" &&
-    !(fields.url && values.url.trim() === "");
+    !(fields.url && values.url.trim() === "") &&
+    !(fields.file && (upload === null || isUploading));
+
+  function reset() {
+    setTypeId(itemTypes[0]?.id ?? "");
+    setValues(EMPTY_ITEM_FORM_VALUES);
+    setErrors({});
+    setUpload(null);
+  }
 
   function handleOpenChange(next: boolean) {
-    // 建立中不讓 Esc／點外面關閉，避免看不到結果
+    // 建立中不讓 Esc／點外面關閉，避免看不到結果；上傳中關閉會中止上傳
     if (isCreating) {
       return;
     }
     setOpen(next);
     if (!next) {
-      setTypeId(itemTypes[0]?.id ?? "");
-      setValues(EMPTY_ITEM_FORM_VALUES);
-      setErrors({});
+      reset();
+    }
+  }
+
+  function handleUploadChange(file: UploadedFile | null) {
+    setUpload(file);
+    setErrors((previous) => ({ ...previous, file: undefined }));
+    // 標題還沒填時以檔名（去掉副檔名）預填
+    if (file && values.title.trim() === "") {
+      setValue("title", file.fileName.replace(/\.[^.]+$/, ""));
     }
   }
 
@@ -74,6 +101,8 @@ export function NewItemDialog({ itemTypes }: NewItemDialogProps) {
     setTypeId(id);
     // 上一個型別的欄位錯誤可能屬於現在看不到的欄位
     setErrors({});
+    // 圖片與檔案的白名單不同；已上傳的檔案只屬於原本的型別
+    setUpload(null);
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -83,6 +112,8 @@ export function NewItemDialog({ itemTypes }: NewItemDialogProps) {
         itemTypeId: typeId,
         ...values,
         tags: parseTagInput(values.tags),
+        storageKey: fields.file ? upload?.storageKey : undefined,
+        fileName: fields.file ? upload?.fileName : undefined,
       });
       if (!result.success || !result.data) {
         setErrors(result.fieldErrors ?? {});
@@ -91,9 +122,7 @@ export function NewItemDialog({ itemTypes }: NewItemDialogProps) {
       }
       toast.success(`Created "${result.data.title}"`);
       setOpen(false);
-      setTypeId(itemTypes[0]?.id ?? "");
-      setValues(EMPTY_ITEM_FORM_VALUES);
-      setErrors({});
+      reset();
       // 卡片列表、統計與側邊欄數量都是 server component
       router.refresh();
     });
@@ -128,6 +157,23 @@ export function NewItemDialog({ itemTypes }: NewItemDialogProps) {
               onChange={selectType}
               error={errors.itemTypeId}
             />
+            {uploadCategory && selectedType && (
+              <section className="space-y-2">
+                <h3 className="text-sm font-medium text-muted-foreground">
+                  {uploadCategory === "image" ? "Image" : "File"}
+                </h3>
+                <FileUpload
+                  // 換型別時重新掛載，進行中的上傳一併中止
+                  key={selectedType.id}
+                  category={uploadCategory}
+                  itemTypeId={selectedType.id}
+                  value={upload}
+                  onChange={handleUploadChange}
+                  onUploadingChange={setIsUploading}
+                  error={errors.file}
+                />
+              </section>
+            )}
             <ItemFormFields
               fields={fields}
               values={values}

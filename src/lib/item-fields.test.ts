@@ -10,6 +10,7 @@ describe("getItemTypeFields", () => {
         language: false,
         markdown: true,
         url: false,
+        file: false,
       });
     }
   });
@@ -36,6 +37,17 @@ describe("getItemTypeFields", () => {
       language: false,
       markdown: false,
       url: true,
+      file: false,
+    });
+  });
+
+  it("FILE kind only has the file field", () => {
+    expect(getItemTypeFields({ kind: "FILE", slug: "images" })).toEqual({
+      content: false,
+      language: false,
+      markdown: false,
+      url: false,
+      file: true,
     });
   });
 });

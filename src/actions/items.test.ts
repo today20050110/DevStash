@@ -5,12 +5,15 @@ import { getCurrentUserId } from "@/lib/current-user";
 import {
   createItem as createItemInDb,
   findCreatableItemType,
+  recordPendingDeletion,
   softDeleteItem,
   updateItem as updateItemInDb,
 } from "@/lib/db/items";
 import { getUserIsPro } from "@/lib/db/users";
 import { FREE_CONTENT_LIMIT_BYTES } from "@/lib/plan";
+import { deleteObject } from "@/lib/r2";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { verifyUploadedFile } from "@/lib/uploads";
 import type { CreatableItemType, ItemDetail } from "@/types/items";
 
 // action 的測試只驗證流程（驗證、登入、錯誤對應），資料庫邏輯在 src/lib/db/items.test.ts
@@ -19,10 +22,17 @@ vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 vi.mock("@/lib/db/items", () => ({
   createItem: vi.fn(),
   findCreatableItemType: vi.fn(),
+  recordPendingDeletion: vi.fn(),
   softDeleteItem: vi.fn(),
   updateItem: vi.fn(),
 }));
 vi.mock("@/lib/db/users", () => ({ getUserIsPro: vi.fn() }));
+vi.mock("@/lib/r2", () => ({ deleteObject: vi.fn() }));
+// getFileCategory 是純函式，保留原本的實作；R2 與資料庫的確認另外 mock
+vi.mock("@/lib/uploads", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/uploads")>()),
+  verifyUploadedFile: vi.fn(),
+}));
 vi.mock("@/lib/rate-limit", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/rate-limit")>()),
   checkRateLimit: vi.fn(),
@@ -44,6 +54,21 @@ const LINKS = {
   slug: "links",
   kind: "URL",
 } satisfies CreatableItemType;
+
+const IMAGES = {
+  ...SNIPPETS,
+  id: "type-images",
+  name: "Images",
+  slug: "images",
+  kind: "FILE",
+} satisfies CreatableItemType;
+
+const UPLOADED = {
+  storageKey: "users/user-1/items/0b6f0c0e-8a1d-4c8e-9a52-2d7e1f0c9b11.png",
+  fileName: "diagram.png",
+  fileSize: 2048,
+  mimeType: "image/png",
+};
 
 const NEW_ITEM = {
   itemTypeId: "type-snippets",
@@ -71,6 +96,71 @@ describe("createItem action", () => {
     });
   });
 
+  it("FILE 型別確認上傳的檔案後，連同檔案資訊建立", async () => {
+    vi.mocked(findCreatableItemType).mockResolvedValue(IMAGES);
+    vi.mocked(verifyUploadedFile).mockResolvedValue({
+      ok: true,
+      file: UPLOADED,
+    });
+
+    const result = await createItem({
+      ...NEW_ITEM,
+      itemTypeId: "type-images",
+      storageKey: ` ${UPLOADED.storageKey} `,
+      fileName: "diagram.png",
+    });
+
+    expect(result.success).toBe(true);
+    expect(verifyUploadedFile).toHaveBeenCalledWith(
+      "user-1",
+      "image",
+      UPLOADED.storageKey,
+      "diagram.png",
+    );
+    const [, , fields, , file] = vi.mocked(createItemInDb).mock.calls[0];
+    expect(file).toEqual(UPLOADED);
+    expect(fields).not.toHaveProperty("storageKey");
+  });
+
+  it("FILE 型別的檔案確認失敗時顯示在檔案欄位，不建立", async () => {
+    vi.mocked(findCreatableItemType).mockResolvedValue(IMAGES);
+    vi.mocked(verifyUploadedFile).mockResolvedValue({
+      ok: false,
+      error: "Upload a file first",
+    });
+
+    const result = await createItem({ ...NEW_ITEM, itemTypeId: "type-images" });
+
+    expect(result).toMatchObject({
+      success: false,
+      fieldErrors: { file: "Upload a file first" },
+    });
+    expect(createItemInDb).not.toHaveBeenCalled();
+  });
+
+  it("檔案在建立時已被其他 item 使用，顯示在檔案欄位", async () => {
+    vi.mocked(findCreatableItemType).mockResolvedValue(IMAGES);
+    vi.mocked(verifyUploadedFile).mockResolvedValue({
+      ok: true,
+      file: UPLOADED,
+    });
+    vi.mocked(createItemInDb).mockResolvedValue({ status: "file-in-use" });
+
+    const result = await createItem({ ...NEW_ITEM, itemTypeId: "type-images" });
+
+    expect(result).toMatchObject({
+      success: false,
+      fieldErrors: { file: expect.stringMatching(/upload the file again/) },
+    });
+  });
+
+  it("非 FILE 型別不檢查也不寫入檔案", async () => {
+    await createItem({ ...NEW_ITEM, storageKey: UPLOADED.storageKey });
+
+    expect(verifyUploadedFile).not.toHaveBeenCalled();
+    expect(vi.mocked(createItemInDb).mock.calls[0][4]).toBeNull();
+  });
+
   it("以正規化的資料建立，Free 方案帶入 50 筆上限", async () => {
     const result = await createItem(NEW_ITEM);
 
@@ -94,6 +184,7 @@ describe("createItem action", () => {
         tags: ["react"],
       },
       50,
+      null,
     );
   });
 
@@ -315,12 +406,50 @@ describe("updateItem action", () => {
 describe("deleteItem action", () => {
   beforeEach(() => {
     vi.mocked(getCurrentUserId).mockResolvedValue("user-1");
-    vi.mocked(softDeleteItem).mockResolvedValue(true);
+    vi.mocked(softDeleteItem).mockResolvedValue({ storageKey: null });
   });
 
   it("以目前使用者軟刪除 item", async () => {
     await expect(deleteItem("item-1")).resolves.toEqual({ success: true });
     expect(softDeleteItem).toHaveBeenCalledWith("user-1", "item-1");
+    expect(deleteObject).not.toHaveBeenCalled();
+  });
+
+  it("有檔案時一併刪除 R2 物件", async () => {
+    vi.mocked(softDeleteItem).mockResolvedValue({
+      storageKey: UPLOADED.storageKey,
+    });
+
+    await expect(deleteItem("item-1")).resolves.toEqual({ success: true });
+    expect(deleteObject).toHaveBeenCalledWith(UPLOADED.storageKey);
+    expect(recordPendingDeletion).not.toHaveBeenCalled();
+  });
+
+  it("R2 刪除失敗時記入 PendingDeletion，item 仍算刪除成功", async () => {
+    vi.mocked(softDeleteItem).mockResolvedValue({
+      storageKey: UPLOADED.storageKey,
+    });
+    const failure = new Error("R2 unavailable");
+    vi.mocked(deleteObject).mockRejectedValue(failure);
+    vi.mocked(recordPendingDeletion).mockResolvedValue();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(deleteItem("item-1")).resolves.toEqual({ success: true });
+    expect(recordPendingDeletion).toHaveBeenCalledWith(
+      UPLOADED.storageKey,
+      failure,
+    );
+  });
+
+  it("連 PendingDeletion 都寫不進去時只記 log，仍回成功", async () => {
+    vi.mocked(softDeleteItem).mockResolvedValue({
+      storageKey: UPLOADED.storageKey,
+    });
+    vi.mocked(deleteObject).mockRejectedValue(new Error("R2 unavailable"));
+    vi.mocked(recordPendingDeletion).mockRejectedValue(new Error("db down"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(deleteItem("item-1")).resolves.toEqual({ success: true });
   });
 
   it.each([42, "", null])("item id 不合法（%s）時當作找不到", async (id) => {
@@ -342,7 +471,7 @@ describe("deleteItem action", () => {
   });
 
   it("不屬於目前使用者、不存在或已刪除時回傳 Item not found", async () => {
-    vi.mocked(softDeleteItem).mockResolvedValue(false);
+    vi.mocked(softDeleteItem).mockResolvedValue(null);
 
     await expect(deleteItem("item-1")).resolves.toEqual({
       success: false,

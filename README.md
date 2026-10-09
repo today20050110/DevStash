@@ -25,6 +25,10 @@ RESEND_API_KEY=          # 寄送註冊驗證信（Resend），關閉驗證時�
 APP_URL=                 # 選用，驗證信連結的網址根，見下方
 UPSTASH_REDIS_REST_URL=  # 選用，速率限制用的 Upstash Redis，見下方
 UPSTASH_REDIS_REST_TOKEN=
+R2_ACCOUNT_ID=           # 檔案與圖片上傳（Cloudflare R2），見下方
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET_NAME=
 ```
 
 產生 `AUTH_SECRET`（不要用 `npx auth secret`，它可能寫出 `.env.local`，蓋過 `.env`）：
@@ -64,6 +68,24 @@ Upstash Redis）。連線資訊依序讀 `KV_REST_API_URL`／`KV_REST_API_TOKEN`
 兩者分開，本機測試不會鎖住正式網站的使用者。**本機不設定也可以**：沒有設定、連不上或逾時（1 秒）
 時一律放行並記錄 log（fail open）。要在本機測試速率限制，把 Development 的兩個值帶進
 `npm run dev` 的程序環境即可；不要用 `vercel env pull` 的預設路徑，它會建立 `.env.local`。
+
+Files／Images 型別的檔案存在 Cloudflare R2 的私有 bucket。瀏覽器以 `POST /api/uploads` 取得 5 分鐘有效的
+presigned PUT 網址後直接上傳到 R2（不經過 Vercel 函式，其 request body 上限為 4.5 MB），預覽與下載經
+`/api/items/[id]/file` 驗證擁有者後由伺服器轉送，不使用 `R2_PUBLIC_URL`。`R2_ACCOUNT_ID` 是 32 個字元的
+account ID。bucket 需要 CORS 允許 PUT，否則瀏覽器無法直傳：
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://dev-stash-eight.vercel.app", "http://localhost:3000"],
+    "AllowedMethods": ["PUT"],
+    "AllowedHeaders": ["Content-Type"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+Preview 部署的網域不在清單內，在 Preview 上傳會被 CORS 擋下。
 
 根目錄的 `.env.production`（已 gitignore）放 production 的連線字串與 Auth 變數。
 Next.js 只在 `npm run build`／`start` 載入它，且優先於 `.env`，所以各指令連到的資料庫不同：

@@ -44,6 +44,15 @@ export interface ItemCollectionSummary {
   name: string;
 }
 
+/** FILE kind 的檔案資訊；內容經 /api/items/[id]/file 讀取 */
+export interface ItemFile {
+  /** 上傳時的原始檔名 */
+  name: string;
+  /** bytes */
+  size: number;
+  mimeType: string;
+}
+
 /** drawer 用的完整資料，點擊卡片時才經 /api/items/[id] 載入 */
 export interface ItemDetail {
   id: string;
@@ -56,6 +65,8 @@ export interface ItemDetail {
   pinnedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  /** FILE kind 且已上傳時才有 */
+  file: ItemFile | null;
   type: ItemTypeSummary & { kind: ItemKind; slug: string };
   /** 標籤名稱，依名稱排序 */
   tags: string[];

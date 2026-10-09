@@ -7,15 +7,20 @@ import { ItemDrawerProvider } from "@/components/items/ItemDrawerProvider";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { getCurrentUser } from "@/lib/current-user";
 import { getCreatableItemTypes } from "@/lib/db/items";
+import { getUserIsPro } from "@/lib/db/users";
+import { canUploadFiles } from "@/lib/plan";
 
 // 登入後的頁面（/dashboard、/profile）共用側邊欄與頂部列；route group 不影響網址
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   // proxy 只驗 JWT 簽章；帳號已刪除、或密碼重設後舊 token 版本不符時在這裡導回登入頁，
   // 而不是顯示空白的頁面。getCurrentUser() 以 cache() 包起來，頁面再呼叫不會多查一次
-  if (!(await getCurrentUser())) {
+  const user = await getCurrentUser();
+  if (!user) {
     redirect(SIGN_IN_PATH);
   }
-  const itemTypes = await getCreatableItemTypes();
+  const itemTypes = await getCreatableItemTypes(
+    canUploadFiles(await getUserIsPro(user.id)),
+  );
 
   return (
     <SidebarProvider>

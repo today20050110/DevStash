@@ -1,11 +1,13 @@
 import type { ReactNode } from "react";
-import { CalendarDays, Folder, Tag } from "lucide-react";
+import { CalendarDays, Download, FileIcon, Folder, Tag } from "lucide-react";
 
 import { CodeEditor } from "@/components/items/CodeEditor";
 import { MarkdownEditor } from "@/components/items/MarkdownEditor";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { getEditorLanguage } from "@/lib/code-language";
-import { formatLongDate } from "@/lib/format";
+import { isImageMimeType } from "@/lib/file-types";
+import { formatFileSize, formatLongDate } from "@/lib/format";
 import { getItemTypeFields } from "@/lib/item-fields";
 import { isHttpUrl } from "@/lib/url";
 import type { ItemDetail } from "@/types/items";
@@ -72,6 +74,9 @@ export function ItemDrawerBody({ item }: { item: ItemDetail }) {
 
 /** snippets／commands 以唯讀的程式碼編輯器顯示，其他 TEXT 以等寬純文字、URL 以連結呈現 */
 function ItemDrawerContent({ item }: { item: ItemDetail }) {
+  if (item.type.kind === "FILE") {
+    return item.file ? <FileSection itemId={item.id} file={item.file} /> : null;
+  }
   if (item.type.kind === "URL") {
     if (!item.url) {
       return null;
@@ -123,6 +128,55 @@ function ItemDrawerContent({ item }: { item: ItemDetail }) {
       <pre className="max-h-[50vh] overflow-auto rounded-lg border bg-muted/40 p-4 font-mono text-xs leading-relaxed">
         <code>{item.content}</code>
       </pre>
+    </Section>
+  );
+}
+
+/**
+ * FILE kind：圖片顯示預覽，其他檔案顯示檔案資訊；兩者都有下載按鈕。
+ * 預覽與下載都經 /api/items/[id]/file（驗證擁有者，bucket 不公開）。
+ */
+function FileSection({
+  itemId,
+  file,
+}: {
+  itemId: string;
+  file: NonNullable<ItemDetail["file"]>;
+}) {
+  const src = `/api/items/${encodeURIComponent(itemId)}/file`;
+  const isImage = isImageMimeType(file.mimeType);
+
+  return (
+    <Section title={isImage ? "Image" : "File"}>
+      <div className="overflow-hidden rounded-lg border bg-muted/40">
+        {isImage && (
+          // 使用者上傳的檔案經驗證過的 API 讀取，next/image 的最佳化不適用
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={src}
+            alt={file.name}
+            className="mx-auto block max-h-80 w-auto max-w-full border-b bg-background object-contain"
+          />
+        )}
+        <div className="flex items-center gap-3 p-3">
+          <FileIcon className="size-8 shrink-0 text-muted-foreground" />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium" title={file.name}>
+              {file.name}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {formatFileSize(file.size)} · {file.mimeType}
+            </p>
+          </div>
+          <Button asChild size="sm" variant="outline">
+            {/* download 屬性讓同源網址直接下載；伺服器端也以 attachment 回應 */}
+            <a href={src} download={file.name}>
+              <Download />
+              Download
+            </a>
+          </Button>
+        </div>
+      </div>
     </Section>
   );
 }

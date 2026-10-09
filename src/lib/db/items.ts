@@ -6,6 +6,7 @@ import { dedupeTagNames, toTagSlug } from "@/lib/tags";
 import type {
   CreatableItemType,
   ItemDetail,
+  ItemFile,
   ItemSummary,
   ItemTypeDetail,
   ItemTypeWithCount,
@@ -199,6 +200,10 @@ export async function getItemDetail(
       pinnedAt: true,
       createdAt: true,
       updatedAt: true,
+      storageKey: true,
+      fileName: true,
+      fileSize: true,
+      mimeType: true,
       itemType: {
         select: { name: true, icon: true, color: true, kind: true, slug: true },
       },
@@ -219,13 +224,65 @@ export async function getItemDetail(
     return null;
   }
 
-  const { itemType, tags, collections, ...rest } = item;
+  const {
+    itemType,
+    tags,
+    collections,
+    storageKey,
+    fileName,
+    fileSize,
+    mimeType,
+    ...rest
+  } = item;
   return {
     ...rest,
+    // storageKey 只在伺服器端使用，不送到前端；檔案一律經 /api/items/[id]/file 讀取
+    file: storageKey ? toItemFile({ fileName, fileSize, mimeType }) : null,
     type: itemType,
     tags: tags.map(({ tag }) => tag.name),
     collections: collections.map(({ collection }) => collection),
   };
+}
+
+function toItemFile(file: {
+  fileName: string | null;
+  fileSize: number | null;
+  mimeType: string | null;
+}): ItemFile {
+  return {
+    name: file.fileName ?? "file",
+    size: file.fileSize ?? 0,
+    mimeType: file.mimeType ?? "application/octet-stream",
+  };
+}
+
+/** 下載代理用：檔案的 key 與資料庫記錄的中繼資料；不存在、屬於別人或已刪除時回傳 null */
+export async function getItemFile(
+  userId: string,
+  id: string,
+): Promise<(ItemFile & { storageKey: string }) | null> {
+  const item = await prisma.item.findFirst({
+    where: { id, userId, deletedAt: null, storageKey: { not: null } },
+    select: {
+      storageKey: true,
+      fileName: true,
+      fileSize: true,
+      mimeType: true,
+    },
+  });
+  if (!item?.storageKey) {
+    return null;
+  }
+  return { ...toItemFile(item), storageKey: item.storageKey };
+}
+
+/** 同一個上傳只能建立一個 item：已被任何 item（含已刪除）使用的 key 不能再用 */
+export async function isStorageKeyInUse(storageKey: string): Promise<boolean> {
+  const item = await prisma.item.findFirst({
+    where: { storageKey },
+    select: { id: true },
+  });
+  return item !== null;
 }
 
 /**
@@ -293,18 +350,40 @@ async function upsertTags(
 /**
  * 軟刪除：只設定 deletedAt，資料列與標籤、collection 關聯都保留（誤刪時可從資料庫還原，
  * 也不再佔 free tier 額度）。所有讀取查詢都已排除 deletedAt 不為 null 的資料列。
- * 擁有者與「尚未刪除」放在同一個 updateMany 條件裡，一次查詢完成，不需要 transaction。
- * 回傳 false 代表不存在、屬於別人或已經刪除過。
+ * 擁有者與「尚未刪除」放在 updateMany 的條件裡，以它的 count 為準；先讀出的 storageKey
+ * 交給呼叫端刪除 R2 物件。回傳 null 代表不存在、屬於別人或已經刪除過。
  */
 export async function softDeleteItem(
   userId: string,
   itemId: string,
-): Promise<boolean> {
+): Promise<{ storageKey: string | null } | null> {
+  const where = { id: itemId, userId, deletedAt: null };
+  const item = await prisma.item.findFirst({
+    where,
+    select: { storageKey: true },
+  });
+  if (!item) {
+    return null;
+  }
   const { count } = await prisma.item.updateMany({
-    where: { id: itemId, userId, deletedAt: null },
+    where,
     data: { deletedAt: new Date() },
   });
-  return count > 0;
+  return count > 0 ? item : null;
+}
+
+/** R2 物件刪除失敗時記下來，留給日後的 sweeper 重試（§3.3） */
+export async function recordPendingDeletion(
+  storageKey: string,
+  error: unknown,
+): Promise<void> {
+  await prisma.pendingDeletion.create({
+    data: {
+      storageKey,
+      attempts: 1,
+      lastError: error instanceof Error ? error.message : String(error),
+    },
+  });
 }
 
 const CREATABLE_TYPE_SELECT = {
@@ -317,18 +396,27 @@ const CREATABLE_TYPE_SELECT = {
 } as const;
 
 /**
- * 新增 item 時可選的型別：系統型別中不需上傳檔案的（FILE kind 要等 R2 上傳完成）。
+ * 新增 item 時可選的型別：系統型別，不能上傳檔案的方案（canUploadFiles）排除 FILE kind。
  * 自訂型別尚未實作，日後在此加入該使用者的型別。
  */
-export async function getCreatableItemTypes(): Promise<CreatableItemType[]> {
+export async function getCreatableItemTypes(
+  includeFileTypes: boolean,
+): Promise<CreatableItemType[]> {
   const types = await prisma.itemType.findMany({
-    where: { isSystem: true, userId: null, kind: { not: "FILE" } },
+    where: {
+      isSystem: true,
+      userId: null,
+      ...(!includeFileTypes && { kind: { not: "FILE" as const } }),
+    },
     select: CREATABLE_TYPE_SELECT,
   });
   return types.sort((a, b) => typeOrder(a.slug) - typeOrder(b.slug));
 }
 
-/** 與 getCreatableItemTypes 同樣的條件；別人的自訂型別與 FILE kind 一律查不到 */
+/**
+ * 系統型別或自己的自訂型別；別人的自訂型別一律查不到。
+ * FILE kind 是否能使用由呼叫端以 canUploadFiles 判斷。
+ */
 export function findCreatableItemType(
   userId: string,
   itemTypeId: string,
@@ -336,28 +424,38 @@ export function findCreatableItemType(
   return prisma.itemType.findFirst({
     where: {
       id: itemTypeId,
-      kind: { not: "FILE" },
       OR: [{ isSystem: true, userId: null }, { userId }],
     },
     select: CREATABLE_TYPE_SELECT,
   });
 }
 
+/** 已上傳到 R2 並由 action 以 HeadObject 確認過的檔案 */
+export interface NewItemFile {
+  storageKey: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+}
+
 export type CreateItemResult =
   | { status: "created"; item: { id: string; title: string } }
-  | { status: "limit-reached"; limit: number };
+  | { status: "limit-reached"; limit: number }
+  | { status: "file-in-use" };
 
 /**
  * 在 transaction 內檢查額度並建立 item（§4.1、§6）。itemLimit 為 null 代表不限。
  * 先取得以 userId 為鍵的 advisory lock：同一使用者同時送出兩個請求時，
  * 第二個要等第一個 commit 後才計數，不會兩個都以 49 筆通過檢查。
  * 不屬於該型別的欄位不寫入，與 updateItem 相同。
+ * 檔案的 key 已被其他 item 使用時回傳 file-in-use，不建立。
  */
 export async function createItem(
   userId: string,
   itemType: Pick<CreatableItemType, "id" | "kind" | "slug">,
-  data: Omit<CreateItemData, "itemTypeId">,
+  data: Omit<CreateItemData, "itemTypeId" | "storageKey" | "fileName">,
   itemLimit: number | null,
+  file: NewItemFile | null = null,
 ): Promise<CreateItemResult> {
   return prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;
@@ -368,6 +466,17 @@ export async function createItem(
       if (count >= itemLimit) {
         return { status: "limit-reached", limit: itemLimit } as const;
       }
+    }
+    // action 已先檢查過一次；這裡在 lock 內再查，同一個 key 同時送出兩次時只有一個能建立
+    // （key 一定屬於同一個使用者，per-user lock 足以把兩個請求排成先後）
+    if (
+      file &&
+      (await tx.item.findFirst({
+        where: { storageKey: file.storageKey },
+        select: { id: true },
+      }))
+    ) {
+      return { status: "file-in-use" } as const;
     }
 
     const fields = getItemTypeFields(itemType);
@@ -381,6 +490,13 @@ export async function createItem(
         ...(fields.content && { content: data.content }),
         ...(fields.language && { language: data.language }),
         ...(fields.url && { url: data.url }),
+        ...(fields.file &&
+          file && {
+            storageKey: file.storageKey,
+            fileName: file.fileName,
+            fileSize: file.fileSize,
+            mimeType: file.mimeType,
+          }),
         tags: {
           create: tagIds.map((tagId) => ({ tagId, source: "USER" })),
         },

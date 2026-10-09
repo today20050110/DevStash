@@ -4,6 +4,8 @@ import {
   createItem,
   findCreatableItemType,
   getItemDetail,
+  getItemFile,
+  recordPendingDeletion,
   softDeleteItem,
   updateItem,
 } from "@/lib/db/items";
@@ -26,6 +28,7 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     item: { findFirst: vi.fn(), updateMany: vi.fn() },
     itemType: { findFirst: vi.fn() },
+    pendingDeletion: { create: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -44,6 +47,10 @@ const ROW = {
   pinnedAt: null,
   createdAt: new Date("2026-09-15T00:00:00Z"),
   updatedAt: new Date("2026-09-16T00:00:00Z"),
+  storageKey: null,
+  fileName: null,
+  fileSize: null,
+  mimeType: null,
   itemType: { name: "Snippets", icon: "Code", color: "#3b82f6", kind: "TEXT" },
   tags: [{ tag: { name: "auth" } }, { tag: { name: "react" } }],
   collections: [{ collection: { id: "col-1", name: "React Patterns" } }],
@@ -94,6 +101,62 @@ describe("getItemDetail", () => {
     findFirst.mockResolvedValue(null);
 
     await expect(getItemDetail("user-1", "item-2")).resolves.toBeNull();
+  });
+
+  it("沒有檔案時 file 為 null", async () => {
+    const item = await getItemDetail("user-1", "item-1");
+
+    expect(item?.file).toBeNull();
+  });
+
+  it("有檔案時回傳檔案資訊，但不把 storageKey 送到前端", async () => {
+    findFirst.mockResolvedValue({
+      ...ROW,
+      storageKey: "users/user-1/items/key.png",
+      fileName: "diagram.png",
+      fileSize: 2048,
+      mimeType: "image/png",
+    } as never);
+
+    const item = await getItemDetail("user-1", "item-1");
+
+    expect(item?.file).toEqual({
+      name: "diagram.png",
+      size: 2048,
+      mimeType: "image/png",
+    });
+    expect(item).not.toHaveProperty("storageKey");
+    expect(item).not.toHaveProperty("fileName");
+  });
+});
+
+describe("getItemFile", () => {
+  it("只查該使用者、未刪除且有檔案的 item", async () => {
+    findFirst.mockResolvedValue(null);
+
+    await expect(getItemFile("user-1", "item-1")).resolves.toBeNull();
+    expect(findFirst.mock.calls[0][0]?.where).toEqual({
+      id: "item-1",
+      userId: "user-1",
+      deletedAt: null,
+      storageKey: { not: null },
+    });
+  });
+
+  it("回傳 key 與資料庫記錄的中繼資料", async () => {
+    findFirst.mockResolvedValue({
+      storageKey: "users/user-1/items/key.pdf",
+      fileName: "spec.pdf",
+      fileSize: 10,
+      mimeType: "application/pdf",
+    } as never);
+
+    await expect(getItemFile("user-1", "item-1")).resolves.toEqual({
+      storageKey: "users/user-1/items/key.pdf",
+      name: "spec.pdf",
+      size: 10,
+      mimeType: "application/pdf",
+    });
   });
 });
 
@@ -193,10 +256,21 @@ describe("updateItem", () => {
 describe("softDeleteItem", () => {
   const updateMany = vi.mocked(prisma.item.updateMany);
 
+  beforeEach(() => {
+    findFirst.mockResolvedValue({ storageKey: null } as never);
+  });
+
   it("只對該使用者且尚未刪除的 item 設定 deletedAt", async () => {
     updateMany.mockResolvedValue({ count: 1 });
 
-    await expect(softDeleteItem("user-1", "item-1")).resolves.toBe(true);
+    await expect(softDeleteItem("user-1", "item-1")).resolves.toEqual({
+      storageKey: null,
+    });
+    expect(findFirst.mock.calls[0][0]?.where).toEqual({
+      id: "item-1",
+      userId: "user-1",
+      deletedAt: null,
+    });
     const args = updateMany.mock.calls[0][0];
     expect(args?.where).toEqual({
       id: "item-1",
@@ -206,15 +280,50 @@ describe("softDeleteItem", () => {
     expect(args?.data).toEqual({ deletedAt: expect.any(Date) });
   });
 
-  it("沒有符合的資料列（別人的、不存在或已刪除）時回傳 false", async () => {
+  it("回傳 storageKey 交給呼叫端刪除 R2 物件", async () => {
+    findFirst.mockResolvedValue({
+      storageKey: "users/user-1/items/key.png",
+    } as never);
+    updateMany.mockResolvedValue({ count: 1 });
+
+    await expect(softDeleteItem("user-1", "item-1")).resolves.toEqual({
+      storageKey: "users/user-1/items/key.png",
+    });
+  });
+
+  it("查不到（別人的、不存在或已刪除）時不更新並回傳 null", async () => {
+    findFirst.mockResolvedValue(null);
+
+    await expect(softDeleteItem("user-1", "item-1")).resolves.toBeNull();
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it("查詢後被同時刪除（updateMany 為 0 列）時回傳 null", async () => {
     updateMany.mockResolvedValue({ count: 0 });
 
-    await expect(softDeleteItem("user-1", "item-1")).resolves.toBe(false);
+    await expect(softDeleteItem("user-1", "item-1")).resolves.toBeNull();
+  });
+});
+
+describe("recordPendingDeletion", () => {
+  it("記下 key 與錯誤訊息，留給 sweeper 重試", async () => {
+    await recordPendingDeletion(
+      "users/user-1/items/key.png",
+      new Error("timeout"),
+    );
+
+    expect(prisma.pendingDeletion.create).toHaveBeenCalledWith({
+      data: {
+        storageKey: "users/user-1/items/key.png",
+        attempts: 1,
+        lastError: "timeout",
+      },
+    });
   });
 });
 
 describe("findCreatableItemType", () => {
-  it("只查系統型別或自己的型別，排除 FILE kind", async () => {
+  it("只查系統型別或自己的型別；FILE kind 由呼叫端依方案判斷", async () => {
     const itemTypeFindFirst = vi.mocked(prisma.itemType.findFirst);
     itemTypeFindFirst.mockResolvedValue(null);
 
@@ -222,7 +331,6 @@ describe("findCreatableItemType", () => {
 
     expect(itemTypeFindFirst.mock.calls[0][0]?.where).toEqual({
       id: "type-1",
-      kind: { not: "FILE" },
       OR: [{ isSystem: true, userId: null }, { userId: "user-1" }],
     });
   });
@@ -303,5 +411,56 @@ describe("createItem", () => {
       tags: { create: [{ tagId: "tag-react", source: "USER" }] },
     });
     expect(data).not.toHaveProperty("url");
+  });
+  it("FILE 型別寫入 action 確認過的檔案欄位", async () => {
+    const images = { id: "type-images", kind: "FILE", slug: "images" } as const;
+    const file = {
+      storageKey: "users/user-1/items/key.png",
+      fileName: "diagram.png",
+      fileSize: 2048,
+      mimeType: "image/png",
+    };
+
+    await createItem("user-1", images, input, 50, file);
+
+    const { data } = tx.item.create.mock.calls[0][0];
+    expect(data).toMatchObject(file);
+    expect(data).not.toHaveProperty("content");
+    expect(data).not.toHaveProperty("url");
+  });
+
+  it("lock 內發現 key 已被其他 item 使用時不建立（同一個上傳同時送出兩次）", async () => {
+    const images = { id: "type-images", kind: "FILE", slug: "images" } as const;
+    tx.item.findFirst.mockResolvedValue({ id: "item-other" });
+
+    await expect(
+      createItem("user-1", images, input, 50, {
+        storageKey: "users/user-1/items/key.png",
+        fileName: "a.png",
+        fileSize: 1,
+        mimeType: "image/png",
+      }),
+    ).resolves.toEqual({ status: "file-in-use" });
+    expect(tx.item.findFirst).toHaveBeenCalledWith({
+      where: { storageKey: "users/user-1/items/key.png" },
+      select: { id: true },
+    });
+    expect(tx.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.item.findFirst.mock.invocationCallOrder[0],
+    );
+    expect(tx.item.create).not.toHaveBeenCalled();
+  });
+
+  it("非 FILE 型別忽略檔案欄位", async () => {
+    await createItem("user-1", snippets, input, 50, {
+      storageKey: "users/user-1/items/key.png",
+      fileName: "x.png",
+      fileSize: 1,
+      mimeType: "image/png",
+    });
+
+    expect(tx.item.create.mock.calls[0][0].data).not.toHaveProperty(
+      "storageKey",
+    );
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canUploadFiles,
   checkContentSize,
   FREE_CONTENT_LIMIT_BYTES,
   getItemLimit,
@@ -70,5 +71,12 @@ describe("checkContentSize", () => {
       checkContentSize("a".repeat(PRO_CONTENT_LIMIT_BYTES + 1), true),
     ).toBe("Content must be 1024 KB or less");
     expect(checkContentSize(null, false)).toBeNull();
+  });
+});
+
+describe("canUploadFiles", () => {
+  it("開發期對所有人開放（§6 的 Pro 限定待 Stripe 上線後啟用）", () => {
+    expect(canUploadFiles(false)).toBe(true);
+    expect(canUploadFiles(true)).toBe(true);
   });
 });

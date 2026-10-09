@@ -11,6 +11,8 @@ export interface ItemTypeFields {
   /** Content 用 Markdown 編輯器（只影響畫面，伺服器端照樣存純文字） */
   markdown: boolean;
   url: boolean;
+  /** 上傳到 R2 的檔案（storageKey、fileName、fileSize、mimeType）；建立後不能更換 */
+  file: boolean;
 }
 
 /**
@@ -28,5 +30,6 @@ export function getItemTypeFields(type: {
     language: LANGUAGE_TYPE_SLUGS.includes(type.slug),
     markdown: content && MARKDOWN_TYPE_SLUGS.includes(type.slug),
     url: type.kind === "URL",
+    file: type.kind === "FILE",
   };
 }

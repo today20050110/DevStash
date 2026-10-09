@@ -1,16 +1,69 @@
-# Current Feature
+# Current Feature: 檔案與圖片上傳（Cloudflare R2）
 
 ## Status
 
-Not Started
+Complete
 
 ## Goals
 
-<!-- 以 /feature load 載入 spec 後填入；成功長什麼樣子 -->
+- 上傳 API route 把檔案存進 Cloudflare R2，資料庫只存 object key（`Item.storageKey`）、`mimeType`、`fileSize`
+- 資料庫函式維持放在 `src/lib/db/items.ts`
+- `FileUpload` 元件：拖放或點擊選檔、顯示上傳進度
+- 新增 item 的 dialog 在 Files／Images 型別改用 `FileUpload`（目前 FILE kind 被排除在可新增的型別之外，需要開放）
+- 檔案限制：圖片 5 MB（png、jpg／jpeg、gif、webp、svg），檔案 10 MB（pdf、txt、md、json、yaml／yml、xml、csv、toml、ini），以 spec 列出的 MIME 白名單驗證，伺服器端檢查，不只靠前端
+- 下載走代理 API route（避免 CORS），驗證登入與擁有者
+- `ItemDrawer`：圖片顯示預覽、檔案顯示檔案資訊（名稱、大小、類型），FILE 型別有下載按鈕
+- 刪除 item 時一併刪除 R2 上的檔案
 
 ## Notes
 
-<!-- 來源、限制、實作方向、驗證結果、已知情況 -->
+- 來源：`context/features/file-image-spec.md`
+- 現況：schema 已有 `storageKey`、`mimeType`、`fileSize` 與 `PendingDeletion`（含 `purgedAt`、`attempts`、`lastError`）；`.env` 與 `.env.production` 都已有 `R2_ACCOUNT_ID`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`、`R2_BUCKET_NAME`、`R2_PUBLIC_URL`（只看鍵名）；尚未安裝任何 S3 SDK；`getCreatableItemTypes`／`findCreatableItemType` 排除 FILE kind；Files／Images 的 `isProOnly = true`
+- **與現況或 overview 衝突、start 前要決定**：
+  1. **上傳路徑**：spec 寫「經 API route 上傳」，但 Vercel 函式的 request body 上限是 4.5 MB，10 MB 的檔案與接近 5 MB 的圖片在正式網站會失敗（本機不會發現）。`project-overview.md` §4.1 原本就規劃 presigned PUT 直傳 R2。建議：API route 只負責驗證並簽發 presigned URL，瀏覽器直傳 R2（進度用 XHR 的 `upload.onprogress`）；代價是 R2 bucket 需要設定 CORS 允許正式網域與 localhost 的 PUT，且要在建立 item 時以 `HeadObject` 確認物件存在與實際大小
+  2. **Pro 限制**：§6 規定檔案與圖片上傳只限 Pro，而 `isPro` 目前是實際判斷、所有使用者都是 FREE —— 照 §6 執行等於沒有人能用。選項：照 §6 擋下（功能上線但無人可用，直到 Stripe）、或暫時對所有人開放（違反 §6 但與目前「開發期全部可用」的原意一致）
+  3. **刪除時機**：item 刪除目前是軟刪除。spec 要求刪除時移除 R2 檔案。選項：軟刪除當下立刻刪 R2（簡單，但軟刪除的 item 無法還原檔案）；或寫入 `PendingDeletion`，等日後的永久清除／sweeper 處理（符合 §3.3 設計，但檔案會留在 R2 直到 sweeper 實作）
+  4. **原始檔名**：schema 沒有檔名欄位，下載時的 `Content-Disposition` 與 drawer 的檔案資訊需要它。選項：新增 `Item.fileName`（需要 migration，記得 `--create-only` 檢查不要夾帶 DROP INDEX）、或以 title 代替
+  5. **`R2_PUBLIC_URL`**：存在代表 bucket 可能設為公開。overview 規劃私有 bucket + 即時簽名；spec 要求下載走代理。建議 bucket 維持私有、不使用 `R2_PUBLIC_URL`，圖片預覽也走代理 route
+- **使用者決定（load 時，四項皆採建議）**：
+  1. 瀏覽器以 presigned PUT 直傳 R2，API route 只驗證並簽發網址；建立 item 前以 `HeadObject` 確認物件存在與實際大小；R2 bucket 需設定 CORS（正式網域與 `http://localhost:3000` 的 PUT）
+  2. 暫時對所有人開放：Pro 判斷仍集中在 `src/lib/plan.ts`（例如新增 `canUploadFiles()`，目前回傳 true），Stripe 上線後只改那裡
+  3. 軟刪除時立刻刪除 R2 物件；刪除失敗時寫入 `PendingDeletion` 留待重試，不讓 item 刪除因此失敗
+  4. 新增 `Item.fileName`（migration 以 `--create-only` 產生，確認不夾帶 `DROP INDEX` 後再套用到 Development）
+  5. （未詢問，依 spec 與 overview）bucket 維持私有、不使用 `R2_PUBLIC_URL`，圖片預覽與下載都走代理 route
+- 安全性：
+  - SVG 可內嵌 script。代理回應一律帶 `X-Content-Type-Options: nosniff`；SVG（以及所有非點陣圖）以 `Content-Disposition: attachment` 下載；預覽只用 `<img>`（`<img>` 中的 SVG 不執行 script），代理加 `Content-Security-Policy: sandbox` 作為保險
+  - MIME 不能只信瀏覽器回報的 `file.type`（可偽造），伺服器端同時檢查副檔名與 MIME 是否屬於同一組白名單；回應時以資料庫記錄的 `mimeType` 而非 R2 的 metadata
+  - object key 由伺服器產生（`users/{userId}/items/{uuid}.{ext}`），不使用使用者提供的檔名，避免路徑穿越
+  - 建立 item 時確認 key 屬於該使用者的前綴，避免拿別人的 key 建立 item 而透過代理讀取
+  - 上傳與下載加速率限制（沿用 `src/lib/rate-limit.ts`）
+- 額度：沿用 `createItem` 的 50 筆上限與 advisory lock；上傳失敗或沒有建立 item 時 R2 會留下孤兒物件（presigned 方案特有），可記入 `PendingDeletion` 或日後以 R2 lifecycle 規則清除
+- proxy matcher 不涵蓋 `/api`，新的 route 要自己以 `getCurrentUserId()` 驗證（含 `sessionVersion`）
+
+### 實作進度（start）
+
+- migration `20261009154846_add_item_file_name`：只有 `ALTER TABLE "Item" ADD COLUMN "fileName" TEXT`（`--create-only` 檢查無 `DROP INDEX`），以 `migrate deploy` 套用到 Development（`ep-lucky-frost-b3c82uje`）；`migration_lock.toml` 只被改行尾，已還原
+- 新增 `@aws-sdk/client-s3`、`@aws-sdk/s3-request-presigner` ^3.1148.0
+- `src/lib/file-types.ts`（白名單、上限、MIME 由副檔名決定、key 產生與擁有者檢查、`contentDisposition`）、`src/lib/r2.ts`（presigned PUT 簽入 content-type 與 content-length；關閉 SDK 預設的 CRC32 checksum，否則 presigned 上傳會失敗）、`src/lib/uploads.ts`（`prepareUpload`、`verifyUploadedFile`）、`plan.ts` 的 `canUploadFiles`、`rate-limit.ts` 的 `uploadFile`（20／1 小時）與 `downloadFile`（120／1 分鐘）
+- `POST /api/uploads`（簽發網址，401／429／400／402／403）、`GET /api/items/[id]/file`（代理，attachment + nosniff + CSP sandbox + `private` 快取）
+- `db/items.ts`：`getItemDetail` 回傳 `file`（不送出 storageKey）、`getItemFile`、`isStorageKeyInUse`、`softDeleteItem` 改回傳 storageKey、`recordPendingDeletion`、`getCreatableItemTypes(includeFileTypes)`、`findCreatableItemType` 不再排除 FILE、`createItem` 寫入檔案欄位
+- `createItem` action 對 FILE 型別呼叫 `verifyUploadedFile`；`deleteItem` 軟刪除後刪 R2 物件，失敗寫 `PendingDeletion`
+- 前端：`FileUpload`（拖放、XHR 進度、前端白名單檢查、圖片本機預覽）、`NewItemDialog`（檔案區塊、標題以檔名預填、換型別清除上傳）、drawer 的 `FileSection`（圖片預覽、檔案資訊、Download）
+- 測試 185/185（新增 `file-types`、`uploads`、`format` 測試，更新 `db/items`、`actions/items`、`item-fields`、`plan`），tsc、lint、build 通過
+- R2 連線：起初所有連線在 TLS handshake 失敗（alert 40），原因是 `.env` 與 `.env.production` 的 `R2_ACCOUNT_ID` 為 33 個字元（account ID 應為 32 個），使用者更正後恢復。腳本實測 presigned PUT：大小不符 403、Content-Type 不符 403、正確 200，HeadObject 取得正確大小與類型，刪除後 HeadObject 為 null。CORS 已由使用者設定：localhost:3000 與正式網域的 preflight 204、其他來源 403
+- review 時修正：`verifyUploadedFile` 在 transaction 外確認 key 未被使用，同一個上傳同時送出兩次 `createItem` 時兩者都會通過、建立兩筆共用同一個 R2 物件的 item（刪除其一就會刪掉另一筆的檔案）。`db/items.ts` 的 `createItem` 在取得 per-user advisory lock 後再查一次，已被使用時回傳 `file-in-use`，action 對應為檔案欄位的錯誤；key 一定屬於同一個使用者，per-user lock 足以排序。測試 187/187
+- README 補上 `R2_*` 四個鍵、上傳與下載的流程與 CORS JSON
+
+### 驗證
+
+- Playwright（demo 帳號，Development，1440／390px）：Images 選 6 MB 的 png 在前端被擋（「File must be 5 MB or smaller」）；gradient.png（103.5 KB）上傳後顯示縮圖與「Uploaded」、標題預填為 gradient，建立後 drawer 顯示圖片預覽、檔案資訊與 Download；下載回應為 `image/png`、正確長度、`attachment`、`nosniff`、`sandbox`、`private, max-age=300`
+- 內含 `<script>` 的 SVG：drawer 以 `<img>` 正常顯示（寬 120）、沒有觸發 alert；直接開啟檔案網址時瀏覽器下載 `xss.svg` 而非渲染
+- Files 選 `run.exe` 在前端被擋並列出允許的副檔名；`notes 筆記.md` 建立後顯示「33 B · text/markdown」，下載的 `filename*` 為 UTF-8 編碼的原始檔名、內容正確
+- 繞過前端直接呼叫 `/api/uploads`：.exe、以 pdf 當圖片、11 MB、snippets 型別、缺欄位皆 400；簽發 10 bytes 的網址後 PUT 2000 bytes 被 R2 拒絕（錯誤回應沒有 CORS 標頭，瀏覽器看到的是網路錯誤），HeadObject 確認沒有留下物件；未登入時 `/api/uploads` 與檔案網址 401
+- 刪除 `notes 筆記`：toast 出現、R2 物件已不存在、其他檔案不受影響；伺服器對已刪除 item 的檔案網址回 404（同一瀏覽器 5 分鐘內可能從快取讀到，見已知情況）
+- 主控台的錯誤皆為刻意測試的 400／404 與被拒絕的 R2 上傳
+- 資料庫（Development）：三筆測試 item 的 `storageKey`、`fileName`、`fileSize`、`mimeType` 皆正確，key 為 `users/{userId}/items/{uuid}.{ext}`
+- 測試資料已清除（經使用者同意）：R2 上三個測試物件刪除後 HeadObject 皆為 null；Development 上三筆測試 item（`gradient`、`xss`、已軟刪除的 `notes 筆記`，皆無標籤與 collection 關聯）以 SQL 刪除，`PendingDeletion` 為 0 列。demo 帳號目前 19 筆有效 item（比 seed 多的 1 筆是使用者先前自行建立的 `shell` prompt，未動）、0 筆檔案 item
 
 ## History
 

@@ -181,6 +181,8 @@ model Item {
   /// 不靠副檔名判斷，因為副檔名是使用者可控的輸入。
   mimeType String?
   fileSize Int?
+  /// 上傳時的原始檔名，下載的 Content-Disposition 與 drawer 顯示用（R2 的 key 不含它）
+  fileName String?
 
   /// 程式碼片段的語法highlight用
   language String?

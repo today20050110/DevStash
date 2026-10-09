@@ -24,6 +24,10 @@ const LIMITS = {
   changePassword: { tokens: 5, window: "15 m" },
   // userId：手動新增不會這麼快，擋的是腳本大量寫入
   createItem: { tokens: 30, window: "1 m" },
+  // userId：每個上傳網址都可能讓 R2 多一個最後沒建立 item 的物件
+  uploadFile: { tokens: 20, window: "1 h" },
+  // userId：drawer 每次開啟圖片都會讀一次
+  downloadFile: { tokens: 120, window: "1 m" },
 } satisfies Record<string, { tokens: number; window: Duration }>;
 
 export type RateLimitAction = keyof typeof LIMITS;

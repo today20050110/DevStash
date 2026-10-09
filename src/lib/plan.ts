@@ -49,3 +49,13 @@ export function checkContentSize(
   }
   return `Content must be ${limit / 1024} KB or less`;
 }
+
+/**
+ * 檔案與圖片上傳（§6 規定為 Pro 限定）。開發期經使用者決定暫時對所有人開放，
+ * 判斷仍只在這裡：Stripe 上線後把 FILE_UPLOADS_REQUIRE_PRO 改為 true 即可。
+ */
+const FILE_UPLOADS_REQUIRE_PRO = false;
+
+export function canUploadFiles(pro: boolean): boolean {
+  return pro || !FILE_UPLOADS_REQUIRE_PRO;
+}

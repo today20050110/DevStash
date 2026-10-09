@@ -49,8 +49,9 @@ export type UpdateItemInput = z.input<typeof updateItemSchema>;
 export type UpdateItemData = z.output<typeof updateItemSchema>;
 
 /**
- * URL 型別的 url 必填要等查到型別才知道，由 action 另外檢查；
- * 這裡只驗證與型別無關的格式。
+ * URL 型別的 url 必填、FILE 型別的檔案必填要等查到型別才知道，由 action 另外檢查；
+ * 這裡只驗證與型別無關的格式。storageKey 是 /api/uploads 回傳的 key，
+ * fileName 是原始檔名，兩者的內容（擁有者、副檔名、大小）由 action 驗證。
  */
 export const createItemSchema = z.object(
   {
@@ -59,6 +60,8 @@ export const createItemSchema = z.object(
       .trim()
       .min(1, "Choose a type"),
     ...itemFields,
+    storageKey: optionalText({ trim: true }),
+    fileName: optionalText({ trim: true }),
   },
   { error: "Invalid item data" },
 );

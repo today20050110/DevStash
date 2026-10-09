@@ -6,19 +6,23 @@ import { getCurrentUserId } from "@/lib/current-user";
 import {
   createItem as createItemInDb,
   findCreatableItemType,
+  recordPendingDeletion,
   softDeleteItem,
   updateItem as updateItemInDb,
+  type NewItemFile,
 } from "@/lib/db/items";
 import { getUserIsPro } from "@/lib/db/users";
 import { createItemSchema, updateItemSchema } from "@/lib/item-schemas";
-import { checkContentSize, getItemLimit } from "@/lib/plan";
+import { canUploadFiles, checkContentSize, getItemLimit } from "@/lib/plan";
+import { deleteObject } from "@/lib/r2";
 import { checkRateLimit, rateLimitMessage } from "@/lib/rate-limit";
+import { getFileCategory, verifyUploadedFile } from "@/lib/uploads";
 import type { ItemDetail } from "@/types/items";
 
 export type UpdateItemField =
   "title" | "description" | "content" | "language" | "url" | "tags";
 
-export type CreateItemField = UpdateItemField | "itemTypeId";
+export type CreateItemField = UpdateItemField | "itemTypeId" | "file";
 
 export interface UpdateItemResult {
   success: boolean;
@@ -44,7 +48,7 @@ const itemIdSchema = z.string().min(1);
 
 /**
  * 新增 item。順序：Zod 驗證 → 登入 → 速率限制 → 型別（只能是可新增的型別）→
- * 依型別的必填與 content 上限 → 在 transaction 內檢查額度並建立。
+ * 依型別的必填與 content 上限（FILE 型別確認 R2 上的檔案）→ 在 transaction 內檢查額度並建立。
  */
 export async function createItem(data: unknown): Promise<CreateItemResult> {
   const parsed = createItemSchema.safeParse(data);
@@ -67,7 +71,7 @@ export async function createItem(data: unknown): Promise<CreateItemResult> {
       return { success: false, error: rateLimitMessage(limit.reset) };
     }
 
-    const { itemTypeId, ...fields } = parsed.data;
+    const { itemTypeId, storageKey, fileName, ...fields } = parsed.data;
     const itemType = await findCreatableItemType(userId, itemTypeId);
     if (!itemType) {
       return fieldError("itemTypeId", "Choose a valid type");
@@ -82,12 +86,37 @@ export async function createItem(data: unknown): Promise<CreateItemResult> {
       return fieldError("content", contentError);
     }
 
+    let file: NewItemFile | null = null;
+    if (itemType.kind === "FILE") {
+      const category = getFileCategory(itemType);
+      if (!category || !canUploadFiles(pro)) {
+        return fieldError("itemTypeId", "Choose a valid type");
+      }
+      const upload = await verifyUploadedFile(
+        userId,
+        category,
+        storageKey,
+        fileName,
+      );
+      if (!upload.ok) {
+        return fieldError("file", upload.error);
+      }
+      file = upload.file;
+    }
+
     const result = await createItemInDb(
       userId,
       itemType,
       fields,
       getItemLimit(pro),
+      file,
     );
+    if (result.status === "file-in-use") {
+      return fieldError(
+        "file",
+        "The upload was not found. Please upload the file again.",
+      );
+    }
     if (result.status === "limit-reached") {
       return {
         success: false,
@@ -176,7 +205,11 @@ export interface DeleteItemResult {
   error?: string;
 }
 
-/** 軟刪除 item；不屬於目前使用者、不存在或已刪除時一律回「Item not found」 */
+/**
+ * 軟刪除 item；不屬於目前使用者、不存在或已刪除時一律回「Item not found」。
+ * FILE 型別一併刪除 R2 物件（使用者決定：不等永久清除）；R2 刪除失敗不影響 item 的刪除，
+ * 記入 PendingDeletion 留給 sweeper 重試。
+ */
 export async function deleteItem(itemId: unknown): Promise<DeleteItemResult> {
   const parsedId = itemIdSchema.safeParse(itemId);
   if (!parsedId.success) {
@@ -188,12 +221,28 @@ export async function deleteItem(itemId: unknown): Promise<DeleteItemResult> {
     if (!userId) {
       return { success: false, error: NOT_SIGNED_IN };
     }
-    if (!(await softDeleteItem(userId, parsedId.data))) {
+    const deleted = await softDeleteItem(userId, parsedId.data);
+    if (!deleted) {
       return { success: false, error: ITEM_NOT_FOUND };
+    }
+    if (deleted.storageKey) {
+      await deleteStoredFile(deleted.storageKey);
     }
     return { success: true };
   } catch (error) {
     console.error("Failed to delete item", error);
     return { success: false, error: GENERIC_ERROR };
+  }
+}
+
+async function deleteStoredFile(storageKey: string): Promise<void> {
+  try {
+    await deleteObject(storageKey);
+  } catch (error) {
+    console.error("Failed to delete file from R2", error);
+    // item 已經刪除；連記錄都失敗時只留 log，不讓使用者以為刪除失敗
+    await recordPendingDeletion(storageKey, error).catch((recordError) => {
+      console.error("Failed to record pending deletion", recordError);
+    });
   }
 }
