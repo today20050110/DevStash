@@ -1,5 +1,4 @@
 import type { Prisma } from "@/generated/prisma/client";
-import { isImageMimeType } from "@/lib/file-types";
 import { getItemTypeFields } from "@/lib/item-fields";
 import type { CreateItemData, UpdateItemData } from "@/lib/item-schemas";
 import { prisma } from "@/lib/prisma";
@@ -132,6 +131,8 @@ async function findItemSummaries(
       pinnedAt: true,
       createdAt: true,
       storageKey: true,
+      fileName: true,
+      fileSize: true,
       mimeType: true,
       itemType: { select: { name: true, icon: true, color: true } },
       tags: {
@@ -143,13 +144,23 @@ async function findItemSummaries(
     },
   });
 
-  // storageKey 只用來判斷有沒有檔案，不送到前端
-  return items.map(({ itemType, tags, storageKey, mimeType, ...item }) => ({
-    ...item,
-    type: itemType,
-    tags: tags.map(({ tag }) => tag.name),
-    isImage: storageKey !== null && isImageMimeType(mimeType),
-  }));
+  return items.map(
+    ({
+      itemType,
+      tags,
+      storageKey,
+      fileName,
+      fileSize,
+      mimeType,
+      ...item
+    }) => ({
+      ...item,
+      type: itemType,
+      tags: tags.map(({ tag }) => tag.name),
+      // storageKey 只用來判斷有沒有檔案，不送到前端
+      file: storageKey ? toItemFile({ fileName, fileSize, mimeType }) : null,
+    }),
+  );
 }
 
 export function getPinnedItems(

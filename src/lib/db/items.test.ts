@@ -467,16 +467,18 @@ describe("createItem", () => {
 });
 
 describe("getItemsByType", () => {
-  const summaryRow = (storageKey: string | null, mimeType: string | null) => ({
+  const summaryRow = (storageKey: string | null) => ({
     id: "item-1",
-    title: "Screenshot",
+    title: "Quarterly report",
     description: null,
     isFavorite: false,
     pinnedAt: null,
     createdAt: new Date("2026-09-15T00:00:00Z"),
     storageKey,
-    mimeType,
-    itemType: { name: "Images", icon: "Image", color: "#ec4899" },
+    fileName: storageKey ? "report.pdf" : null,
+    fileSize: storageKey ? 2048 : null,
+    mimeType: storageKey ? "application/pdf" : null,
+    itemType: { name: "Files", icon: "File", color: "#6b7280" },
     tags: [],
   });
   const findMany = vi.mocked(prisma.item.findMany);
@@ -492,24 +494,25 @@ describe("getItemsByType", () => {
     });
   });
 
-  it("有檔案且 MIME 為圖片時 isImage 為 true，不把 storageKey 送到前端", async () => {
+  it("有檔案時回傳檔名、大小與 MIME，不把 storageKey 送到前端", async () => {
     findMany.mockResolvedValue([
-      summaryRow("users/user-1/items/a.png", "image/png"),
+      summaryRow("users/user-1/items/a.pdf"),
     ] as never);
 
     const [item] = await getItemsByType("user-1", "type-1");
-    expect(item.isImage).toBe(true);
+    expect(item.file).toEqual({
+      name: "report.pdf",
+      size: 2048,
+      mimeType: "application/pdf",
+    });
     expect(item).not.toHaveProperty("storageKey");
-    expect(item).not.toHaveProperty("mimeType");
+    expect(item).not.toHaveProperty("fileName");
   });
 
-  it("非圖片的檔案與沒有檔案的 item，isImage 為 false", async () => {
-    findMany.mockResolvedValue([
-      summaryRow("users/user-1/items/a.pdf", "application/pdf"),
-      summaryRow(null, "image/png"),
-    ] as never);
+  it("沒有檔案的 item，file 為 null", async () => {
+    findMany.mockResolvedValue([summaryRow(null)] as never);
 
-    const items = await getItemsByType("user-1", "type-1");
-    expect(items.map((item) => item.isImage)).toEqual([false, false]);
+    const [item] = await getItemsByType("user-1", "type-1");
+    expect(item.file).toBeNull();
   });
 });

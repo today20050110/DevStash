@@ -37,8 +37,8 @@ export interface ItemSummary {
   type: ItemTypeSummary;
   /** 標籤名稱，依名稱排序 */
   tags: string[];
-  /** 有上傳檔案且為圖片；型別列表頁以縮圖卡片顯示，圖片經 /api/items/[id]/file 讀取 */
-  isImage: boolean;
+  /** 上傳的檔案資訊（FILE kind）；型別列表頁依此顯示圖片縮圖或檔案列 */
+  file: ItemFile | null;
 }
 
 export interface ItemCollectionSummary {

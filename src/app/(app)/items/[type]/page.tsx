@@ -6,9 +6,11 @@ import { cache } from "react";
 import { SIGN_IN_PATH } from "@/auth.config";
 import { ItemCard } from "@/components/dashboard/ItemCard";
 import { TypeIcon } from "@/components/dashboard/TypeIcon";
+import { FileList } from "@/components/items/FileList";
 import { ImageCard } from "@/components/items/ImageCard";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getItemTypeBySlug, getItemsByType } from "@/lib/db/items";
+import { getUploadCategory, isImageMimeType } from "@/lib/file-types";
 
 /**
  * generateMetadata 與頁面都需要型別；以 cache() 包起來，同一個請求只查一次。
@@ -70,19 +72,22 @@ export default async function ItemsByTypePage({
         </div>
       </div>
 
-      {items.length > 0 ? (
+      {items.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No items yet.</p>
+      ) : getUploadCategory(itemType.slug) === "file" ? (
+        // 版面是整頁的決定，沿用上傳規則的型別對照；dashboard 維持一般卡片
+        <FileList items={items} />
+      ) : (
         <div className="grid gap-4 @3xl:grid-cols-2 @5xl:grid-cols-3">
           {items.map((item) =>
-            // 依檔案本身判斷而非型別 slug；dashboard 維持一般卡片
-            item.isImage ? (
+            // 卡片依檔案本身逐筆判斷，而非型別 slug
+            item.file && isImageMimeType(item.file.mimeType) ? (
               <ImageCard key={item.id} item={item} />
             ) : (
               <ItemCard key={item.id} item={item} />
             ),
           )}
         </div>
-      ) : (
-        <p className="text-sm text-muted-foreground">No items yet.</p>
       )}
     </div>
   );
