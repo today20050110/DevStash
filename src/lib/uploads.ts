@@ -11,7 +11,7 @@ import {
   validateUpload,
   type UploadCategory,
 } from "@/lib/file-types";
-import { canUploadFiles, getItemLimit } from "@/lib/plan";
+import { canUploadFiles, getItemLimit, itemLimitMessage } from "@/lib/plan";
 import { createUploadUrl, deleteObject, headObject } from "@/lib/r2";
 import type { CreatableItemType } from "@/types/items";
 
@@ -52,7 +52,7 @@ export async function prepareUpload(
     return {
       ok: false,
       reason: "limit-reached",
-      error: `The Free plan is limited to ${limit} items. Delete an item or upgrade to Pro to add more.`,
+      error: itemLimitMessage(limit),
     };
   }
 

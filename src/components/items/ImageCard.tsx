@@ -1,7 +1,7 @@
-import { Pin, Star } from "lucide-react";
-
 import { ItemCardTrigger } from "@/components/items/ItemCardTrigger";
+import { ItemStatusIcons } from "@/components/items/ItemStatusIcons";
 import { Card } from "@/components/ui/card";
+import { itemFileUrl } from "@/lib/item-api";
 import type { ItemSummary } from "@/types/items";
 
 interface ImageCardProps {
@@ -10,7 +10,7 @@ interface ImageCardProps {
 
 /** 型別列表頁的圖片縮圖卡片；點擊與 ItemCard 相同，開啟 item drawer */
 export function ImageCard({ item }: ImageCardProps) {
-  const src = `/api/items/${encodeURIComponent(item.id)}/file`;
+  const src = itemFileUrl(item.id);
 
   return (
     <Card className="relative gap-0 py-0 transition-colors hover:bg-muted/40">
@@ -29,12 +29,7 @@ export function ImageCard({ item }: ImageCardProps) {
       </div>
       <div className="flex items-center gap-2 px-4 py-3">
         <span className="truncate font-semibold">{item.title}</span>
-        {item.pinnedAt && (
-          <Pin className="size-3.5 shrink-0 text-muted-foreground" />
-        )}
-        {item.isFavorite && (
-          <Star className="size-3.5 shrink-0 fill-yellow-400 text-yellow-400" />
-        )}
+        <ItemStatusIcons item={item} />
       </div>
       {/* 放在最後：放大中的圖片（scale）會被提升到定位層，按鈕在前面時會被圖片蓋住而點不到 */}
       <ItemCardTrigger id={item.id} title={item.title} />

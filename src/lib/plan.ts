@@ -31,6 +31,11 @@ export function getItemLimit(pro: boolean): number | null {
   return pro ? null : FREE_ITEM_LIMIT;
 }
 
+/** 達到項目數上限時的提示；新增 item 與申請上傳網址共用 */
+export function itemLimitMessage(limit: number): string {
+  return `The Free plan is limited to ${limit} items. Delete an item or upgrade to Pro to add more.`;
+}
+
 export function getContentLimitBytes(pro: boolean): number {
   return pro ? PRO_CONTENT_LIMIT_BYTES : FREE_CONTENT_LIMIT_BYTES;
 }

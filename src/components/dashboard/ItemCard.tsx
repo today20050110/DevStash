@@ -1,8 +1,7 @@
-import { Pin, Star } from "lucide-react";
-
-import { TypeIcon } from "@/components/dashboard/TypeIcon";
+import { TypeIconTile } from "@/components/dashboard/TypeIconTile";
 import { CopyItemButton } from "@/components/items/CopyItemButton";
 import { ItemCardTrigger } from "@/components/items/ItemCardTrigger";
+import { ItemStatusIcons } from "@/components/items/ItemStatusIcons";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate } from "@/lib/format";
@@ -22,27 +21,12 @@ export function ItemCard({ item }: ItemCardProps) {
     >
       <ItemCardTrigger id={item.id} title={item.title} />
       <CardContent className="flex gap-4">
-        <div
-          className="flex size-10 shrink-0 items-center justify-center rounded-lg"
-          // color-mix rather than appending alpha to the hex — ItemType.color is an
-          // unconstrained String, so the six-digit form is not guaranteed.
-          style={{
-            backgroundColor: `color-mix(in srgb, ${color} 10%, transparent)`,
-            color,
-          }}
-        >
-          <TypeIcon name={icon} className="size-5" />
-        </div>
+        <TypeIconTile icon={icon} color={color} />
 
         <div className="min-w-0 flex-1 space-y-2">
           <div className="flex items-center gap-2">
             <span className="truncate font-semibold">{item.title}</span>
-            {item.pinnedAt && (
-              <Pin className="size-3.5 shrink-0 text-muted-foreground" />
-            )}
-            {item.isFavorite && (
-              <Star className="size-3.5 shrink-0 fill-yellow-400 text-yellow-400" />
-            )}
+            <ItemStatusIcons item={item} />
           </div>
 
           {item.description && (

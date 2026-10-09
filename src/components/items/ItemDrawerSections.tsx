@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { getEditorLanguage } from "@/lib/code-language";
 import { isImageMimeType } from "@/lib/file-types";
 import { formatFileSize, formatLongDate } from "@/lib/format";
+import { itemFileUrl } from "@/lib/item-api";
 import { getItemTypeFields } from "@/lib/item-fields";
 import { isHttpUrl } from "@/lib/url";
 import type { ItemDetail } from "@/types/items";
@@ -143,7 +144,7 @@ function FileSection({
   itemId: string;
   file: NonNullable<ItemDetail["file"]>;
 }) {
-  const src = `/api/items/${encodeURIComponent(itemId)}/file`;
+  const src = itemFileUrl(itemId);
   const isImage = isImageMimeType(file.mimeType);
 
   return (

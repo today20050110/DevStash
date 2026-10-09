@@ -4,7 +4,7 @@
 - **稽核方式**：`code-scanner` agent 掃描，所有項目再由主 session 對照原始碼確認；排除尚未實作的功能、已確認的設計決定、NextAuth／Next.js 已處理的部分，以及 `AUTH_SECURITY_REVIEW.md` 已處理或已接受的項目
 - **稽核範圍**：`src/`（不含 `src/generated`）、`prisma/seed.ts`、`scripts/`
 - **結果摘要**：Critical 0／High 0／Medium 2／Low 7，另有 8 處重複程式碼
-- **處理狀態**：M1、M2、L1 已於 `fix/item-input-limits` 修正；L3、L6 已於 `fix/copy-button-and-seed-files` 修正；L2、L5 已於 `fix/upload-cancel-and-markdown-lazy` 修正；L4、L7 已於 `refactor/queries-and-items-split` 處理；重複程式碼未處理
+- **處理狀態**：M1、M2、L1 已於 `fix/item-input-limits` 修正；L3、L6 已於 `fix/copy-button-and-seed-files` 修正；L2、L5 已於 `fix/upload-cancel-and-markdown-lazy` 修正；L4、L7 已於 `refactor/queries-and-items-split` 處理；重複程式碼已於 `refactor/dedupe` 處理。報告列出的項目全部完成
 
 ## Medium
 
@@ -66,7 +66,9 @@
 
 - **處理**：依建議拆成 `db/item-types.ts`（137 行：系統型別、`getItemTypeBySlug`、`getCreatableItemTypes`、`findCreatableItemType`）、`db/items.ts`（263 行：列表、drawer、下載代理、`isStorageKeyInUse`、`countActiveItems`）、`db/item-mutations.ts`（186 行：`createItem`、`updateItem`、`softDeleteItem`、`recordPendingDeletion`）。函式本體以腳本依標記原樣搬移，測試檔跟著拆成三個（32 個測試全數保留）
 
-## 重複的程式碼
+## 重複的程式碼（已處理）
+
+處理方式：1 → `components/dashboard/TypeIconTile.tsx`；2、7 → `lib/item-api.ts` 的 `itemFileUrl`、`itemApiUrl`、`fetchItemDetail`（`CopyItemButton` 因此改為檢查 `success`、日期轉回 `Date`）；3 → `lib/api-response.ts` 的 `apiError` 與 `ApiResponse<T>`，連同報告漏列的 `api/auth/register/route.ts`（含其 429 回應）共 4 處；4 → `actions/items.ts` 的 `validationFailure`；5 → `plan.ts` 的 `itemLimitMessage`；6 → `db/items.ts` 的 `ownedTagNames`、`toTagNames`；8 → `components/items/ItemStatusIcons.tsx`。
 
 1. 型別圖示方塊（`color-mix` 背景 + 型別色）×3：`ItemCard.tsx`、`app/(app)/items/[type]/page.tsx`、`ItemDrawer.tsx`
 2. 檔案網址 `` `/api/items/${encodeURIComponent(id)}/file` `` ×3：`ImageCard.tsx`、`ItemDrawerSections.tsx`、`FileList.tsx`

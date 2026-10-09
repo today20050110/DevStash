@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { Prisma } from "@/generated/prisma/client";
+import { apiError, type ApiResponse } from "@/lib/api-response";
 import { registerSchema } from "@/lib/auth-schemas";
 import {
   isEmailVerificationEnabled,
@@ -15,51 +16,36 @@ import {
   retryAfterSeconds,
 } from "@/lib/rate-limit";
 
-interface RegisterResponse {
-  success: boolean;
-  data?: {
-    id: string;
-    name: string | null;
-    email: string;
-    // 關閉驗證時為 false，verificationEmailSent 也會是 false，前端不該提示寄信失敗
-    verificationRequired: boolean;
-    verificationEmailSent: boolean;
-  };
-  error?: string;
-}
+type RegisterResponse = ApiResponse<{
+  id: string;
+  name: string | null;
+  email: string;
+  // 關閉驗證時為 false，verificationEmailSent 也會是 false，前端不該提示寄信失敗
+  verificationRequired: boolean;
+  verificationEmailSent: boolean;
+}>;
 
 const EMAIL_TAKEN = "An account with this email already exists";
-
-function errorResponse(error: string, status: number) {
-  return NextResponse.json<RegisterResponse>(
-    { success: false, error },
-    { status },
-  );
-}
 
 export async function POST(request: Request) {
   // 放在解析 body 之前：格式錯誤的請求也要計入
   const limit = await checkRateLimit("register", getClientIp(request.headers));
   if (!limit.success) {
-    return NextResponse.json<RegisterResponse>(
-      { success: false, error: rateLimitMessage(limit.reset) },
-      {
-        status: 429,
-        headers: { "Retry-After": String(retryAfterSeconds(limit.reset)) },
-      },
-    );
+    return apiError(rateLimitMessage(limit.reset), 429, {
+      "Retry-After": String(retryAfterSeconds(limit.reset)),
+    });
   }
 
   let body: unknown;
   try {
     body = await request.json();
   } catch {
-    return errorResponse("Request body must be valid JSON", 400);
+    return apiError("Request body must be valid JSON", 400);
   }
 
   const parsed = registerSchema.safeParse(body);
   if (!parsed.success) {
-    return errorResponse(parsed.error.issues[0].message, 400);
+    return apiError(parsed.error.issues[0].message, 400);
   }
 
   const { name, email, password } = parsed.data;
@@ -70,7 +56,7 @@ export async function POST(request: Request) {
     select: { id: true },
   });
   if (existing) {
-    return errorResponse(EMAIL_TAKEN, 409);
+    return apiError(EMAIL_TAKEN, 409);
   }
 
   try {
@@ -95,9 +81,9 @@ export async function POST(request: Request) {
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"
     ) {
-      return errorResponse(EMAIL_TAKEN, 409);
+      return apiError(EMAIL_TAKEN, 409);
     }
     console.error("Registration failed", error);
-    return errorResponse("Registration failed, please try again", 500);
+    return apiError("Registration failed, please try again", 500);
   }
 }

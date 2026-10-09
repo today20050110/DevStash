@@ -1,14 +1,9 @@
-import { NextResponse } from "next/server";
-
+import { apiError } from "@/lib/api-response";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getItemFile } from "@/lib/db/items";
 import { contentDisposition } from "@/lib/file-types";
 import { getObjectStream } from "@/lib/r2";
 import { checkRateLimit, rateLimitMessage } from "@/lib/rate-limit";
-
-function errorResponse(error: string, status: number) {
-  return NextResponse.json({ success: false, error }, { status });
-}
 
 /**
  * 檔案下載與圖片預覽的代理：驗證登入與擁有者後由伺服器向 R2 讀取並轉送，
@@ -26,11 +21,11 @@ export async function GET(
 ) {
   const userId = await getCurrentUserId();
   if (!userId) {
-    return errorResponse("Unauthorized", 401);
+    return apiError("Unauthorized", 401);
   }
   const limit = await checkRateLimit("downloadFile", userId);
   if (!limit.success) {
-    return errorResponse(rateLimitMessage(limit.reset), 429);
+    return apiError(rateLimitMessage(limit.reset), 429);
   }
 
   const { id } = await params;
@@ -38,11 +33,11 @@ export async function GET(
     const file = await getItemFile(userId, id);
     // 別人的、已刪除的與沒有檔案的 item 一樣回 404
     if (!file) {
-      return errorResponse("File not found", 404);
+      return apiError("File not found", 404);
     }
     const body = await getObjectStream(file.storageKey);
     if (!body) {
-      return errorResponse("File not found", 404);
+      return apiError("File not found", 404);
     }
     return new Response(body, {
       headers: {
@@ -59,6 +54,6 @@ export async function GET(
     });
   } catch (error) {
     console.error("Failed to load file", error);
-    return errorResponse("Failed to load file", 500);
+    return apiError("Failed to load file", 500);
   }
 }

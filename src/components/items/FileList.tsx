@@ -4,6 +4,7 @@ import { createElement } from "react";
 import { ItemCardTrigger } from "@/components/items/ItemCardTrigger";
 import { buttonVariants } from "@/components/ui/button";
 import { getFileIcon } from "@/lib/file-icons";
+import { itemFileUrl } from "@/lib/item-api";
 import { formatDate, formatFileSize } from "@/lib/format";
 import type { ItemFile, ItemSummary } from "@/types/items";
 
@@ -81,7 +82,7 @@ function FileRow({ item }: { item: ItemSummary }) {
         {file ? (
           // z-10 疊在覆蓋整列的按鈕之上；兩者是兄弟元素而非巢狀，點下載不會開啟 drawer
           <a
-            href={`/api/items/${encodeURIComponent(item.id)}/file`}
+            href={itemFileUrl(item.id)}
             download={file.name}
             aria-label={`Download ${file.name}`}
             title="Download"

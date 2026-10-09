@@ -1,21 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
+import { fetchItemDetail } from "@/lib/item-api";
 import type { ItemDetail } from "@/types/items";
-
-type ItemDetailJson = Omit<
-  ItemDetail,
-  "pinnedAt" | "createdAt" | "updatedAt"
-> & {
-  pinnedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
-
-interface ItemDetailResponse {
-  success: boolean;
-  data?: ItemDetailJson;
-  error?: string;
-}
 
 /** 結果帶著 request 的 key：開啟新的 request 時舊結果自然不符而視為載入中，不需在 effect 內同步重設 state */
 interface ItemDetailResult {
@@ -30,32 +16,6 @@ interface ItemDetailState {
   isLoading: boolean;
   /** 儲存後以 server action 回傳的資料更新 drawer，不必再載入一次 */
   replaceItem: (item: ItemDetail) => void;
-}
-
-function parseItemDetail(json: ItemDetailJson): ItemDetail {
-  return {
-    ...json,
-    pinnedAt: json.pinnedAt ? new Date(json.pinnedAt) : null,
-    createdAt: new Date(json.createdAt),
-    updatedAt: new Date(json.updatedAt),
-  };
-}
-
-async function fetchItemDetail(
-  id: string,
-  signal: AbortSignal,
-): Promise<ItemDetail> {
-  const response = await fetch(`/api/items/${encodeURIComponent(id)}`, {
-    signal,
-  });
-  // 非 JSON 的錯誤頁（例如平台層的 5xx）不讓 SyntaxError 的訊息顯示給使用者
-  const body = (await response
-    .json()
-    .catch(() => null)) as ItemDetailResponse | null;
-  if (!response.ok || !body?.success || !body.data) {
-    throw new Error(body?.error ?? "Failed to load item");
-  }
-  return parseItemDetail(body.data);
 }
 
 /** 每次開啟都是新的 request（key 遞增），同一個 item 再開一次也會重新載入，失敗後可重試 */

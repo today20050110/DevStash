@@ -13,7 +13,12 @@ import {
 import { findCreatableItemType } from "@/lib/db/item-types";
 import { getUserIsPro } from "@/lib/db/users";
 import { createItemSchema, updateItemSchema } from "@/lib/item-schemas";
-import { canUploadFiles, checkContentSize, getItemLimit } from "@/lib/plan";
+import {
+  canUploadFiles,
+  checkContentSize,
+  getItemLimit,
+  itemLimitMessage,
+} from "@/lib/plan";
 import { deleteObject } from "@/lib/r2";
 import { checkRateLimit, rateLimitMessage } from "@/lib/rate-limit";
 import { getFileCategory, verifyUploadedFile } from "@/lib/uploads";
@@ -53,12 +58,7 @@ const itemIdSchema = z.string().min(1);
 export async function createItem(data: unknown): Promise<CreateItemResult> {
   const parsed = createItemSchema.safeParse(data);
   if (!parsed.success) {
-    const { formErrors, fieldErrors } = z.flattenError(parsed.error);
-    return {
-      success: false,
-      error: formErrors[0] ?? FIX_FIELDS,
-      fieldErrors: firstErrors(fieldErrors),
-    };
+    return validationFailure(parsed.error);
   }
 
   try {
@@ -120,7 +120,7 @@ export async function createItem(data: unknown): Promise<CreateItemResult> {
     if (result.status === "limit-reached") {
       return {
         success: false,
-        error: `The Free plan is limited to ${result.limit} items. Delete an item or upgrade to Pro to add more.`,
+        error: itemLimitMessage(result.limit),
       };
     }
     return { success: true, data: result.item };
@@ -152,12 +152,7 @@ export async function updateItem(
   }
   const parsed = updateItemSchema.safeParse(data);
   if (!parsed.success) {
-    const { formErrors, fieldErrors } = z.flattenError(parsed.error);
-    return {
-      success: false,
-      error: formErrors[0] ?? FIX_FIELDS,
-      fieldErrors: firstErrors(fieldErrors),
-    };
+    return validationFailure(parsed.error);
   }
 
   try {
@@ -190,6 +185,16 @@ export async function updateItem(
 }
 
 /** 每個欄位只顯示第一則錯誤；tags 陣列中個別元素的錯誤也歸到 tags */
+/** Zod 驗證失敗時的回應：表單層級的錯誤優先，否則提示修正欄位，並附上每個欄位的第一則錯誤 */
+function validationFailure<T>(error: z.ZodError<T>) {
+  const { formErrors, fieldErrors } = z.flattenError(error);
+  return {
+    success: false,
+    error: formErrors[0] ?? FIX_FIELDS,
+    fieldErrors: firstErrors(fieldErrors as Partial<Record<string, string[]>>),
+  };
+}
+
 function firstErrors<Field extends string>(
   fieldErrors: Partial<Record<Field, string[]>>,
 ): Partial<Record<Field, string>> {

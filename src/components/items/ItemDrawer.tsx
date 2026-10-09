@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { TypeIcon } from "@/components/dashboard/TypeIcon";
+import { TypeIconTile } from "@/components/dashboard/TypeIconTile";
 import { ItemDrawerActions } from "@/components/items/ItemDrawerActions";
 import { ItemDrawerBody } from "@/components/items/ItemDrawerSections";
 import { ItemEditForm } from "@/components/items/ItemEditForm";
@@ -108,16 +108,7 @@ function ItemDrawerHeader({ item }: { item: ItemDetail }) {
 
   return (
     <SheetHeader className="flex-row items-start gap-3 pr-12">
-      <div
-        className="flex size-10 shrink-0 items-center justify-center rounded-lg"
-        // 色碼來自資料庫，同 ItemCard 以 inline style 套用
-        style={{
-          backgroundColor: `color-mix(in srgb, ${color} 10%, transparent)`,
-          color,
-        }}
-      >
-        <TypeIcon name={icon} className="size-5" />
-      </div>
+      <TypeIconTile icon={icon} color={color} />
       <div className="min-w-0 space-y-2">
         <SheetTitle className="text-lg font-semibold break-words">
           {item.title}

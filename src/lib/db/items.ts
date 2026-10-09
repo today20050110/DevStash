@@ -22,6 +22,22 @@ export async function getItemCounts(
   return { items, favoriteItems };
 }
 
+/**
+ * 卡片與 drawer 共用的標籤查詢：依名稱排序、只取名稱。
+ * tag.userId 也要限制——join table 本身不帶擁有者
+ */
+function ownedTagNames(userId: string) {
+  return {
+    where: { tag: { userId } },
+    orderBy: { tag: { name: "asc" } },
+    select: { tag: { select: { name: true } } },
+  } satisfies Prisma.ItemTagFindManyArgs;
+}
+
+function toTagNames(tags: { tag: { name: string } }[]): string[] {
+  return tags.map(({ tag }) => tag.name);
+}
+
 interface ItemSummaryQuery {
   where?: Prisma.ItemWhereInput;
   orderBy: Prisma.ItemOrderByWithRelationInput;
@@ -83,12 +99,7 @@ async function findItemSummaries(
       fileSize: true,
       mimeType: true,
       itemType: { select: { name: true, icon: true, color: true } },
-      tags: {
-        // tag.userId 也要限制：join table 本身不帶擁有者
-        where: { tag: { userId } },
-        orderBy: { tag: { name: "asc" } },
-        select: { tag: { select: { name: true } } },
-      },
+      tags: ownedTagNames(userId),
     },
   });
 
@@ -109,7 +120,7 @@ async function findItemSummaries(
     }) => ({
       ...item,
       type: itemType,
-      tags: tags.map(({ tag }) => tag.name),
+      tags: toTagNames(tags),
       hasCopyValue: copyable.has(item.id),
       // storageKey 只用來判斷有沒有檔案，不送到前端
       file: storageKey ? toItemFile({ fileName, fileSize, mimeType }) : null,
@@ -177,12 +188,8 @@ export async function getItemDetail(
       itemType: {
         select: { name: true, icon: true, color: true, kind: true, slug: true },
       },
-      tags: {
-        // join table 本身不帶擁有者，tag 與 collection 都要另外限制 userId
-        where: { tag: { userId } },
-        orderBy: { tag: { name: "asc" } },
-        select: { tag: { select: { name: true } } },
-      },
+      // join table 本身不帶擁有者，collection 也要另外限制 userId
+      tags: ownedTagNames(userId),
       collections: {
         where: { collection: { userId, deletedAt: null } },
         orderBy: { collection: { name: "asc" } },
@@ -209,7 +216,7 @@ export async function getItemDetail(
     // storageKey 只在伺服器端使用，不送到前端；檔案一律經 /api/items/[id]/file 讀取
     file: storageKey ? toItemFile({ fileName, fileSize, mimeType }) : null,
     type: itemType,
-    tags: tags.map(({ tag }) => tag.name),
+    tags: toTagNames(tags),
     collections: collections.map(({ collection }) => collection),
   };
 }

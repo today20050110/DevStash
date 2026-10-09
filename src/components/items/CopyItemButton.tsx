@@ -5,8 +5,8 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
+import { fetchItemDetail } from "@/lib/item-api";
 import { getCopyValue } from "@/lib/item-copy";
-import type { ItemDetail } from "@/types/items";
 
 interface CopyItemButtonProps {
   id: string;
@@ -15,13 +15,9 @@ interface CopyItemButtonProps {
 
 /** 列表查詢不載入 content；點擊時才向 drawer 用的 API 取得完整資料 */
 async function loadCopyValue(id: string): Promise<string> {
-  const response = await fetch(`/api/items/${encodeURIComponent(id)}`);
-  const body = (await response.json().catch(() => null)) as {
-    data?: ItemDetail;
-  } | null;
-  const value = body?.data ? getCopyValue(body.data) : null;
-  if (!response.ok || !value) {
-    throw new Error(response.ok ? "Nothing to copy" : "Failed to load item");
+  const value = getCopyValue(await fetchItemDetail(id));
+  if (!value) {
+    throw new Error("Nothing to copy");
   }
   return value;
 }

@@ -5,7 +5,7 @@ import { cache } from "react";
 
 import { SIGN_IN_PATH } from "@/auth.config";
 import { ItemCard } from "@/components/dashboard/ItemCard";
-import { TypeIcon } from "@/components/dashboard/TypeIcon";
+import { TypeIconTile } from "@/components/dashboard/TypeIconTile";
 import { FileList } from "@/components/items/FileList";
 import { ImageCard } from "@/components/items/ImageCard";
 import { getCurrentUserId } from "@/lib/current-user";
@@ -55,16 +55,7 @@ export default async function ItemsByTypePage({
     // 以頁面本身為容器：側邊欄佔去寬度時，視窗的 md 斷點會讓兩欄窄到無法閱讀
     <div className="@container space-y-8">
       <div className="flex items-center gap-3">
-        <div
-          className="flex size-10 shrink-0 items-center justify-center rounded-lg"
-          // 色碼來自資料庫，同 ItemCard 以 inline style 套用
-          style={{
-            backgroundColor: `color-mix(in srgb, ${itemType.color} 10%, transparent)`,
-            color: itemType.color,
-          }}
-        >
-          <TypeIcon name={itemType.icon} className="size-5" />
-        </div>
+        <TypeIconTile icon={itemType.icon} color={itemType.color} />
         <div>
           <h1 className="text-3xl font-bold">{itemType.name}</h1>
           <p className="text-sm text-muted-foreground">
