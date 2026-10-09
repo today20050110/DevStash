@@ -21,7 +21,7 @@ current-feature.md has these sections:
 - `## Status` - Not Started | In Progress | Complete (English only, even though the rest of the file is written in Traditional Chinese)
 - `## Goals` - Bullet points of what success looks like
 - `## Notes` - Additional context, constraints, or details from spec
-- `## History` - Completed features (append only)
+- `## History` - One pointer line; completed features are appended to `context/feature-history.md` (not auto-loaded)
 
 ## Task
 

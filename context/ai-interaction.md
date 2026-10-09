@@ -21,7 +21,7 @@ This is the common workflow that we will use for every single feature/fix:
 7. **Merge** - Merge to main
 8. **Delete Branch** - Delete branch after merge
 9. **Review** - Review AI-generated code periodically and on demand.
-10. Mark as completed in @context/current-feature.md and add to history
+10. Mark as completed in @context/current-feature.md and add to history in `context/feature-history.md`
 
 Do NOT commit without permission and until the tests and build pass. If either fails, fix the issues first.
 

@@ -17,8 +17,10 @@ The main branch of this repo is `master`, not `main`.
    - Change H1 back to `# Current Feature`
    - Clear Goals and Notes sections (keep placeholder comments)
    - Set Status back to `Not Started`
-   - Add feature summary to the END of History, matching the detail level of the
-     existing entries (what changed, why, verification result, known issues)
+   - Leave the `## History` pointer line as is
+   - Add feature summary to the END of `context/feature-history.md`, matching the
+     detail level of the existing entries (what changed, why, verification result,
+     known issues)
 5. Commit the reset: `chore: reset current-feature.md after completing [feature]`
 6. Push `master` to origin ONCE (single push with all changes)
 7. If feature branch was previously pushed, delete it from origin
