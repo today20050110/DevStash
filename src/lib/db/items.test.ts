@@ -5,6 +5,7 @@ import {
   findCreatableItemType,
   getItemDetail,
   getItemFile,
+  getItemsByType,
   recordPendingDeletion,
   softDeleteItem,
   updateItem,
@@ -26,7 +27,7 @@ const tx = {
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    item: { findFirst: vi.fn(), updateMany: vi.fn() },
+    item: { findFirst: vi.fn(), findMany: vi.fn(), updateMany: vi.fn() },
     itemType: { findFirst: vi.fn() },
     pendingDeletion: { create: vi.fn() },
     $transaction: vi.fn(),
@@ -462,5 +463,53 @@ describe("createItem", () => {
     expect(tx.item.create.mock.calls[0][0].data).not.toHaveProperty(
       "storageKey",
     );
+  });
+});
+
+describe("getItemsByType", () => {
+  const summaryRow = (storageKey: string | null, mimeType: string | null) => ({
+    id: "item-1",
+    title: "Screenshot",
+    description: null,
+    isFavorite: false,
+    pinnedAt: null,
+    createdAt: new Date("2026-09-15T00:00:00Z"),
+    storageKey,
+    mimeType,
+    itemType: { name: "Images", icon: "Image", color: "#ec4899" },
+    tags: [],
+  });
+  const findMany = vi.mocked(prisma.item.findMany);
+
+  it("只查該使用者、未刪除且屬於該型別的 item", async () => {
+    findMany.mockResolvedValue([]);
+    await getItemsByType("user-1", "type-1");
+
+    expect(findMany.mock.calls[0][0]?.where).toEqual({
+      itemTypeId: "type-1",
+      userId: "user-1",
+      deletedAt: null,
+    });
+  });
+
+  it("有檔案且 MIME 為圖片時 isImage 為 true，不把 storageKey 送到前端", async () => {
+    findMany.mockResolvedValue([
+      summaryRow("users/user-1/items/a.png", "image/png"),
+    ] as never);
+
+    const [item] = await getItemsByType("user-1", "type-1");
+    expect(item.isImage).toBe(true);
+    expect(item).not.toHaveProperty("storageKey");
+    expect(item).not.toHaveProperty("mimeType");
+  });
+
+  it("非圖片的檔案與沒有檔案的 item，isImage 為 false", async () => {
+    findMany.mockResolvedValue([
+      summaryRow("users/user-1/items/a.pdf", "application/pdf"),
+      summaryRow(null, "image/png"),
+    ] as never);
+
+    const items = await getItemsByType("user-1", "type-1");
+    expect(items.map((item) => item.isImage)).toEqual([false, false]);
   });
 });

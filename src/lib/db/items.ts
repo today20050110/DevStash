@@ -1,4 +1,5 @@
 import type { Prisma } from "@/generated/prisma/client";
+import { isImageMimeType } from "@/lib/file-types";
 import { getItemTypeFields } from "@/lib/item-fields";
 import type { CreateItemData, UpdateItemData } from "@/lib/item-schemas";
 import { prisma } from "@/lib/prisma";
@@ -130,6 +131,8 @@ async function findItemSummaries(
       isFavorite: true,
       pinnedAt: true,
       createdAt: true,
+      storageKey: true,
+      mimeType: true,
       itemType: { select: { name: true, icon: true, color: true } },
       tags: {
         // tag.userId 也要限制：join table 本身不帶擁有者
@@ -140,10 +143,12 @@ async function findItemSummaries(
     },
   });
 
-  return items.map(({ itemType, tags, ...item }) => ({
+  // storageKey 只用來判斷有沒有檔案，不送到前端
+  return items.map(({ itemType, tags, storageKey, mimeType, ...item }) => ({
     ...item,
     type: itemType,
     tags: tags.map(({ tag }) => tag.name),
+    isImage: storageKey !== null && isImageMimeType(mimeType),
   }));
 }
 

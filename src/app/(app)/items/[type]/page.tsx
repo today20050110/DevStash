@@ -6,6 +6,7 @@ import { cache } from "react";
 import { SIGN_IN_PATH } from "@/auth.config";
 import { ItemCard } from "@/components/dashboard/ItemCard";
 import { TypeIcon } from "@/components/dashboard/TypeIcon";
+import { ImageCard } from "@/components/items/ImageCard";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getItemTypeBySlug, getItemsByType } from "@/lib/db/items";
 
@@ -71,9 +72,14 @@ export default async function ItemsByTypePage({
 
       {items.length > 0 ? (
         <div className="grid gap-4 @3xl:grid-cols-2 @5xl:grid-cols-3">
-          {items.map((item) => (
-            <ItemCard key={item.id} item={item} />
-          ))}
+          {items.map((item) =>
+            // 依檔案本身判斷而非型別 slug；dashboard 維持一般卡片
+            item.isImage ? (
+              <ImageCard key={item.id} item={item} />
+            ) : (
+              <ItemCard key={item.id} item={item} />
+            ),
+          )}
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">No items yet.</p>
