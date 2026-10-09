@@ -15,13 +15,29 @@ function optionalText({ trim }: { trim: boolean }) {
     });
 }
 
+/**
+ * 列表查詢會載入每一筆的標題、描述與全部標籤（只有 content 刻意不載入），
+ * 沒有上限的話，描述就成了繞過 content 100 KB 上限、讓每次列表載入變得巨大的途徑
+ */
+export const TITLE_MAX_LENGTH = 200;
+export const DESCRIPTION_MAX_LENGTH = 2000;
+export const TAG_MAX_LENGTH = 50;
+export const MAX_TAGS = 20;
+
 /** 新增與編輯共用的欄位；型別專屬欄位是否適用由呼叫端依 getItemTypeFields 判斷 */
 const itemFields = {
   title: z
     .string({ error: "Title is required" })
     .trim()
-    .min(1, "Title is required"),
-  description: optionalText({ trim: true }),
+    .min(1, "Title is required")
+    .max(
+      TITLE_MAX_LENGTH,
+      `Title must be ${TITLE_MAX_LENGTH} characters or less`,
+    ),
+  description: optionalText({ trim: true }).refine(
+    (value) => value === null || value.length <= DESCRIPTION_MAX_LENGTH,
+    `Description must be ${DESCRIPTION_MAX_LENGTH.toLocaleString("en-US")} characters or less`,
+  ),
   // 程式碼的縮排與結尾換行有意義，不 trim
   content: optionalText({ trim: false }),
   language: optionalText({ trim: true }),
@@ -35,9 +51,14 @@ const itemFields = {
       z
         .string({ error: "Tags must be text" })
         .trim()
-        .min(1, "Tags cannot be empty"),
+        .min(1, "Tags cannot be empty")
+        .max(
+          TAG_MAX_LENGTH,
+          `Each tag must be ${TAG_MAX_LENGTH} characters or less`,
+        ),
       { error: "Tags must be a list" },
     )
+    .max(MAX_TAGS, `Up to ${MAX_TAGS} tags`)
     .default([]),
 };
 

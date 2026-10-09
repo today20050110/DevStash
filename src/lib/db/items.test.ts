@@ -443,7 +443,7 @@ describe("createItem", () => {
       }),
     ).resolves.toEqual({ status: "file-in-use" });
     expect(tx.item.findFirst).toHaveBeenCalledWith({
-      where: { storageKey: "users/user-1/items/key.png" },
+      where: { userId: "user-1", storageKey: "users/user-1/items/key.png" },
       select: { id: true },
     });
     expect(tx.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(

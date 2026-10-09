@@ -18,6 +18,10 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  callServerAction,
+  SERVER_UNREACHABLE_MESSAGE,
+} from "@/lib/server-action";
 
 interface DeleteItemDialogProps {
   itemId: string;
@@ -49,9 +53,13 @@ export function DeleteItemDialog({
 
   function handleDelete() {
     startDeleting(async () => {
-      const result = await deleteItem(itemId);
-      if (!result.success) {
-        setError(result.error ?? "Failed to delete item");
+      const result = await callServerAction(() => deleteItem(itemId));
+      if (!result?.success) {
+        setError(
+          result
+            ? (result.error ?? "Failed to delete item")
+            : SERVER_UNREACHABLE_MESSAGE,
+        );
         return;
       }
       setOpen(false);

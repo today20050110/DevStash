@@ -152,6 +152,7 @@ describe("verifyUploadedFile", () => {
     const result = await verifyUploadedFile("user-1", "image", KEY, "a.png");
 
     expect(result.ok).toBe(false);
+    expect(isStorageKeyInUse).toHaveBeenCalledWith("user-1", KEY);
     expect(headObject).not.toHaveBeenCalled();
   });
 

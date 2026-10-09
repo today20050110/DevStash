@@ -107,7 +107,7 @@ export async function verifyUploadedFile(
   if (!isOwnStorageKey(storageKey, userId)) {
     return { ok: false, error: UPLOAD_MISSING };
   }
-  if (await isStorageKeyInUse(storageKey)) {
+  if (await isStorageKeyInUse(userId, storageKey)) {
     return { ok: false, error: UPLOAD_MISSING };
   }
   const stored = await headObject(storageKey);

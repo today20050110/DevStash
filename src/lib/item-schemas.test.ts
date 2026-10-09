@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
-import { updateItemSchema } from "@/lib/item-schemas";
+import {
+  DESCRIPTION_MAX_LENGTH,
+  MAX_TAGS,
+  TAG_MAX_LENGTH,
+  TITLE_MAX_LENGTH,
+  updateItemSchema,
+} from "@/lib/item-schemas";
 
 const VALID = {
   title: "useAuth Hook",
@@ -66,5 +73,43 @@ describe("updateItemSchema", () => {
 
   it("不是物件時失敗", () => {
     expect(updateItemSchema.safeParse("x").success).toBe(false);
+  });
+
+  it("標題與描述剛好在上限時通過，超過一個字元時失敗；長度以 trim 後計算", () => {
+    const title = "a".repeat(TITLE_MAX_LENGTH);
+    const description = "a".repeat(DESCRIPTION_MAX_LENGTH);
+    expect(
+      updateItemSchema.safeParse({ ...VALID, title: ` ${title} `, description })
+        .success,
+    ).toBe(true);
+    expect(
+      updateItemSchema.safeParse({ ...VALID, title: `${title}a` }).success,
+    ).toBe(false);
+    expect(
+      updateItemSchema.safeParse({ ...VALID, description: `${description}a` })
+        .success,
+    ).toBe(false);
+  });
+
+  it("標籤數量與單一標籤長度有上限，錯誤掛在 tags 欄位", () => {
+    const tags = Array.from({ length: MAX_TAGS }, (_, i) => `tag-${i}`);
+    expect(updateItemSchema.safeParse({ ...VALID, tags }).success).toBe(true);
+
+    const tooMany = updateItemSchema.safeParse({
+      ...VALID,
+      tags: [...tags, "one-more"],
+    });
+    const tooLong = updateItemSchema.safeParse({
+      ...VALID,
+      tags: ["a".repeat(TAG_MAX_LENGTH + 1)],
+    });
+    expect(tooMany.success).toBe(false);
+    expect(tooLong.success).toBe(false);
+    expect(z.flattenError(tooMany.error!).fieldErrors.tags?.[0]).toBe(
+      `Up to ${MAX_TAGS} tags`,
+    );
+    expect(z.flattenError(tooLong.error!).fieldErrors.tags?.[0]).toBe(
+      `Each tag must be ${TAG_MAX_LENGTH} characters or less`,
+    );
   });
 });

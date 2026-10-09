@@ -26,6 +26,10 @@ import {
 } from "@/components/ui/dialog";
 import { getUploadCategory } from "@/lib/file-types";
 import { getItemTypeFields } from "@/lib/item-fields";
+import {
+  callServerAction,
+  SERVER_UNREACHABLE_MESSAGE,
+} from "@/lib/server-action";
 import { cn } from "@/lib/utils";
 import { parseTagInput } from "@/lib/tags";
 import type { CreatableItemType } from "@/types/items";
@@ -108,13 +112,20 @@ export function NewItemDialog({ itemTypes }: NewItemDialogProps) {
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     startCreating(async () => {
-      const result = await createItem({
-        itemTypeId: typeId,
-        ...values,
-        tags: parseTagInput(values.tags),
-        storageKey: fields.file ? upload?.storageKey : undefined,
-        fileName: fields.file ? upload?.fileName : undefined,
-      });
+      const result = await callServerAction(() =>
+        createItem({
+          itemTypeId: typeId,
+          ...values,
+          tags: parseTagInput(values.tags),
+          storageKey: fields.file ? upload?.storageKey : undefined,
+          fileName: fields.file ? upload?.fileName : undefined,
+        }),
+      );
+      // 沒連上伺服器：dialog 保持開啟、內容保留，讓使用者重試
+      if (!result) {
+        toast.error(SERVER_UNREACHABLE_MESSAGE);
+        return;
+      }
       if (!result.success || !result.data) {
         setErrors(result.fieldErrors ?? {});
         toast.error(result.error ?? "Failed to create item");

@@ -292,10 +292,17 @@ export async function getItemFile(
   return { ...toItemFile(item), storageKey: item.storageKey };
 }
 
-/** 同一個上傳只能建立一個 item：已被任何 item（含已刪除）使用的 key 不能再用 */
-export async function isStorageKeyInUse(storageKey: string): Promise<boolean> {
+/**
+ * 同一個上傳只能建立一個 item：已被任何 item（含已刪除）使用的 key 不能再用。
+ * key 內含 userId 且呼叫端已以 isOwnStorageKey 確認，帶上 userId 語意不變，
+ * 又能用到以 userId 開頭的索引，不必掃描所有使用者的 item
+ */
+export async function isStorageKeyInUse(
+  userId: string,
+  storageKey: string,
+): Promise<boolean> {
   const item = await prisma.item.findFirst({
-    where: { storageKey },
+    where: { userId, storageKey },
     select: { id: true },
   });
   return item !== null;
@@ -488,7 +495,7 @@ export async function createItem(
     if (
       file &&
       (await tx.item.findFirst({
-        where: { storageKey: file.storageKey },
+        where: { userId, storageKey: file.storageKey },
         select: { id: true },
       }))
     ) {

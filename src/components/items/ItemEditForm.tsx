@@ -17,6 +17,10 @@ import {
 } from "@/components/items/ItemFormFields";
 import { Button } from "@/components/ui/button";
 import { getItemTypeFields } from "@/lib/item-fields";
+import {
+  callServerAction,
+  SERVER_UNREACHABLE_MESSAGE,
+} from "@/lib/server-action";
 import { parseTagInput } from "@/lib/tags";
 import type { ItemDetail } from "@/types/items";
 
@@ -52,10 +56,17 @@ export function ItemEditForm({ item, onCancel, onSaved }: ItemEditFormProps) {
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     startSaving(async () => {
-      const result = await updateItem(item.id, {
-        ...values,
-        tags: parseTagInput(values.tags),
-      });
+      const result = await callServerAction(() =>
+        updateItem(item.id, {
+          ...values,
+          tags: parseTagInput(values.tags),
+        }),
+      );
+      // 沒連上伺服器：保留表單內容讓使用者重試
+      if (!result) {
+        toast.error(SERVER_UNREACHABLE_MESSAGE);
+        return;
+      }
       if (!result.success || !result.data) {
         setErrors(result.fieldErrors ?? {});
         toast.error(result.error ?? "Failed to save item");
