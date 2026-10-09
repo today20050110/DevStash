@@ -1,16 +1,27 @@
-# Current Feature
+# Current Feature: 處理 Vercel 安裝時的 npm 警告
 
 ## Status
 
-Not Started
+Complete
 
 ## Goals
 
-<!-- 以 /feature load 載入 spec 後填入；成功長什麼樣子 -->
+- `package.json` 加入 `allowScripts`，涵蓋需要執行安裝腳本的套件（`@prisma/engines`、`prisma`、`esbuild`、`unrs-resolver`，以及只在 macOS 安裝的 `fsevents`），Vercel 不再出現 `install-scripts` 警告，日後 npm 12 預設封鎖未核准的腳本時部署也不會壞
+- 嘗試把 ESLint 由 9（已停止支援）升級到 10；`eslint-config-next` 內含的外掛相容、`npm run lint` 結果不變才保留，否則維持 9 並記錄原因
+- `npm test`、tsc、lint、build 通過
 
 ## Notes
 
-<!-- 來源、限制、實作方向、驗證結果、已知情況 -->
+- 來源：使用者貼上的 Vercel 部署警告（`npm warn deprecated eslint@9.39.5`、`npm warn install-scripts 4 packages have install scripts not yet covered by allowScripts`）
+- 本機 npm 為 11.6.1，還沒有 `allowScripts`；Vercel 用的是較新的 npm 11。npm 文件（v11.21.0）：`npm approve-scripts` 寫入 `package.json` 的 `allowScripts`，預設寫入釘版本的鍵（`pkg@1.2.3`），`--no-allow-scripts-pin` 寫入只有名稱的鍵（允許之後的版本），`false` 代表拒絕
+- 這幾個腳本都是必要的：`prisma`／`@prisma/engines` 下載引擎（部署時的 `prisma migrate deploy` 需要），`esbuild` 安裝平台執行檔（tsx、Vitest），`unrs-resolver` 是 ESLint 解析 import 的原生模組
+
+### 結果
+
+- **allowScripts**：本機 npm 11.6.1 沒有此功能，改以 `npx npm@11.21.0`（`npx -y npm@11` 會用快取裡的 11.13.0，沒有 `approve-scripts`）執行 `approve-scripts --allow-scripts-pending`，列出的 4 個套件與 Vercel 警告完全相同（`fsevents` 只在 macOS 安裝，不在清單中，未加入）。以 `approve-scripts --all --no-allow-scripts-pin` 寫入只有名稱的鍵：釘版本的鍵在套件升級後就不再涵蓋，npm 12 會跳過 `prisma`／`@prisma/engines` 的腳本而讓部署失敗；確切版本已由 `package-lock.json` 鎖定。之後再查為「No packages with unreviewed install scripts」；`package-lock.json` 未改變
+- **ESLint 10：不升級**。`eslint-config-next`（16.3.8，最新 16.4.0 亦同）內含的 `eslint-plugin-react` 7.37.5、`eslint-plugin-import` 2.32.0、`eslint-plugin-jsx-a11y` 6.10.2 的 peer 範圍都只到 ESLint 9（最新版也是）；npm 只警告 `ERESOLVE overriding peer dependency` 而不擋。實際安裝 10.12.0 後 `npm run lint` 直接崩潰：`Error while loading rule 'react/display-name': contextOrFilename.getFilename is not a function`（ESLint 10 移除了 `context.getFilename()`）。已還原 `package.json` 與 `package-lock.json` 並 `npm ci`，ESLint 回到 9.39.5。Vercel 的 `deprecated eslint@9.39.5` 警告會保留，直到 `eslint-config-next` 的外掛支援 ESLint 10
+- 還原時 `npm ci` 因我在背景啟動的 dev server 鎖住 `lightningcss` 的原生模組而 EPERM，停掉該 dev server 後重跑成功並重新 `prisma generate`
+- `npm test` 187/187、tsc、lint、build 通過
 
 ## History
 
