@@ -15,6 +15,14 @@ export interface CollectionOption {
   name: string;
 }
 
+/** /collections/[id] 頁首顯示的欄位 */
+export interface CollectionHeader {
+  id: string;
+  name: string;
+  description: string | null;
+  isFavorite: boolean;
+}
+
 export interface CollectionSummary {
   id: string;
   name: string;

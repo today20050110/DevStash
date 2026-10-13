@@ -107,7 +107,7 @@ function FavoriteCollectionMenuItem({
   return (
     <SidebarMenuItem>
       <SidebarMenuButton asChild>
-        <Link href={`/collections/${collection.slug}`}>
+        <Link href={`/collections/${collection.id}`}>
           <Folder />
           <span>{collection.name}</span>
         </Link>
@@ -130,7 +130,7 @@ function RecentCollectionMenuItem({
   return (
     <SidebarMenuItem>
       <SidebarMenuButton asChild>
-        <Link href={`/collections/${collection.slug}`}>
+        <Link href={`/collections/${collection.id}`}>
           <Folder />
           <span
             aria-hidden

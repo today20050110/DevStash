@@ -149,6 +149,20 @@ export function getItemsByType(
   });
 }
 
+/**
+ * collection 內的 items，依建立時間由新到舊。collection 的擁有者由呼叫端先以
+ * getCollectionById 確認；item 本身的 userId 與 deletedAt 由 findItemSummaries 限制
+ */
+export function getItemsInCollection(
+  userId: string,
+  collectionId: string,
+): Promise<ItemSummary[]> {
+  return findItemSummaries(userId, {
+    where: { collections: { some: { collectionId } } },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
 /** pinned 與 recent 是不同維度，已釘選的項目同樣會出現在這裡 */
 export function getRecentItems(
   userId: string,

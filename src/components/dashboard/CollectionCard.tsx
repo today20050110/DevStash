@@ -15,14 +15,15 @@ export function CollectionCard({ collection }: CollectionCardProps) {
 
   return (
     <Card
-      className="border-l-4 transition-colors hover:bg-muted/40"
+      className="relative border-l-4 transition-colors has-focus-visible:ring-3 has-focus-visible:ring-ring/50 hover:bg-muted/40"
       style={{ borderLeftColor: dominantType?.color }}
     >
       <CardContent className="space-y-3">
         <div>
+          {/* after: 把連結的可點範圍撐滿整張卡片；連結文字仍只有名稱，螢幕閱讀器不會念出整張卡片 */}
           <Link
-            href={`/collections/${collection.slug}`}
-            className="flex items-center gap-2 font-semibold hover:underline"
+            href={`/collections/${collection.id}`}
+            className="flex items-center gap-2 font-semibold outline-none after:absolute after:inset-0 hover:underline"
           >
             {collection.name}
             {collection.isFavorite && (

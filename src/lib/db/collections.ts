@@ -3,6 +3,7 @@ import type { CreateCollectionData } from "@/lib/collection-schemas";
 import { nextAvailableSlug, toCollectionSlug } from "@/lib/collection-slug";
 import { prisma } from "@/lib/prisma";
 import type {
+  CollectionHeader,
   CollectionOption,
   CollectionSummary,
   CollectionTypeSummary,
@@ -84,6 +85,27 @@ export function getFavoriteCollections(
   userId: string,
 ): Promise<CollectionSummary[]> {
   return findCollectionSummaries(userId, { where: { isFavorite: true } });
+}
+
+/** /collections 頁：全部未刪除的 collections */
+export function getAllCollections(
+  userId: string,
+): Promise<CollectionSummary[]> {
+  return findCollectionSummaries(userId, {});
+}
+
+/**
+ * /collections/[id] 的頁首。不屬於該使用者、不存在或已刪除時回傳 null（頁面回 404），
+ * 不區分三者
+ */
+export function getCollectionById(
+  userId: string,
+  collectionId: string,
+): Promise<CollectionHeader | null> {
+  return prisma.collection.findFirst({
+    where: { id: collectionId, userId, deletedAt: null },
+    select: { id: true, name: true, description: true, isFavorite: true },
+  });
 }
 
 /** 側邊欄用：收藏已有自己的區塊，這裡排除以免重複列出 */

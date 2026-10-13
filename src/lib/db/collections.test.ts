@@ -4,6 +4,8 @@ import { createCollectionSchema } from "@/lib/collection-schemas";
 import {
   createCollection,
   findOwnedCollectionIds,
+  getAllCollections,
+  getCollectionById,
   getCollectionOptions,
 } from "@/lib/db/collections";
 import { prisma } from "@/lib/prisma";
@@ -18,7 +20,10 @@ const tx = {
 };
 
 vi.mock("@/lib/prisma", () => ({
-  prisma: { $transaction: vi.fn(), collection: { findMany: vi.fn() } },
+  prisma: {
+    $transaction: vi.fn(),
+    collection: { findMany: vi.fn(), findFirst: vi.fn() },
+  },
 }));
 
 const transaction = vi.mocked(prisma.$transaction);
@@ -36,6 +41,83 @@ describe("getCollectionOptions", () => {
       orderBy: [{ name: "asc" }, { id: "asc" }],
       select: { id: true, name: true },
     });
+  });
+});
+
+describe("getAllCollections", () => {
+  it("不限數量，只取該使用者未刪除的，並彙總 item 數與型別組成", async () => {
+    findMany.mockResolvedValue([
+      {
+        id: "col-1",
+        name: "DevOps",
+        slug: "devops",
+        description: null,
+        isFavorite: false,
+        items: [
+          {
+            item: {
+              itemType: {
+                id: "t-1",
+                name: "Commands",
+                slug: "commands",
+                icon: "Terminal",
+                color: "#f97316",
+              },
+            },
+          },
+          {
+            item: {
+              itemType: {
+                id: "t-1",
+                name: "Commands",
+                slug: "commands",
+                icon: "Terminal",
+                color: "#f97316",
+              },
+            },
+          },
+        ],
+      },
+    ] as never);
+
+    const [collection] = await getAllCollections("user-1");
+
+    const args = findMany.mock.calls[0][0];
+    expect(args?.where).toEqual({ userId: "user-1", deletedAt: null });
+    expect(args?.take).toBeUndefined();
+    expect(collection).toMatchObject({
+      id: "col-1",
+      itemCount: 2,
+      types: [{ id: "t-1", count: 2 }],
+    });
+  });
+});
+
+describe("getCollectionById", () => {
+  const findFirst = vi.mocked(prisma.collection.findFirst);
+
+  it("只查該使用者且未刪除的 collection", async () => {
+    findFirst.mockResolvedValue({
+      id: "col-1",
+      name: "DevOps",
+      description: null,
+      isFavorite: false,
+    } as never);
+
+    await expect(getCollectionById("user-1", "col-1")).resolves.toMatchObject({
+      id: "col-1",
+    });
+    expect(findFirst.mock.calls[0][0]?.where).toEqual({
+      id: "col-1",
+      userId: "user-1",
+      deletedAt: null,
+    });
+  });
+
+  it("查不到（別人的、不存在或已刪除）時回傳 null", async () => {
+    findFirst.mockResolvedValue(null);
+
+    await expect(getCollectionById("user-1", "col-x")).resolves.toBeNull();
   });
 });
 

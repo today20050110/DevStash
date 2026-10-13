@@ -4,14 +4,13 @@ import { connection } from "next/server";
 import { cache } from "react";
 
 import { SIGN_IN_PATH } from "@/auth.config";
-import { ItemCard } from "@/components/dashboard/ItemCard";
 import { TypeIconTile } from "@/components/dashboard/TypeIconTile";
 import { FileList } from "@/components/items/FileList";
-import { ImageCard } from "@/components/items/ImageCard";
+import { ItemGrid } from "@/components/items/ItemGrid";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getItemTypeBySlug } from "@/lib/db/item-types";
 import { getItemsByType } from "@/lib/db/items";
-import { getUploadCategory, isImageMimeType } from "@/lib/file-types";
+import { getUploadCategory } from "@/lib/file-types";
 
 /**
  * generateMetadata 與頁面都需要型別；以 cache() 包起來，同一個請求只查一次。
@@ -52,7 +51,7 @@ export default async function ItemsByTypePage({
   const items = await getItemsByType(userId, itemType.id);
 
   return (
-    // 以頁面本身為容器：側邊欄佔去寬度時，視窗的 md 斷點會讓兩欄窄到無法閱讀
+    // 以頁面本身為容器，ItemGrid 依它決定欄數
     <div className="@container space-y-8">
       <div className="flex items-center gap-3">
         <TypeIconTile icon={itemType.icon} color={itemType.color} />
@@ -70,16 +69,7 @@ export default async function ItemsByTypePage({
         // 版面是整頁的決定，沿用上傳規則的型別對照；dashboard 維持一般卡片
         <FileList items={items} />
       ) : (
-        <div className="grid gap-4 @3xl:grid-cols-2 @5xl:grid-cols-3">
-          {items.map((item) =>
-            // 卡片依檔案本身逐筆判斷，而非型別 slug
-            item.file && isImageMimeType(item.file.mimeType) ? (
-              <ImageCard key={item.id} item={item} />
-            ) : (
-              <ItemCard key={item.id} item={item} />
-            ),
-          )}
-        </div>
+        <ItemGrid items={items} />
       )}
     </div>
   );

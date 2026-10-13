@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { getItemDetail, getItemFile, getItemsByType } from "@/lib/db/items";
+import {
+  getItemDetail,
+  getItemFile,
+  getItemsByType,
+  getItemsInCollection,
+} from "@/lib/db/items";
 import { prisma } from "@/lib/prisma";
 
 vi.mock("@/lib/prisma", () => ({
@@ -130,6 +135,24 @@ describe("getItemFile", () => {
       size: 10,
       mimeType: "application/pdf",
     });
+  });
+});
+
+describe("getItemsInCollection", () => {
+  const findMany = vi.mocked(prisma.item.findMany);
+
+  it("只查該使用者、未刪除且在該 collection 內的 item，由新到舊", async () => {
+    findMany.mockResolvedValue([]);
+
+    await getItemsInCollection("user-1", "col-1");
+
+    const args = findMany.mock.calls[0][0];
+    expect(args?.where).toEqual({
+      collections: { some: { collectionId: "col-1" } },
+      userId: "user-1",
+      deletedAt: null,
+    });
+    expect(args?.orderBy).toEqual([{ createdAt: "desc" }, { id: "desc" }]);
   });
 });
 
