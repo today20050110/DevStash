@@ -1,5 +1,5 @@
 import type { Prisma } from "@/generated/prisma/client";
-import type { CreateCollectionData } from "@/lib/collection-schemas";
+import type { CollectionData } from "@/lib/collection-schemas";
 import { nextAvailableSlug, toCollectionSlug } from "@/lib/collection-slug";
 import { prisma } from "@/lib/prisma";
 import type {
@@ -158,7 +158,7 @@ export type CreateCollectionResult =
  */
 export async function createCollection(
   userId: string,
-  data: CreateCollectionData,
+  data: CollectionData,
   collectionLimit: number | null,
 ): Promise<CreateCollectionResult> {
   return prisma.$transaction(async (tx) => {
@@ -191,6 +191,39 @@ export async function createCollection(
     });
     return { status: "created", collection } as const;
   });
+}
+
+/**
+ * 更新 name 與 description。擁有者與「尚未刪除」放在 updateMany 的條件裡，
+ * 以 count 判斷；不屬於該使用者、不存在或已刪除時回傳 null。
+ * slug 不變：網址用 id，改名後重算 slug 只會多出衝突要處理
+ */
+export async function updateCollection(
+  userId: string,
+  collectionId: string,
+  data: CollectionData,
+): Promise<{ id: string; name: string } | null> {
+  const { count } = await prisma.collection.updateMany({
+    where: { id: collectionId, userId, deletedAt: null },
+    data: { name: data.name, description: data.description },
+  });
+  return count > 0 ? { id: collectionId, name: data.name } : null;
+}
+
+/**
+ * 軟刪除：只設定 deletedAt，item 不受影響。ItemCollection 連結保留——所有讀取都排除
+ * 已刪除的 collection，item 看起來就是不在這個 collection 了，誤刪時也能從資料庫還原。
+ * 回傳 false 代表不存在、屬於別人或已經刪除過
+ */
+export async function softDeleteCollection(
+  userId: string,
+  collectionId: string,
+): Promise<boolean> {
+  const { count } = await prisma.collection.updateMany({
+    where: { id: collectionId, userId, deletedAt: null },
+    data: { deletedAt: new Date() },
+  });
+  return count > 0;
 }
 
 export async function getCollectionCounts(

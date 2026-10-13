@@ -6,7 +6,8 @@ import { optionalText } from "@/lib/item-schemas";
 export const COLLECTION_NAME_MAX_LENGTH = 100;
 export const COLLECTION_DESCRIPTION_MAX_LENGTH = 500;
 
-export const createCollectionSchema = z.object(
+/** 新增與編輯共用：兩者都只有 name 與 description */
+export const collectionSchema = z.object(
   {
     name: z
       .string({ error: "Name is required" })
@@ -25,5 +26,5 @@ export const createCollectionSchema = z.object(
   { error: "Invalid collection data" },
 );
 
-export type CreateCollectionInput = z.input<typeof createCollectionSchema>;
-export type CreateCollectionData = z.output<typeof createCollectionSchema>;
+export type CollectionInput = z.input<typeof collectionSchema>;
+export type CollectionData = z.output<typeof collectionSchema>;

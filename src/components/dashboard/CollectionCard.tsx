@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Star } from "lucide-react";
 
+import { CollectionCardMenu } from "@/components/collections/CollectionCardMenu";
 import { TypeIcon } from "@/components/dashboard/TypeIcon";
 import { Card, CardContent } from "@/components/ui/card";
 import type { CollectionSummary } from "@/types/collections";
@@ -19,20 +20,24 @@ export function CollectionCard({ collection }: CollectionCardProps) {
       style={{ borderLeftColor: dominantType?.color }}
     >
       <CardContent className="space-y-3">
-        <div>
-          {/* after: 把連結的可點範圍撐滿整張卡片；連結文字仍只有名稱，螢幕閱讀器不會念出整張卡片 */}
-          <Link
-            href={`/collections/${collection.id}`}
-            className="flex items-center gap-2 font-semibold outline-none after:absolute after:inset-0 hover:underline"
-          >
-            {collection.name}
-            {collection.isFavorite && (
-              <Star className="size-4 shrink-0 fill-yellow-400 text-yellow-400" />
-            )}
-          </Link>
-          <p className="text-sm text-muted-foreground">
-            {collection.itemCount} {collection.itemCount === 1 ? "item" : "items"}
-          </p>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            {/* after: 把連結的可點範圍撐滿整張卡片；連結文字仍只有名稱，螢幕閱讀器不會念出整張卡片 */}
+            <Link
+              href={`/collections/${collection.id}`}
+              className="flex items-center gap-2 font-semibold outline-none after:absolute after:inset-0 hover:underline"
+            >
+              <span className="truncate">{collection.name}</span>
+              {collection.isFavorite && (
+                <Star className="size-4 shrink-0 fill-yellow-400 text-yellow-400" />
+              )}
+            </Link>
+            <p className="text-sm text-muted-foreground">
+              {collection.itemCount}{" "}
+              {collection.itemCount === 1 ? "item" : "items"}
+            </p>
+          </div>
+          <CollectionCardMenu collection={collection} />
         </div>
 
         {collection.description && (

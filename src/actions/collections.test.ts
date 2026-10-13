@@ -1,15 +1,27 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createCollection } from "@/actions/collections";
+import {
+  createCollection,
+  deleteCollection,
+  updateCollection,
+} from "@/actions/collections";
 import { getCurrentUserId } from "@/lib/current-user";
-import { createCollection as createCollectionInDb } from "@/lib/db/collections";
+import {
+  createCollection as createCollectionInDb,
+  softDeleteCollection,
+  updateCollection as updateCollectionInDb,
+} from "@/lib/db/collections";
 import { getUserIsPro } from "@/lib/db/users";
 import { checkRateLimit } from "@/lib/rate-limit";
 
 // action 的測試只驗證流程（驗證、登入、錯誤對應），資料庫邏輯在 src/lib/db/ 的測試
 vi.mock("@/lib/prisma", () => ({ prisma: {} }));
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
-vi.mock("@/lib/db/collections", () => ({ createCollection: vi.fn() }));
+vi.mock("@/lib/db/collections", () => ({
+  createCollection: vi.fn(),
+  softDeleteCollection: vi.fn(),
+  updateCollection: vi.fn(),
+}));
 vi.mock("@/lib/db/users", () => ({ getUserIsPro: vi.fn() }));
 vi.mock("@/lib/rate-limit", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/rate-limit")>()),
@@ -122,6 +134,125 @@ describe("createCollection action", () => {
     const result = await createCollection(NEW_COLLECTION);
 
     expect(result).toEqual({
+      success: false,
+      error: "Something went wrong, please try again",
+    });
+  });
+});
+
+describe("updateCollection action", () => {
+  const VALID = { name: "  Renamed  ", description: "Updated" };
+
+  beforeEach(() => {
+    vi.mocked(getCurrentUserId).mockResolvedValue("user-1");
+    vi.mocked(updateCollectionInDb).mockResolvedValue({
+      id: "col-1",
+      name: "Renamed",
+    });
+  });
+
+  it("以 session 的 userId 與驗證後的資料更新", async () => {
+    const result = await updateCollection("col-1", VALID);
+
+    expect(result).toEqual({
+      success: true,
+      data: { id: "col-1", name: "Renamed" },
+    });
+    expect(updateCollectionInDb).toHaveBeenCalledWith("user-1", "col-1", {
+      name: "Renamed",
+      description: "Updated",
+    });
+  });
+
+  it("驗證失敗時回傳欄位錯誤，不碰資料庫", async () => {
+    const result = await updateCollection("col-1", { name: "" });
+
+    expect(result.fieldErrors).toEqual({ name: "Name is required" });
+    expect(getCurrentUserId).not.toHaveBeenCalled();
+    expect(updateCollectionInDb).not.toHaveBeenCalled();
+  });
+
+  it("collection id 不是字串時當作找不到", async () => {
+    const result = await updateCollection(42, VALID);
+
+    expect(result).toEqual({ success: false, error: "Collection not found" });
+    expect(updateCollectionInDb).not.toHaveBeenCalled();
+  });
+
+  it("未登入時不更新", async () => {
+    vi.mocked(getCurrentUserId).mockResolvedValue(null);
+
+    const result = await updateCollection("col-1", VALID);
+
+    expect(result.error).toMatch(/signed in/);
+    expect(updateCollectionInDb).not.toHaveBeenCalled();
+  });
+
+  it("不屬於使用者、不存在或已刪除時回「Collection not found」", async () => {
+    vi.mocked(updateCollectionInDb).mockResolvedValue(null);
+
+    const result = await updateCollection("col-other-user", VALID);
+
+    expect(result).toEqual({ success: false, error: "Collection not found" });
+  });
+
+  it("資料庫錯誤時回傳通用訊息", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(updateCollectionInDb).mockRejectedValue(new Error("db down"));
+
+    const result = await updateCollection("col-1", VALID);
+
+    expect(result).toEqual({
+      success: false,
+      error: "Something went wrong, please try again",
+    });
+  });
+});
+
+describe("deleteCollection action", () => {
+  beforeEach(() => {
+    vi.mocked(getCurrentUserId).mockResolvedValue("user-1");
+    vi.mocked(softDeleteCollection).mockResolvedValue(true);
+  });
+
+  it("以 session 的 userId 軟刪除", async () => {
+    await expect(deleteCollection("col-1")).resolves.toEqual({
+      success: true,
+    });
+    expect(softDeleteCollection).toHaveBeenCalledWith("user-1", "col-1");
+  });
+
+  it("collection id 不是字串時當作找不到", async () => {
+    await expect(deleteCollection(undefined)).resolves.toEqual({
+      success: false,
+      error: "Collection not found",
+    });
+    expect(softDeleteCollection).not.toHaveBeenCalled();
+  });
+
+  it("未登入時不刪除", async () => {
+    vi.mocked(getCurrentUserId).mockResolvedValue(null);
+
+    const result = await deleteCollection("col-1");
+
+    expect(result.error).toMatch(/signed in/);
+    expect(softDeleteCollection).not.toHaveBeenCalled();
+  });
+
+  it("不屬於使用者、不存在或已刪除時回「Collection not found」", async () => {
+    vi.mocked(softDeleteCollection).mockResolvedValue(false);
+
+    await expect(deleteCollection("col-other-user")).resolves.toEqual({
+      success: false,
+      error: "Collection not found",
+    });
+  });
+
+  it("資料庫錯誤時回傳通用訊息", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(softDeleteCollection).mockRejectedValue(new Error("db down"));
+
+    await expect(deleteCollection("col-1")).resolves.toEqual({
       success: false,
       error: "Something went wrong, please try again",
     });

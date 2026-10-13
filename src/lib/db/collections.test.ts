@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createCollectionSchema } from "@/lib/collection-schemas";
+import { collectionSchema } from "@/lib/collection-schemas";
 import {
   createCollection,
   findOwnedCollectionIds,
   getAllCollections,
   getCollectionById,
   getCollectionOptions,
+  softDeleteCollection,
+  updateCollection,
 } from "@/lib/db/collections";
 import { prisma } from "@/lib/prisma";
 
@@ -22,7 +24,7 @@ const tx = {
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     $transaction: vi.fn(),
-    collection: { findMany: vi.fn(), findFirst: vi.fn() },
+    collection: { findMany: vi.fn(), findFirst: vi.fn(), updateMany: vi.fn() },
   },
 }));
 
@@ -145,7 +147,7 @@ describe("findOwnedCollectionIds", () => {
 });
 
 describe("createCollection", () => {
-  const input = createCollectionSchema.parse({
+  const input = collectionSchema.parse({
     name: "React Patterns",
     description: "Hooks and components",
   });
@@ -223,5 +225,52 @@ describe("createCollection", () => {
 
     expect(tx.collection.count).not.toHaveBeenCalled();
     expect(tx.collection.create).toHaveBeenCalled();
+  });
+});
+
+describe("updateCollection", () => {
+  const updateMany = vi.mocked(prisma.collection.updateMany);
+  const data = collectionSchema.parse({
+    name: "Renamed",
+    description: "  ",
+  });
+
+  it("只更新該使用者且未刪除的 collection 的 name 與 description，slug 不變", async () => {
+    updateMany.mockResolvedValue({ count: 1 });
+
+    await expect(updateCollection("user-1", "col-1", data)).resolves.toEqual({
+      id: "col-1",
+      name: "Renamed",
+    });
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: "col-1", userId: "user-1", deletedAt: null },
+      data: { name: "Renamed", description: null },
+    });
+  });
+
+  it("查不到（別人的、不存在或已刪除）時回傳 null", async () => {
+    updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(updateCollection("user-1", "col-x", data)).resolves.toBeNull();
+  });
+});
+
+describe("softDeleteCollection", () => {
+  const updateMany = vi.mocked(prisma.collection.updateMany);
+
+  it("只對該使用者且尚未刪除的 collection 設定 deletedAt，不碰 item", async () => {
+    updateMany.mockResolvedValue({ count: 1 });
+
+    await expect(softDeleteCollection("user-1", "col-1")).resolves.toBe(true);
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: "col-1", userId: "user-1", deletedAt: null },
+      data: { deletedAt: expect.any(Date) },
+    });
+  });
+
+  it("查不到時回傳 false", async () => {
+    updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(softDeleteCollection("user-1", "col-x")).resolves.toBe(false);
   });
 });

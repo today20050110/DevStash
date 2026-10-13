@@ -5,6 +5,7 @@ import { cache } from "react";
 import { Folder, Star } from "lucide-react";
 
 import { SIGN_IN_PATH } from "@/auth.config";
+import { CollectionActions } from "@/components/collections/CollectionActions";
 import { ItemGrid } from "@/components/items/ItemGrid";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCollectionById } from "@/lib/db/collections";
@@ -51,11 +52,11 @@ export default async function CollectionPage({
   return (
     // 以頁面本身為容器，ItemGrid 依它決定欄數
     <div className="@container space-y-8">
-      <div className="flex items-start gap-3">
+      <div className="flex flex-wrap items-start gap-3">
         <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
           <Folder className="size-5" />
         </div>
-        <div className="min-w-0 space-y-1">
+        <div className="min-w-0 flex-1 space-y-1">
           <h1 className="flex items-center gap-2 text-3xl font-bold break-words">
             {collection.name}
             {collection.isFavorite && (
@@ -72,6 +73,7 @@ export default async function CollectionPage({
             <p className="text-muted-foreground">{collection.description}</p>
           )}
         </div>
+        <CollectionActions collection={collection} />
       </div>
 
       {items.length === 0 ? (

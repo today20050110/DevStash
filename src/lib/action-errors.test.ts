@@ -4,7 +4,7 @@ import {
   FIX_FIELDS_MESSAGE,
   validationFailure,
 } from "@/lib/action-errors";
-import { createCollectionSchema } from "@/lib/collection-schemas";
+import { collectionSchema } from "@/lib/collection-schemas";
 import { updateItemSchema } from "@/lib/item-schemas";
 
 function failureOf<T>(result: { success: boolean; error?: T }): T {
@@ -16,7 +16,7 @@ function failureOf<T>(result: { success: boolean; error?: T }): T {
 
 describe("validationFailure", () => {
   it("輸入不是物件時回傳表單層級的錯誤，沒有欄位錯誤", () => {
-    const error = failureOf(createCollectionSchema.safeParse("DevOps"));
+    const error = failureOf(collectionSchema.safeParse("DevOps"));
 
     expect(validationFailure(error)).toEqual({
       success: false,
@@ -27,7 +27,7 @@ describe("validationFailure", () => {
 
   it("欄位錯誤時提示修正欄位，每個欄位只留第一則訊息", () => {
     const error = failureOf(
-      createCollectionSchema.safeParse({ name: "", description: 42 }),
+      collectionSchema.safeParse({ name: "", description: 42 }),
     );
 
     expect(validationFailure(error)).toEqual({
