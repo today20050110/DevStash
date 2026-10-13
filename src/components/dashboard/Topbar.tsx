@@ -1,7 +1,7 @@
-import { FolderPlus, Search } from "lucide-react";
+import { Search } from "lucide-react";
 
+import { NewCollectionDialog } from "@/components/collections/NewCollectionDialog";
 import { NewItemDialog } from "@/components/items/NewItemDialog";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import type { CreatableItemType } from "@/types/items";
@@ -12,8 +12,8 @@ interface TopbarProps {
 }
 
 /**
- * Dashboard top bar. Search and New Collection are display only;
- * the sidebar trigger and New Item work.
+ * Dashboard top bar. Search is display only;
+ * the sidebar trigger, New Collection and New Item work.
  */
 export function Topbar({ itemTypes }: TopbarProps) {
   return (
@@ -33,10 +33,7 @@ export function Topbar({ itemTypes }: TopbarProps) {
       </div>
 
       <div className="ml-auto flex items-center gap-2">
-        <Button variant="outline" size="lg" className="hidden sm:inline-flex">
-          <FolderPlus />
-          New Collection
-        </Button>
+        <NewCollectionDialog />
         <NewItemDialog itemTypes={itemTypes} />
       </div>
     </header>

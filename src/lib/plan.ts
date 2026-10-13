@@ -36,6 +36,18 @@ export function itemLimitMessage(limit: number): string {
   return `The Free plan is limited to ${limit} items. Delete an item or upgrade to Pro to add more.`;
 }
 
+/** Free 方案的 collection 數上限（§6），不含已刪除的 collection */
+export const FREE_COLLECTION_LIMIT = 3;
+
+/** collection 數上限；null 代表不限 */
+export function getCollectionLimit(pro: boolean): number | null {
+  return pro ? null : FREE_COLLECTION_LIMIT;
+}
+
+export function collectionLimitMessage(limit: number): string {
+  return `The Free plan is limited to ${limit} collections. Delete a collection or upgrade to Pro to add more.`;
+}
+
 export function getContentLimitBytes(pro: boolean): number {
   return pro ? PRO_CONTENT_LIMIT_BYTES : FREE_CONTENT_LIMIT_BYTES;
 }

@@ -184,7 +184,8 @@ export function ItemFormField({
   );
 }
 
-function errorProps(id: string, error: string | undefined) {
+/** 有錯誤時把輸入框標為 invalid，並以 aria-describedby 指向 ItemFormField 的錯誤訊息 */
+export function errorProps(id: string, error: string | undefined) {
   return error
     ? { "aria-invalid": true, "aria-describedby": `${id}-error` }
     : {};

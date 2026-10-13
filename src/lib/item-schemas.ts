@@ -2,8 +2,8 @@ import { z } from "zod";
 
 import { isHttpUrl } from "@/lib/url";
 
-/** 可空的文字欄位：空字串（含只有空白）視為沒填，存成 null */
-function optionalText({ trim }: { trim: boolean }) {
+/** 可空的文字欄位：空字串（含只有空白）視為沒填，存成 null。collection 的表單也共用 */
+export function optionalText({ trim }: { trim: boolean }) {
   return z
     .string({ error: "Must be text" })
     .nullish()

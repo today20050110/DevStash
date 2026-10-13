@@ -2,6 +2,12 @@
 
 import { z } from "zod";
 
+import {
+  FIX_FIELDS_MESSAGE,
+  GENERIC_ERROR_MESSAGE,
+  NOT_SIGNED_IN_MESSAGE,
+  validationFailure,
+} from "@/lib/action-errors";
 import { getCurrentUserId } from "@/lib/current-user";
 import {
   createItem as createItemInDb,
@@ -44,10 +50,7 @@ export interface CreateItemResult {
   fieldErrors?: Partial<Record<CreateItemField, string>>;
 }
 
-const NOT_SIGNED_IN = "You are no longer signed in. Please sign in again.";
 const ITEM_NOT_FOUND = "Item not found";
-const GENERIC_ERROR = "Something went wrong, please try again";
-const FIX_FIELDS = "Please fix the highlighted fields";
 
 const itemIdSchema = z.string().min(1);
 
@@ -64,7 +67,7 @@ export async function createItem(data: unknown): Promise<CreateItemResult> {
   try {
     const userId = await getCurrentUserId();
     if (!userId) {
-      return { success: false, error: NOT_SIGNED_IN };
+      return { success: false, error: NOT_SIGNED_IN_MESSAGE };
     }
     const limit = await checkRateLimit("createItem", userId);
     if (!limit.success) {
@@ -126,14 +129,14 @@ export async function createItem(data: unknown): Promise<CreateItemResult> {
     return { success: true, data: result.item };
   } catch (error) {
     console.error("Failed to create item", error);
-    return { success: false, error: GENERIC_ERROR };
+    return { success: false, error: GENERIC_ERROR_MESSAGE };
   }
 }
 
 function fieldError(field: CreateItemField, message: string): CreateItemResult {
   return {
     success: false,
-    error: FIX_FIELDS,
+    error: FIX_FIELDS_MESSAGE,
     fieldErrors: { [field]: message },
   };
 }
@@ -159,7 +162,7 @@ export async function updateItem(
     // getCurrentUserId() 回查資料庫並比對 sessionVersion，重設密碼後的舊 token 會被擋下
     const userId = await getCurrentUserId();
     if (!userId) {
-      return { success: false, error: NOT_SIGNED_IN };
+      return { success: false, error: NOT_SIGNED_IN_MESSAGE };
     }
     // 與新增相同的 content 上限，否則可以先建立再以編輯繞過
     const contentError = checkContentSize(
@@ -169,7 +172,7 @@ export async function updateItem(
     if (contentError) {
       return {
         success: false,
-        error: FIX_FIELDS,
+        error: FIX_FIELDS_MESSAGE,
         fieldErrors: { content: contentError },
       };
     }
@@ -180,29 +183,8 @@ export async function updateItem(
     return { success: true, data: item };
   } catch (error) {
     console.error("Failed to update item", error);
-    return { success: false, error: GENERIC_ERROR };
+    return { success: false, error: GENERIC_ERROR_MESSAGE };
   }
-}
-
-/** 每個欄位只顯示第一則錯誤；tags 陣列中個別元素的錯誤也歸到 tags */
-/** Zod 驗證失敗時的回應：表單層級的錯誤優先，否則提示修正欄位，並附上每個欄位的第一則錯誤 */
-function validationFailure<T>(error: z.ZodError<T>) {
-  const { formErrors, fieldErrors } = z.flattenError(error);
-  return {
-    success: false,
-    error: formErrors[0] ?? FIX_FIELDS,
-    fieldErrors: firstErrors(fieldErrors as Partial<Record<string, string[]>>),
-  };
-}
-
-function firstErrors<Field extends string>(
-  fieldErrors: Partial<Record<Field, string[]>>,
-): Partial<Record<Field, string>> {
-  return Object.fromEntries(
-    Object.entries<string[] | undefined>(fieldErrors).map(
-      ([field, messages]) => [field, messages?.[0]],
-    ),
-  ) as Partial<Record<Field, string>>;
 }
 
 export interface DeleteItemResult {
@@ -224,7 +206,7 @@ export async function deleteItem(itemId: unknown): Promise<DeleteItemResult> {
   try {
     const userId = await getCurrentUserId();
     if (!userId) {
-      return { success: false, error: NOT_SIGNED_IN };
+      return { success: false, error: NOT_SIGNED_IN_MESSAGE };
     }
     const deleted = await softDeleteItem(userId, parsedId.data);
     if (!deleted) {
@@ -236,7 +218,7 @@ export async function deleteItem(itemId: unknown): Promise<DeleteItemResult> {
     return { success: true };
   } catch (error) {
     console.error("Failed to delete item", error);
-    return { success: false, error: GENERIC_ERROR };
+    return { success: false, error: GENERIC_ERROR_MESSAGE };
   }
 }
 

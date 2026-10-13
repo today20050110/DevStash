@@ -1,4 +1,6 @@
 import type { Prisma } from "@/generated/prisma/client";
+import type { CreateCollectionData } from "@/lib/collection-schemas";
+import { nextAvailableSlug, toCollectionSlug } from "@/lib/collection-slug";
 import { prisma } from "@/lib/prisma";
 import type {
   CollectionSummary,
@@ -91,6 +93,53 @@ export function getRecentNonFavoriteCollections(
   return findCollectionSummaries(userId, {
     where: { isFavorite: false },
     take: limit,
+  });
+}
+
+export type CreateCollectionResult =
+  | { status: "created"; collection: { id: string; name: string } }
+  | { status: "limit-reached"; limit: number };
+
+/**
+ * 在 transaction 內檢查額度並建立 collection（§6）。collectionLimit 為 null 代表不限。
+ * 與 createItem 相同先取得以 userId 為鍵的 advisory lock，同時送出的兩個請求依序計數，
+ * 也不會算出同一個 slug。slug 由名稱產生，同名時加上 -2、-3 後綴；
+ * 已軟刪除的 collection 仍佔用 slug（unique 不排除它們），所以查詢不加 deletedAt 條件。
+ */
+export async function createCollection(
+  userId: string,
+  data: CreateCollectionData,
+  collectionLimit: number | null,
+): Promise<CreateCollectionResult> {
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;
+    if (collectionLimit !== null) {
+      const count = await tx.collection.count({
+        where: { userId, deletedAt: null },
+      });
+      if (count >= collectionLimit) {
+        return { status: "limit-reached", limit: collectionLimit } as const;
+      }
+    }
+
+    const base = toCollectionSlug(data.name);
+    const existing = await tx.collection.findMany({
+      where: { userId, slug: { startsWith: base } },
+      select: { slug: true },
+    });
+    const collection = await tx.collection.create({
+      data: {
+        userId,
+        name: data.name,
+        slug: nextAvailableSlug(
+          base,
+          existing.map(({ slug }) => slug),
+        ),
+        description: data.description,
+      },
+      select: { id: true, name: true },
+    });
+    return { status: "created", collection } as const;
   });
 }
 

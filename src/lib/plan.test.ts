@@ -4,6 +4,7 @@ import {
   canUploadFiles,
   checkContentSize,
   FREE_CONTENT_LIMIT_BYTES,
+  getCollectionLimit,
   getItemLimit,
   isPro,
   PRO_CONTENT_LIMIT_BYTES,
@@ -45,6 +46,13 @@ describe("getItemLimit", () => {
   it("Free 50 筆、Pro 不限", () => {
     expect(getItemLimit(false)).toBe(50);
     expect(getItemLimit(true)).toBeNull();
+  });
+});
+
+describe("getCollectionLimit", () => {
+  it("Free 3 個、Pro 不限", () => {
+    expect(getCollectionLimit(false)).toBe(3);
+    expect(getCollectionLimit(true)).toBeNull();
   });
 });
 
