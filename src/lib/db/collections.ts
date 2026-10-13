@@ -4,7 +4,6 @@ import { nextAvailableSlug, toCollectionSlug } from "@/lib/collection-slug";
 import { prisma } from "@/lib/prisma";
 import type {
   CollectionHeader,
-  CollectionOption,
   CollectionSummary,
   CollectionTypeSummary,
 } from "@/types/collections";
@@ -116,17 +115,6 @@ export function getRecentNonFavoriteCollections(
   return findCollectionSummaries(userId, {
     where: { isFavorite: false },
     take: limit,
-  });
-}
-
-/** item 表單可選的 collections：只取 id 與名稱，依名稱排序 */
-export function getCollectionOptions(
-  userId: string,
-): Promise<CollectionOption[]> {
-  return prisma.collection.findMany({
-    where: { userId, deletedAt: null },
-    orderBy: [{ name: "asc" }, { id: "asc" }],
-    select: { id: true, name: true },
   });
 }
 

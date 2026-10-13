@@ -1,8 +1,6 @@
-import { Search } from "lucide-react";
-
 import { NewCollectionDialog } from "@/components/collections/NewCollectionDialog";
 import { NewItemDialog } from "@/components/items/NewItemDialog";
-import { Input } from "@/components/ui/input";
+import { SearchButton } from "@/components/search/SearchButton";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import type { CollectionOption } from "@/types/collections";
 import type { CreatableItemType } from "@/types/items";
@@ -15,25 +13,15 @@ interface TopbarProps {
 }
 
 /**
- * Dashboard top bar. Search is display only;
- * the sidebar trigger, New Collection and New Item work.
+ * Dashboard top bar: sidebar trigger, search (opens the command palette),
+ * New Collection and New Item.
  */
 export function Topbar({ itemTypes, collections }: TopbarProps) {
   return (
     <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4">
       <SidebarTrigger />
 
-      <div className="relative w-full max-w-lg">
-        <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          type="search"
-          placeholder="Search items..."
-          className="h-9 pr-16 pl-9"
-        />
-        <kbd className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 rounded border border-border px-1.5 py-0.5 font-sans text-[0.7rem] text-muted-foreground">
-          ⌘ K
-        </kbd>
-      </div>
+      <SearchButton />
 
       <div className="ml-auto flex items-center gap-2">
         <NewCollectionDialog />

@@ -6,7 +6,6 @@ import {
   findOwnedCollectionIds,
   getAllCollections,
   getCollectionById,
-  getCollectionOptions,
   softDeleteCollection,
   updateCollection,
 } from "@/lib/db/collections";
@@ -30,21 +29,6 @@ vi.mock("@/lib/prisma", () => ({
 
 const transaction = vi.mocked(prisma.$transaction);
 const findMany = vi.mocked(prisma.collection.findMany);
-
-describe("getCollectionOptions", () => {
-  it("只取該使用者未刪除的 collections 的 id 與名稱，依名稱排序", async () => {
-    findMany.mockResolvedValue([{ id: "col-1", name: "DevOps" }] as never);
-
-    await expect(getCollectionOptions("user-1")).resolves.toEqual([
-      { id: "col-1", name: "DevOps" },
-    ]);
-    expect(findMany).toHaveBeenCalledWith({
-      where: { userId: "user-1", deletedAt: null },
-      orderBy: [{ name: "asc" }, { id: "asc" }],
-      select: { id: true, name: true },
-    });
-  });
-});
 
 describe("getAllCollections", () => {
   it("不限數量，只取該使用者未刪除的，並彙總 item 數與型別組成", async () => {

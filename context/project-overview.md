@@ -186,6 +186,8 @@ CREATE INDEX item_title_trgm_idx ON "Item" USING GIN (title gin_trgm_ops);
 
 用 `ILIKE '%query%'` 查標題與內容。實作 30 分鐘，在數千筆項目內反應時間可接受，而且支援錯字容忍。
 
+> 更新：全域搜尋（Cmd+K command palette）依 `context/features/global-search-spec.md` 改為**用戶端**搜尋——進入 app 時預先載入所有 items（標題、型別、content 開頭 300 字的預覽）與 collections，以 cmdk 的模糊比對篩選。在目前的規模（Free 50 筆）反應最快；Pro 不限筆數，預先載入的資料量會隨之成長，屆時改回本節的伺服器端搜尋。`pg_trgm` 索引保留。
+
 **階段二 — tsvector generated column**
 
 當單一使用者項目數破萬、或需要排序相關性時再上：
