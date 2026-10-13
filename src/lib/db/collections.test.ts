@@ -4,11 +4,12 @@ import { collectionSchema } from "@/lib/collection-schemas";
 import {
   createCollection,
   findOwnedCollectionIds,
-  getAllCollections,
+  getCollectionsPage,
   getCollectionById,
   softDeleteCollection,
   updateCollection,
 } from "@/lib/db/collections";
+import { COLLECTIONS_PER_PAGE } from "@/lib/pagination";
 import { prisma } from "@/lib/prisma";
 
 const tx = {
@@ -23,15 +24,23 @@ const tx = {
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     $transaction: vi.fn(),
-    collection: { findMany: vi.fn(), findFirst: vi.fn(), updateMany: vi.fn() },
+    collection: {
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+      updateMany: vi.fn(),
+      count: vi.fn(),
+    },
   },
 }));
 
 const transaction = vi.mocked(prisma.$transaction);
 const findMany = vi.mocked(prisma.collection.findMany);
 
-describe("getAllCollections", () => {
-  it("不限數量，只取該使用者未刪除的，並彙總 item 數與型別組成", async () => {
+describe("getCollectionsPage", () => {
+  const count = vi.mocked(prisma.collection.count);
+
+  it("只取當頁、只取該使用者未刪除的，並彙總 item 數與型別組成", async () => {
+    count.mockResolvedValue(30);
     findMany.mockResolvedValue([
       {
         id: "col-1",
@@ -66,12 +75,17 @@ describe("getAllCollections", () => {
       },
     ] as never);
 
-    const [collection] = await getAllCollections("user-1");
+    const page = await getCollectionsPage("user-1", 2);
 
+    expect(count).toHaveBeenCalledWith({
+      where: { userId: "user-1", deletedAt: null },
+    });
     const args = findMany.mock.calls[0][0];
     expect(args?.where).toEqual({ userId: "user-1", deletedAt: null });
-    expect(args?.take).toBeUndefined();
-    expect(collection).toMatchObject({
+    expect(args?.skip).toBe(COLLECTIONS_PER_PAGE);
+    expect(args?.take).toBe(COLLECTIONS_PER_PAGE);
+    expect(page).toMatchObject({ total: 30, page: 2, pageCount: 2 });
+    expect(page.rows[0]).toMatchObject({
       id: "col-1",
       itemCount: 2,
       types: [{ id: "t-1", count: 2 }],

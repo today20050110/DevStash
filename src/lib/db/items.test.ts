@@ -3,13 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getItemDetail,
   getItemFile,
-  getItemsByType,
-  getItemsInCollection,
+  getItemsByTypePage,
+  getItemsInCollectionPage,
 } from "@/lib/db/items";
+import { ITEMS_PER_PAGE } from "@/lib/pagination";
 import { prisma } from "@/lib/prisma";
 
 vi.mock("@/lib/prisma", () => ({
-  prisma: { item: { findFirst: vi.fn(), findMany: vi.fn() } },
+  prisma: { item: { findFirst: vi.fn(), findMany: vi.fn(), count: vi.fn() } },
 }));
 
 const findFirst = vi.mocked(prisma.item.findFirst);
@@ -138,25 +139,41 @@ describe("getItemFile", () => {
   });
 });
 
-describe("getItemsInCollection", () => {
+describe("getItemsInCollectionPage", () => {
   const findMany = vi.mocked(prisma.item.findMany);
+  const count = vi.mocked(prisma.item.count);
+  const owned = {
+    collections: { some: { collectionId: "col-1" } },
+    userId: "user-1",
+    deletedAt: null,
+  };
 
-  it("只查該使用者、未刪除且在該 collection 內的 item，由新到舊", async () => {
+  it("計數與列表用同一組條件，只取當頁，由新到舊", async () => {
+    count.mockResolvedValue(50);
     findMany.mockResolvedValue([]);
 
-    await getItemsInCollection("user-1", "col-1");
+    const page = await getItemsInCollectionPage("user-1", "col-1", 2);
 
+    expect(count).toHaveBeenCalledWith({ where: owned });
     const args = findMany.mock.calls[0][0];
-    expect(args?.where).toEqual({
-      collections: { some: { collectionId: "col-1" } },
-      userId: "user-1",
-      deletedAt: null,
-    });
+    expect(args?.where).toEqual(owned);
     expect(args?.orderBy).toEqual([{ createdAt: "desc" }, { id: "desc" }]);
+    expect(args?.skip).toBe(ITEMS_PER_PAGE);
+    expect(args?.take).toBe(ITEMS_PER_PAGE);
+    expect(page).toMatchObject({ total: 50, page: 2, pageCount: 3 });
+  });
+
+  it("沒有 item 時不查列表", async () => {
+    count.mockResolvedValue(0);
+
+    await expect(
+      getItemsInCollectionPage("user-1", "col-1", 1),
+    ).resolves.toEqual({ rows: [], total: 0, page: 1, pageCount: 1 });
+    expect(findMany).not.toHaveBeenCalled();
   });
 });
 
-describe("getItemsByType", () => {
+describe("getItemsByTypePage", () => {
   const summaryRow = (storageKey: string | null) => ({
     id: "item-1",
     title: "Quarterly report",
@@ -173,9 +190,13 @@ describe("getItemsByType", () => {
   });
   const findMany = vi.mocked(prisma.item.findMany);
 
+  beforeEach(() => {
+    vi.mocked(prisma.item.count).mockResolvedValue(1);
+  });
+
   it("只查該使用者、未刪除且屬於該型別的 item", async () => {
     findMany.mockResolvedValue([]);
-    await getItemsByType("user-1", "type-1");
+    await getItemsByTypePage("user-1", "type-1", 1);
 
     expect(findMany.mock.calls[0][0]?.where).toEqual({
       itemTypeId: "type-1",
@@ -189,7 +210,9 @@ describe("getItemsByType", () => {
       summaryRow("users/user-1/items/a.pdf"),
     ] as never);
 
-    const [item] = await getItemsByType("user-1", "type-1");
+    const {
+      rows: [item],
+    } = await getItemsByTypePage("user-1", "type-1", 1);
     expect(item.file).toEqual({
       name: "report.pdf",
       size: 2048,
@@ -202,7 +225,9 @@ describe("getItemsByType", () => {
   it("沒有檔案的 item，file 為 null", async () => {
     findMany.mockResolvedValue([summaryRow(null)] as never);
 
-    const [item] = await getItemsByType("user-1", "type-1");
+    const {
+      rows: [item],
+    } = await getItemsByTypePage("user-1", "type-1", 1);
     expect(item.file).toBeNull();
   });
 
@@ -214,7 +239,7 @@ describe("getItemsByType", () => {
       ] as never)
       .mockResolvedValueOnce([{ id: "with-content" }] as never);
 
-    const items = await getItemsByType("user-1", "type-1");
+    const { rows: items } = await getItemsByTypePage("user-1", "type-1", 1);
 
     expect(findMany).toHaveBeenCalledTimes(2);
     expect(findMany.mock.calls[1][0]).toEqual({
@@ -234,7 +259,7 @@ describe("getItemsByType", () => {
   it("列表為空時不再查詢可複製的 item", async () => {
     findMany.mockResolvedValueOnce([]);
 
-    await getItemsByType("user-1", "type-1");
+    await getItemsByTypePage("user-1", "type-1", 1);
 
     expect(findMany).toHaveBeenCalledTimes(1);
   });

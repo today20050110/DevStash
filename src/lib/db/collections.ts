@@ -1,6 +1,12 @@
 import type { Prisma } from "@/generated/prisma/client";
 import type { CollectionData } from "@/lib/collection-schemas";
 import { nextAvailableSlug, toCollectionSlug } from "@/lib/collection-slug";
+import {
+  COLLECTIONS_PER_PAGE,
+  DASHBOARD_COLLECTIONS_LIMIT,
+  loadPage,
+  type Page,
+} from "@/lib/pagination";
 import { prisma } from "@/lib/prisma";
 import type {
   CollectionHeader,
@@ -8,7 +14,6 @@ import type {
   CollectionTypeSummary,
 } from "@/types/collections";
 
-const RECENT_COLLECTIONS_LIMIT = 6;
 const SIDEBAR_RECENT_COLLECTIONS_LIMIT = 10;
 
 type TypeFields = Omit<CollectionTypeSummary, "count">;
@@ -28,6 +33,7 @@ function summarizeTypes(types: TypeFields[]): CollectionTypeSummary[] {
 
 interface CollectionSummaryQuery {
   where?: Prisma.CollectionWhereInput;
+  skip?: number;
   take?: number;
 }
 
@@ -38,11 +44,12 @@ interface CollectionSummaryQuery {
  */
 async function findCollectionSummaries(
   userId: string,
-  { where, take }: CollectionSummaryQuery,
+  { where, skip, take }: CollectionSummaryQuery,
 ): Promise<CollectionSummary[]> {
   const collections = await prisma.collection.findMany({
     where: { ...where, userId, deletedAt: null },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    skip,
     take,
     select: {
       id: true,
@@ -57,7 +64,13 @@ async function findCollectionSummaries(
           item: {
             select: {
               itemType: {
-                select: { id: true, name: true, slug: true, icon: true, color: true },
+                select: {
+                  id: true,
+                  name: true,
+                  slug: true,
+                  icon: true,
+                  color: true,
+                },
               },
             },
           },
@@ -75,7 +88,7 @@ async function findCollectionSummaries(
 
 export function getRecentCollections(
   userId: string,
-  limit = RECENT_COLLECTIONS_LIMIT,
+  limit = DASHBOARD_COLLECTIONS_LIMIT,
 ): Promise<CollectionSummary[]> {
   return findCollectionSummaries(userId, { take: limit });
 }
@@ -86,11 +99,17 @@ export function getFavoriteCollections(
   return findCollectionSummaries(userId, { where: { isFavorite: true } });
 }
 
-/** /collections 頁：全部未刪除的 collections */
-export function getAllCollections(
+/** /collections 頁：未刪除的 collections，一次只取一頁 */
+export function getCollectionsPage(
   userId: string,
-): Promise<CollectionSummary[]> {
-  return findCollectionSummaries(userId, {});
+  page: number,
+): Promise<Page<CollectionSummary>> {
+  return loadPage(
+    page,
+    COLLECTIONS_PER_PAGE,
+    () => prisma.collection.count({ where: { userId, deletedAt: null } }),
+    (skip, take) => findCollectionSummaries(userId, { skip, take }),
+  );
 }
 
 /**

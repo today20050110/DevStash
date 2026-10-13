@@ -7,10 +7,12 @@ import { SIGN_IN_PATH } from "@/auth.config";
 import { TypeIconTile } from "@/components/dashboard/TypeIconTile";
 import { FileList } from "@/components/items/FileList";
 import { ItemGrid } from "@/components/items/ItemGrid";
+import { ListPagination } from "@/components/pagination/ListPagination";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getItemTypeBySlug } from "@/lib/db/item-types";
-import { getItemsByType } from "@/lib/db/items";
+import { getItemsByTypePage } from "@/lib/db/items";
 import { getUploadCategory } from "@/lib/file-types";
+import { parsePageParam } from "@/lib/pagination";
 
 /**
  * generateMetadata 與頁面都需要型別；以 cache() 包起來，同一個請求只查一次。
@@ -45,10 +47,17 @@ export async function generateMetadata({
 
 export default async function ItemsByTypePage({
   params,
+  searchParams,
 }: PageProps<"/items/[type]">) {
   const { type } = await params;
   const { userId, itemType } = await getItemType(type);
-  const items = await getItemsByType(userId, itemType.id);
+  const { page: pageParam } = await searchParams;
+  const {
+    rows: items,
+    total,
+    page,
+    pageCount,
+  } = await getItemsByTypePage(userId, itemType.id, parsePageParam(pageParam));
 
   return (
     // 以頁面本身為容器，ItemGrid 依它決定欄數
@@ -58,7 +67,7 @@ export default async function ItemsByTypePage({
         <div>
           <h1 className="text-3xl font-bold">{itemType.name}</h1>
           <p className="text-sm text-muted-foreground">
-            {items.length} {items.length === 1 ? "item" : "items"}
+            {total} {total === 1 ? "item" : "items"}
           </p>
         </div>
       </div>
@@ -71,6 +80,12 @@ export default async function ItemsByTypePage({
       ) : (
         <ItemGrid items={items} />
       )}
+
+      <ListPagination
+        basePath={`/items/${itemType.slug}`}
+        page={page}
+        pageCount={pageCount}
+      />
     </div>
   );
 }

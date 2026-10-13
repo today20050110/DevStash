@@ -1,9 +1,14 @@
 /** item 的讀取查詢（卡片列表、drawer、下載代理）；寫入在 item-mutations.ts，型別在 item-types.ts */
 import type { Prisma } from "@/generated/prisma/client";
+import {
+  DASHBOARD_RECENT_ITEMS_LIMIT,
+  ITEMS_PER_PAGE,
+  loadPage,
+  type Page,
+} from "@/lib/pagination";
 import { prisma } from "@/lib/prisma";
 import type { ItemDetail, ItemFile, ItemSummary } from "@/types/items";
 
-const RECENT_ITEMS_LIMIT = 10;
 const PINNED_ITEMS_LIMIT = 10;
 
 /** 未刪除的 item 數量，額度檢查用；不像 getItemCounts 多算一次收藏數 */
@@ -41,6 +46,7 @@ function toTagNames(tags: { tag: { name: string } }[]): string[] {
 interface ItemSummaryQuery {
   where?: Prisma.ItemWhereInput;
   orderBy: Prisma.ItemOrderByWithRelationInput;
+  skip?: number;
   take?: number;
 }
 
@@ -78,7 +84,7 @@ async function findCopyableItemIds(
  */
 async function findItemSummaries(
   userId: string,
-  { where, orderBy, take }: ItemSummaryQuery,
+  { where, orderBy, skip, take }: ItemSummaryQuery,
 ): Promise<ItemSummary[]> {
   const owned = { userId, deletedAt: null };
   const items = await prisma.item.findMany({
@@ -86,6 +92,7 @@ async function findItemSummaries(
     // 同一次巢狀 create 建立的 items 時間戳相同，以 id 決定同值時的順序，
     // 否則重新整理後列表順序可能改變
     orderBy: [orderBy, { id: "desc" }],
+    skip,
     take,
     select: {
       id: true,
@@ -139,34 +146,57 @@ export function getPinnedItems(
   });
 }
 
-export function getItemsByType(
+/**
+ * 型別頁與 collection 頁共用：符合 where 的 items，依建立時間由新到舊，一次只取一頁。
+ * 計數與列表用同一組條件（含 userId 與 deletedAt），總數與實際列出的不會對不上
+ */
+function getItemsPage(
+  userId: string,
+  where: Prisma.ItemWhereInput,
+  page: number,
+): Promise<Page<ItemSummary>> {
+  return loadPage(
+    page,
+    ITEMS_PER_PAGE,
+    () => prisma.item.count({ where: { ...where, userId, deletedAt: null } }),
+    (skip, take) =>
+      findItemSummaries(userId, {
+        where,
+        orderBy: { createdAt: "desc" },
+        skip,
+        take,
+      }),
+  );
+}
+
+export function getItemsByTypePage(
   userId: string,
   itemTypeId: string,
-): Promise<ItemSummary[]> {
-  return findItemSummaries(userId, {
-    where: { itemTypeId },
-    orderBy: { createdAt: "desc" },
-  });
+  page: number,
+): Promise<Page<ItemSummary>> {
+  return getItemsPage(userId, { itemTypeId }, page);
 }
 
 /**
- * collection 內的 items，依建立時間由新到舊。collection 的擁有者由呼叫端先以
- * getCollectionById 確認；item 本身的 userId 與 deletedAt 由 findItemSummaries 限制
+ * collection 內的 items。collection 的擁有者由呼叫端先以 getCollectionById 確認；
+ * item 本身的 userId 與 deletedAt 由 getItemsPage 限制
  */
-export function getItemsInCollection(
+export function getItemsInCollectionPage(
   userId: string,
   collectionId: string,
-): Promise<ItemSummary[]> {
-  return findItemSummaries(userId, {
-    where: { collections: { some: { collectionId } } },
-    orderBy: { createdAt: "desc" },
-  });
+  page: number,
+): Promise<Page<ItemSummary>> {
+  return getItemsPage(
+    userId,
+    { collections: { some: { collectionId } } },
+    page,
+  );
 }
 
 /** pinned 與 recent 是不同維度，已釘選的項目同樣會出現在這裡 */
 export function getRecentItems(
   userId: string,
-  limit = RECENT_ITEMS_LIMIT,
+  limit = DASHBOARD_RECENT_ITEMS_LIMIT,
 ): Promise<ItemSummary[]> {
   return findItemSummaries(userId, {
     orderBy: { createdAt: "desc" },

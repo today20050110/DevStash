@@ -7,9 +7,11 @@ import { Folder, Star } from "lucide-react";
 import { SIGN_IN_PATH } from "@/auth.config";
 import { CollectionActions } from "@/components/collections/CollectionActions";
 import { ItemGrid } from "@/components/items/ItemGrid";
+import { ListPagination } from "@/components/pagination/ListPagination";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCollectionById } from "@/lib/db/collections";
-import { getItemsInCollection } from "@/lib/db/items";
+import { getItemsInCollectionPage } from "@/lib/db/items";
+import { parsePageParam } from "@/lib/pagination";
 
 /**
  * generateMetadata 與頁面都需要 collection；以 cache() 包起來，同一個請求只查一次。
@@ -44,10 +46,21 @@ export async function generateMetadata({
 
 export default async function CollectionPage({
   params,
+  searchParams,
 }: PageProps<"/collections/[id]">) {
   const { id } = await params;
   const { userId, collection } = await getCollection(id);
-  const items = await getItemsInCollection(userId, collection.id);
+  const { page: pageParam } = await searchParams;
+  const {
+    rows: items,
+    total,
+    page,
+    pageCount,
+  } = await getItemsInCollectionPage(
+    userId,
+    collection.id,
+    parsePageParam(pageParam),
+  );
 
   return (
     // 以頁面本身為容器，ItemGrid 依它決定欄數
@@ -67,7 +80,7 @@ export default async function CollectionPage({
             )}
           </h1>
           <p className="text-sm text-muted-foreground">
-            {items.length} {items.length === 1 ? "item" : "items"}
+            {total} {total === 1 ? "item" : "items"}
           </p>
           {collection.description && (
             <p className="text-muted-foreground">{collection.description}</p>
@@ -83,6 +96,12 @@ export default async function CollectionPage({
       ) : (
         <ItemGrid items={items} />
       )}
+
+      <ListPagination
+        basePath={`/collections/${collection.id}`}
+        page={page}
+        pageCount={pageCount}
+      />
     </div>
   );
 }
