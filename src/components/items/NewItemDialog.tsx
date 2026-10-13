@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { createItem, type CreateItemField } from "@/actions/items";
 import { TypeIcon } from "@/components/dashboard/TypeIcon";
+import { CollectionSelect } from "@/components/items/CollectionSelect";
 import { FileUpload, type UploadedFile } from "@/components/items/FileUpload";
 import {
   EMPTY_ITEM_FORM_VALUES,
@@ -32,21 +33,25 @@ import {
 } from "@/lib/server-action";
 import { cn } from "@/lib/utils";
 import { parseTagInput } from "@/lib/tags";
+import type { CollectionOption } from "@/types/collections";
 import type { CreatableItemType } from "@/types/items";
 
 interface NewItemDialogProps {
   /** 可新增的型別（方案不能上傳時不含 FILE kind），第一個為預設 */
   itemTypes: CreatableItemType[];
+  /** 可加入的 collections */
+  collections: CollectionOption[];
 }
 
 type CreateErrors = Partial<Record<CreateItemField, string>>;
 
 /** 頂部列的 New Item 按鈕與新增 dialog；欄位依選擇的型別顯示 */
-export function NewItemDialog({ itemTypes }: NewItemDialogProps) {
+export function NewItemDialog({ itemTypes, collections }: NewItemDialogProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [typeId, setTypeId] = useState(itemTypes[0]?.id ?? "");
   const [values, setValues] = useState(EMPTY_ITEM_FORM_VALUES);
+  const [collectionIds, setCollectionIds] = useState<string[]>([]);
   const [errors, setErrors] = useState<CreateErrors>({});
   const [upload, setUpload] = useState<UploadedFile | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -73,6 +78,7 @@ export function NewItemDialog({ itemTypes }: NewItemDialogProps) {
   function reset() {
     setTypeId(itemTypes[0]?.id ?? "");
     setValues(EMPTY_ITEM_FORM_VALUES);
+    setCollectionIds([]);
     setErrors({});
     setUpload(null);
   }
@@ -117,6 +123,7 @@ export function NewItemDialog({ itemTypes }: NewItemDialogProps) {
           itemTypeId: typeId,
           ...values,
           tags: parseTagInput(values.tags),
+          collectionIds,
           storageKey: fields.file ? upload?.storageKey : undefined,
           fileName: fields.file ? upload?.fileName : undefined,
         }),
@@ -192,6 +199,18 @@ export function NewItemDialog({ itemTypes }: NewItemDialogProps) {
               typeSlug={selectedType?.slug ?? ""}
               setValue={setValue}
               urlRequired
+            />
+            <CollectionSelect
+              collections={collections}
+              value={collectionIds}
+              onChange={(ids) => {
+                setCollectionIds(ids);
+                setErrors((previous) => ({
+                  ...previous,
+                  collectionIds: undefined,
+                }));
+              }}
+              error={errors.collectionIds}
             />
           </div>
 

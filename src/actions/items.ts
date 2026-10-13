@@ -16,6 +16,7 @@ import {
   updateItem as updateItemInDb,
   type NewItemFile,
 } from "@/lib/db/item-mutations";
+import { findOwnedCollectionIds } from "@/lib/db/collections";
 import { findCreatableItemType } from "@/lib/db/item-types";
 import { getUserIsPro } from "@/lib/db/users";
 import { createItemSchema, updateItemSchema } from "@/lib/item-schemas";
@@ -33,14 +34,17 @@ import type { ItemDetail } from "@/types/items";
 export type UpdateItemField =
   "title" | "description" | "content" | "language" | "url" | "tags";
 
-export type CreateItemField = UpdateItemField | "itemTypeId" | "file";
+/** 可能帶錯誤的欄位：文字欄位之外還有 collections 的選擇 */
+export type UpdateItemErrorField = UpdateItemField | "collectionIds";
+
+export type CreateItemField = UpdateItemErrorField | "itemTypeId" | "file";
 
 export interface UpdateItemResult {
   success: boolean;
   data?: ItemDetail;
   error?: string;
   /** Zod 的欄位錯誤，表單顯示在對應欄位下方 */
-  fieldErrors?: Partial<Record<UpdateItemField, string>>;
+  fieldErrors?: Partial<Record<UpdateItemErrorField, string>>;
 }
 
 export interface CreateItemResult {
@@ -51,12 +55,13 @@ export interface CreateItemResult {
 }
 
 const ITEM_NOT_FOUND = "Item not found";
+const INVALID_COLLECTIONS = "Choose valid collections";
 
 const itemIdSchema = z.string().min(1);
 
 /**
  * 新增 item。順序：Zod 驗證 → 登入 → 速率限制 → 型別（只能是可新增的型別）→
- * 依型別的必填與 content 上限（FILE 型別確認 R2 上的檔案）→ 在 transaction 內檢查額度並建立。
+ * 依型別的必填、collections 的擁有者與 content 上限（FILE 型別確認 R2 上的檔案）→ 在 transaction 內檢查額度並建立。
  */
 export async function createItem(data: unknown): Promise<CreateItemResult> {
   const parsed = createItemSchema.safeParse(data);
@@ -81,6 +86,9 @@ export async function createItem(data: unknown): Promise<CreateItemResult> {
     }
     if (itemType.kind === "URL" && fields.url === null) {
       return fieldError("url", "URL is required");
+    }
+    if (!(await ownsAllCollections(userId, fields.collectionIds))) {
+      return fieldError("collectionIds", INVALID_COLLECTIONS);
     }
     const pro = await getUserIsPro(userId);
     const contentError =
@@ -142,6 +150,18 @@ function fieldError(field: CreateItemField, message: string): CreateItemResult {
 }
 
 /**
+ * 選的 collections 是否全部屬於該使用者且未刪除。寫入時還會再篩一次，
+ * 這裡先擋下來，讓使用者看到錯誤而不是默默少加了幾個
+ */
+async function ownsAllCollections(
+  userId: string,
+  collectionIds: string[],
+): Promise<boolean> {
+  const owned = await findOwnedCollectionIds(userId, collectionIds);
+  return owned.length === collectionIds.length;
+}
+
+/**
  * 更新 item 的可編輯欄位。先以 Zod 驗證再碰資料庫；擁有者在查詢條件中確認，
  * 不屬於目前使用者的 item 與不存在的一樣回「Item not found」。
  */
@@ -174,6 +194,13 @@ export async function updateItem(
         success: false,
         error: FIX_FIELDS_MESSAGE,
         fieldErrors: { content: contentError },
+      };
+    }
+    if (!(await ownsAllCollections(userId, parsed.data.collectionIds))) {
+      return {
+        success: false,
+        error: FIX_FIELDS_MESSAGE,
+        fieldErrors: { collectionIds: INVALID_COLLECTIONS },
       };
     }
     const item = await updateItemInDb(userId, parsedId.data, parsed.data);

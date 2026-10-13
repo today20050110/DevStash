@@ -4,18 +4,21 @@ import { NewCollectionDialog } from "@/components/collections/NewCollectionDialo
 import { NewItemDialog } from "@/components/items/NewItemDialog";
 import { Input } from "@/components/ui/input";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import type { CollectionOption } from "@/types/collections";
 import type { CreatableItemType } from "@/types/items";
 
 interface TopbarProps {
   /** New Item dialog 可選的型別 */
   itemTypes: CreatableItemType[];
+  /** New Item dialog 可加入的 collections */
+  collections: CollectionOption[];
 }
 
 /**
  * Dashboard top bar. Search is display only;
  * the sidebar trigger, New Collection and New Item work.
  */
-export function Topbar({ itemTypes }: TopbarProps) {
+export function Topbar({ itemTypes, collections }: TopbarProps) {
   return (
     <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4">
       <SidebarTrigger />
@@ -34,7 +37,7 @@ export function Topbar({ itemTypes }: TopbarProps) {
 
       <div className="ml-auto flex items-center gap-2">
         <NewCollectionDialog />
-        <NewItemDialog itemTypes={itemTypes} />
+        <NewItemDialog itemTypes={itemTypes} collections={collections} />
       </div>
     </header>
   );

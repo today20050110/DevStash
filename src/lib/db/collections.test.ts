@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createCollectionSchema } from "@/lib/collection-schemas";
-import { createCollection } from "@/lib/db/collections";
+import {
+  createCollection,
+  findOwnedCollectionIds,
+  getCollectionOptions,
+} from "@/lib/db/collections";
 import { prisma } from "@/lib/prisma";
 
 const tx = {
@@ -13,9 +17,50 @@ const tx = {
   $executeRaw: vi.fn(),
 };
 
-vi.mock("@/lib/prisma", () => ({ prisma: { $transaction: vi.fn() } }));
+vi.mock("@/lib/prisma", () => ({
+  prisma: { $transaction: vi.fn(), collection: { findMany: vi.fn() } },
+}));
 
 const transaction = vi.mocked(prisma.$transaction);
+const findMany = vi.mocked(prisma.collection.findMany);
+
+describe("getCollectionOptions", () => {
+  it("只取該使用者未刪除的 collections 的 id 與名稱，依名稱排序", async () => {
+    findMany.mockResolvedValue([{ id: "col-1", name: "DevOps" }] as never);
+
+    await expect(getCollectionOptions("user-1")).resolves.toEqual([
+      { id: "col-1", name: "DevOps" },
+    ]);
+    expect(findMany).toHaveBeenCalledWith({
+      where: { userId: "user-1", deletedAt: null },
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+      select: { id: true, name: true },
+    });
+  });
+});
+
+describe("findOwnedCollectionIds", () => {
+  it("只回傳屬於該使用者且未刪除的 id", async () => {
+    findMany.mockResolvedValue([{ id: "col-1" }] as never);
+
+    await expect(
+      findOwnedCollectionIds("user-1", ["col-1", "col-other-user"]),
+    ).resolves.toEqual(["col-1"]);
+    expect(findMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: ["col-1", "col-other-user"] },
+        userId: "user-1",
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+  });
+
+  it("沒有 id 時不查詢", async () => {
+    await expect(findOwnedCollectionIds("user-1", [])).resolves.toEqual([]);
+    expect(findMany).not.toHaveBeenCalled();
+  });
+});
 
 describe("createCollection", () => {
   const input = createCollectionSchema.parse({

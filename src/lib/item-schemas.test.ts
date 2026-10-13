@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import {
   DESCRIPTION_MAX_LENGTH,
+  MAX_ITEM_COLLECTIONS,
   MAX_TAGS,
   TAG_MAX_LENGTH,
   TITLE_MAX_LENGTH,
@@ -60,7 +61,7 @@ describe("updateItemSchema", () => {
     ).toBe(false);
   });
 
-  it("沒有傳 tags 時預設為空陣列，選填欄位可省略", () => {
+  it("沒有傳 tags 與 collectionIds 時預設為空陣列，選填欄位可省略", () => {
     expect(updateItemSchema.parse({ title: "x" })).toEqual({
       title: "x",
       description: null,
@@ -68,6 +69,7 @@ describe("updateItemSchema", () => {
       language: null,
       url: null,
       tags: [],
+      collectionIds: [],
     });
   });
 
@@ -110,6 +112,28 @@ describe("updateItemSchema", () => {
     );
     expect(z.flattenError(tooLong.error!).fieldErrors.tags?.[0]).toBe(
       `Each tag must be ${TAG_MAX_LENGTH} characters or less`,
+    );
+  });
+
+  it("collectionIds 去重，空字串與超過上限時失敗", () => {
+    expect(
+      updateItemSchema.parse({
+        ...VALID,
+        collectionIds: [" col-1 ", "col-2", "col-1"],
+      }).collectionIds,
+    ).toEqual(["col-1", "col-2"]);
+
+    const empty = updateItemSchema.safeParse({ ...VALID, collectionIds: [""] });
+    const tooMany = updateItemSchema.safeParse({
+      ...VALID,
+      collectionIds: Array.from(
+        { length: MAX_ITEM_COLLECTIONS + 1 },
+        (_, i) => `col-${i}`,
+      ),
+    });
+    expect(empty.success).toBe(false);
+    expect(z.flattenError(tooMany.error!).fieldErrors.collectionIds?.[0]).toBe(
+      `Up to ${MAX_ITEM_COLLECTIONS} collections`,
     );
   });
 });

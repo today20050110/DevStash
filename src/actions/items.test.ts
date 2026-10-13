@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createItem, deleteItem, updateItem } from "@/actions/items";
 import { getCurrentUserId } from "@/lib/current-user";
+import { findOwnedCollectionIds } from "@/lib/db/collections";
 import {
   createItem as createItemInDb,
   recordPendingDeletion,
@@ -26,6 +27,10 @@ vi.mock("@/lib/db/item-mutations", () => ({
   updateItem: vi.fn(),
 }));
 vi.mock("@/lib/db/item-types", () => ({ findCreatableItemType: vi.fn() }));
+// 預設全部屬於該使用者；個別測試改成只回傳部分 id
+vi.mock("@/lib/db/collections", () => ({
+  findOwnedCollectionIds: vi.fn(async (_userId: string, ids: string[]) => ids),
+}));
 vi.mock("@/lib/db/users", () => ({ getUserIsPro: vi.fn() }));
 vi.mock("@/lib/r2", () => ({ deleteObject: vi.fn() }));
 // getFileCategory 是純函式，保留原本的實作；R2 與資料庫的確認另外 mock
@@ -182,6 +187,7 @@ describe("createItem action", () => {
         language: "ts",
         url: null,
         tags: ["react"],
+        collectionIds: [],
       },
       50,
       null,
@@ -242,6 +248,39 @@ describe("createItem action", () => {
 
     expect(result.fieldErrors).toEqual({ itemTypeId: "Choose a valid type" });
     expect(createItemInDb).not.toHaveBeenCalled();
+  });
+
+  it("選了不屬於自己的 collection 時回傳欄位錯誤，不建立", async () => {
+    vi.mocked(findOwnedCollectionIds).mockResolvedValue(["col-1"]);
+
+    const result = await createItem({
+      ...NEW_ITEM,
+      collectionIds: ["col-1", "col-other-user"],
+    });
+
+    expect(findOwnedCollectionIds).toHaveBeenCalledWith("user-1", [
+      "col-1",
+      "col-other-user",
+    ]);
+    expect(result.fieldErrors).toEqual({
+      collectionIds: "Choose valid collections",
+    });
+    expect(createItemInDb).not.toHaveBeenCalled();
+  });
+
+  it("collections 都屬於自己時一併交給寫入", async () => {
+    vi.mocked(findOwnedCollectionIds).mockResolvedValue(["col-1", "col-2"]);
+
+    const result = await createItem({
+      ...NEW_ITEM,
+      collectionIds: ["col-1", "col-2", "col-1"],
+    });
+
+    expect(result.success).toBe(true);
+    expect(vi.mocked(createItemInDb).mock.calls[0][2].collectionIds).toEqual([
+      "col-1",
+      "col-2",
+    ]);
   });
 
   it("URL 型別沒有填 url 時回傳 URL 必填", async () => {
@@ -322,6 +361,22 @@ describe("updateItem action", () => {
     vi.mocked(updateItemInDb).mockResolvedValue(ITEM);
   });
 
+  it("選了不屬於自己的 collection 時回傳欄位錯誤，不更新", async () => {
+    vi.mocked(findOwnedCollectionIds).mockResolvedValue([]);
+
+    const result = await updateItem("item-1", {
+      ...VALID,
+      collectionIds: ["col-other-user"],
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: "Please fix the highlighted fields",
+      fieldErrors: { collectionIds: "Choose valid collections" },
+    });
+    expect(updateItemInDb).not.toHaveBeenCalled();
+  });
+
   it("content 超過方案上限時不更新，避免以編輯繞過新增時的檢查", async () => {
     const result = await updateItem("item-1", {
       ...VALID,
@@ -345,6 +400,7 @@ describe("updateItem action", () => {
       language: null,
       url: null,
       tags: ["react"],
+      collectionIds: [],
     });
   });
 

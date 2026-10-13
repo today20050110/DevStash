@@ -1,5 +1,6 @@
-/** item 的寫入：新增、編輯（含標籤）、軟刪除與待刪除檔案的紀錄 */
+/** item 的寫入：新增、編輯（含標籤與所屬 collections）、軟刪除與待刪除檔案的紀錄 */
 import type { Prisma } from "@/generated/prisma/client";
+import { findOwnedCollectionIds } from "@/lib/db/collections";
 import { getItemDetail } from "@/lib/db/items";
 import { getItemTypeFields } from "@/lib/item-fields";
 import type { CreateItemData, UpdateItemData } from "@/lib/item-schemas";
@@ -8,7 +9,7 @@ import { dedupeTagNames, toTagSlug } from "@/lib/tags";
 import type { CreatableItemType, ItemDetail } from "@/types/items";
 
 /**
- * 更新 item 的可編輯欄位並整批替換標籤，回傳更新後的完整資料。
+ * 更新 item 的可編輯欄位並整批替換標籤與所屬 collections，回傳更新後的完整資料。
  * 不屬於該使用者或已刪除時回傳 null（與 getItemDetail 相同，不區分兩者）。
  * 不屬於該型別的欄位（例如替 snippet 寫入 url）直接忽略，不寫入資料庫。
  */
@@ -43,6 +44,7 @@ export async function updateItem(
         },
       },
     });
+    await setItemCollections(tx, userId, itemId, data.collectionIds);
     return true;
   });
 
@@ -67,6 +69,33 @@ async function upsertTags(
     tagIds.push(tag.id);
   }
   return tagIds;
+}
+
+/**
+ * 讓 item 所屬的 collections 剛好是 collectionIds：移除沒選的、加入新選的，
+ * 原本就在的不動（保留 addedAt 與 position）。只處理該使用者未刪除的 collection——
+ * 不屬於他的 id 不會寫入，已軟刪除的 collection 的連結也保留，還原時才不會遺失。
+ */
+async function setItemCollections(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  itemId: string,
+  collectionIds: string[],
+): Promise<void> {
+  const ownedIds = await findOwnedCollectionIds(userId, collectionIds, tx);
+  await tx.itemCollection.deleteMany({
+    where: {
+      itemId,
+      collectionId: { notIn: ownedIds },
+      collection: { userId, deletedAt: null },
+    },
+  });
+  if (ownedIds.length > 0) {
+    await tx.itemCollection.createMany({
+      data: ownedIds.map((collectionId) => ({ itemId, collectionId })),
+      skipDuplicates: true,
+    });
+  }
 }
 
 /**
@@ -181,6 +210,7 @@ export async function createItem(
       },
       select: { id: true, title: true },
     });
+    await setItemCollections(tx, userId, item.id, data.collectionIds);
     return { status: "created", item } as const;
   });
 }

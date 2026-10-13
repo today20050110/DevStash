@@ -6,6 +6,7 @@ import { Topbar } from "@/components/dashboard/Topbar";
 import { ItemDrawerProvider } from "@/components/items/ItemDrawerProvider";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { getCurrentUser } from "@/lib/current-user";
+import { getCollectionOptions } from "@/lib/db/collections";
 import { getCreatableItemTypes } from "@/lib/db/item-types";
 import { canUploadFiles } from "@/lib/plan";
 
@@ -17,15 +18,21 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   if (!user) {
     redirect(SIGN_IN_PATH);
   }
-  const itemTypes = await getCreatableItemTypes(canUploadFiles(user.isPro));
+  // 新增 dialog 與 drawer 編輯模式的選項；新增 collection 後 router.refresh() 會重新取得
+  const [itemTypes, collections] = await Promise.all([
+    getCreatableItemTypes(canUploadFiles(user.isPro)),
+    getCollectionOptions(user.id),
+  ]);
 
   return (
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
-        <Topbar itemTypes={itemTypes} />
+        <Topbar itemTypes={itemTypes} collections={collections} />
         <main className="flex-1 overflow-y-auto p-8">
-          <ItemDrawerProvider>{children}</ItemDrawerProvider>
+          <ItemDrawerProvider collections={collections}>
+            {children}
+          </ItemDrawerProvider>
         </main>
       </SidebarInset>
     </SidebarProvider>

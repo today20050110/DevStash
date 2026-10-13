@@ -9,6 +9,12 @@ export interface CollectionTypeSummary {
   count: number;
 }
 
+/** item 表單中可選的 collection */
+export interface CollectionOption {
+  id: string;
+  name: string;
+}
+
 export interface CollectionSummary {
   id: string;
   name: string;

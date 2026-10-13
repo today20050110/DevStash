@@ -5,14 +5,15 @@ import { useRouter } from "next/navigation";
 import { Loader2, Save, X } from "lucide-react";
 import { toast } from "sonner";
 
-import { updateItem, type UpdateItemField } from "@/actions/items";
 import {
-  CollectionsSection,
-  DetailsSection,
-} from "@/components/items/ItemDrawerSections";
+  updateItem,
+  type UpdateItemErrorField,
+  type UpdateItemField,
+} from "@/actions/items";
+import { CollectionSelect } from "@/components/items/CollectionSelect";
+import { DetailsSection } from "@/components/items/ItemDrawerSections";
 import {
   ItemFormFields,
-  type ItemFormErrors,
   type ItemFormValues,
 } from "@/components/items/ItemFormFields";
 import { Button } from "@/components/ui/button";
@@ -22,10 +23,13 @@ import {
   SERVER_UNREACHABLE_MESSAGE,
 } from "@/lib/server-action";
 import { parseTagInput } from "@/lib/tags";
+import type { CollectionOption } from "@/types/collections";
 import type { ItemDetail } from "@/types/items";
 
 interface ItemEditFormProps {
   item: ItemDetail;
+  /** 可加入的 collections */
+  collections: CollectionOption[];
   onCancel: () => void;
   onSaved: (item: ItemDetail) => void;
 }
@@ -42,11 +46,21 @@ function initialValues(item: ItemDetail): ItemFormValues {
 }
 
 /** 受控輸入 + local state；伺服器端的 Zod 驗證才是最終依據，這裡只擋空白標題 */
-export function ItemEditForm({ item, onCancel, onSaved }: ItemEditFormProps) {
+export function ItemEditForm({
+  item,
+  collections,
+  onCancel,
+  onSaved,
+}: ItemEditFormProps) {
   const router = useRouter();
   const fields = getItemTypeFields(item.type);
   const [values, setValues] = useState(() => initialValues(item));
-  const [errors, setErrors] = useState<ItemFormErrors>({});
+  const [collectionIds, setCollectionIds] = useState(() =>
+    item.collections.map(({ id }) => id),
+  );
+  const [errors, setErrors] = useState<
+    Partial<Record<UpdateItemErrorField, string>>
+  >({});
   const [isSaving, startSaving] = useTransition();
 
   function setValue(field: UpdateItemField, value: string) {
@@ -60,6 +74,7 @@ export function ItemEditForm({ item, onCancel, onSaved }: ItemEditFormProps) {
         updateItem(item.id, {
           ...values,
           tags: parseTagInput(values.tags),
+          collectionIds,
         }),
       );
       // 沒連上伺服器：保留表單內容讓使用者重試
@@ -74,7 +89,7 @@ export function ItemEditForm({ item, onCancel, onSaved }: ItemEditFormProps) {
       }
       toast.success("Item saved");
       onSaved(result.data);
-      // 底下的卡片列表是 server component，重新取得才會反映新的標題與標籤
+      // 底下的卡片列表與 collection 卡片是 server component，重新取得才會反映新的標題、標籤與歸屬
       router.refresh();
     });
   }
@@ -116,7 +131,15 @@ export function ItemEditForm({ item, onCancel, onSaved }: ItemEditFormProps) {
           setValue={setValue}
         />
 
-        <CollectionsSection item={item} />
+        <CollectionSelect
+          collections={collections}
+          value={collectionIds}
+          onChange={(ids) => {
+            setCollectionIds(ids);
+            setErrors((previous) => ({ ...previous, collectionIds: undefined }));
+          }}
+          error={errors.collectionIds}
+        />
         <DetailsSection item={item} />
       </div>
     </form>

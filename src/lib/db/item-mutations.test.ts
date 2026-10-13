@@ -18,6 +18,8 @@ const tx = {
     create: vi.fn(),
   },
   tag: { upsert: vi.fn() },
+  collection: { findMany: vi.fn() },
+  itemCollection: { deleteMany: vi.fn(), createMany: vi.fn() },
   $executeRaw: vi.fn(),
 };
 
@@ -137,6 +139,50 @@ describe("updateItem", () => {
     expect(data.url).toBe("https://example.com");
     expect(data).not.toHaveProperty("content");
     expect(data).not.toHaveProperty("language");
+  });
+
+  it("collections：只處理該使用者未刪除的，移除沒選的、加入新選的", async () => {
+    tx.collection.findMany.mockResolvedValue([{ id: "col-1" }, { id: "col-2" }]);
+
+    await updateItem("user-1", "item-1", {
+      ...input,
+      collectionIds: ["col-1", "col-2", "col-other-user"],
+    });
+
+    expect(tx.collection.findMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: ["col-1", "col-2", "col-other-user"] },
+        userId: "user-1",
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+    // 已軟刪除的 collection 的連結不在移除範圍內，還原時才不會遺失
+    expect(tx.itemCollection.deleteMany).toHaveBeenCalledWith({
+      where: {
+        itemId: "item-1",
+        collectionId: { notIn: ["col-1", "col-2"] },
+        collection: { userId: "user-1", deletedAt: null },
+      },
+    });
+    // 原本就在的由 skipDuplicates 略過，保留 addedAt 與 position
+    expect(tx.itemCollection.createMany).toHaveBeenCalledWith({
+      data: [
+        { itemId: "item-1", collectionId: "col-1" },
+        { itemId: "item-1", collectionId: "col-2" },
+      ],
+      skipDuplicates: true,
+    });
+  });
+
+  it("collections 全部取消時移除所有連結，不查詢也不建立", async () => {
+    await updateItem("user-1", "item-1", input);
+
+    expect(tx.collection.findMany).not.toHaveBeenCalled();
+    expect(tx.itemCollection.deleteMany.mock.calls[0][0].where.collectionId).toEqual(
+      { notIn: [] },
+    );
+    expect(tx.itemCollection.createMany).not.toHaveBeenCalled();
   });
 
   it("回傳更新後的完整資料", async () => {
@@ -271,6 +317,38 @@ describe("createItem", () => {
 
     expect(tx.item.count).not.toHaveBeenCalled();
     expect(tx.item.create).toHaveBeenCalled();
+  });
+
+  it("建立後在同一個 transaction 內連上選的 collections", async () => {
+    tx.collection.findMany.mockResolvedValue([{ id: "col-1" }]);
+
+    await createItem(
+      "user-1",
+      snippets,
+      { ...input, collectionIds: ["col-1"] },
+      50,
+    );
+
+    expect(tx.itemCollection.createMany).toHaveBeenCalledWith({
+      data: [{ itemId: "item-9", collectionId: "col-1" }],
+      skipDuplicates: true,
+    });
+    expect(tx.item.create.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.itemCollection.createMany.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("達到上限時不連上 collections", async () => {
+    tx.item.count.mockResolvedValue(50);
+
+    await createItem(
+      "user-1",
+      snippets,
+      { ...input, collectionIds: ["col-1"] },
+      50,
+    );
+
+    expect(tx.itemCollection.createMany).not.toHaveBeenCalled();
   });
 
   it("以 userId 與型別建立，只寫入該型別適用的欄位並連上去重後的標籤", async () => {

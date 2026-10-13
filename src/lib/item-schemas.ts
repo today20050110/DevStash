@@ -23,6 +23,7 @@ export const TITLE_MAX_LENGTH = 200;
 export const DESCRIPTION_MAX_LENGTH = 2000;
 export const TAG_MAX_LENGTH = 50;
 export const MAX_TAGS = 20;
+export const MAX_ITEM_COLLECTIONS = 50;
 
 /** 新增與編輯共用的欄位；型別專屬欄位是否適用由呼叫端依 getItemTypeFields 判斷 */
 const itemFields = {
@@ -60,6 +61,21 @@ const itemFields = {
     )
     .max(MAX_TAGS, `Up to ${MAX_TAGS} tags`)
     .default([]),
+  // 是否屬於目前使用者由 action 與寫入時的查詢確認，這裡只驗證格式並去重
+  collectionIds: z
+    .array(
+      z
+        .string({ error: "Choose valid collections" })
+        .trim()
+        .min(1, "Choose valid collections"),
+      { error: "Collections must be a list" },
+    )
+    .max(
+      MAX_ITEM_COLLECTIONS,
+      `Up to ${MAX_ITEM_COLLECTIONS} collections`,
+    )
+    .default([])
+    .transform((ids) => [...new Set(ids)]),
 };
 
 export const updateItemSchema = z.object(itemFields, {

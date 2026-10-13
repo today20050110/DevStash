@@ -3,6 +3,7 @@ import type { CreateCollectionData } from "@/lib/collection-schemas";
 import { nextAvailableSlug, toCollectionSlug } from "@/lib/collection-slug";
 import { prisma } from "@/lib/prisma";
 import type {
+  CollectionOption,
   CollectionSummary,
   CollectionTypeSummary,
 } from "@/types/collections";
@@ -94,6 +95,33 @@ export function getRecentNonFavoriteCollections(
     where: { isFavorite: false },
     take: limit,
   });
+}
+
+/** item 表單可選的 collections：只取 id 與名稱，依名稱排序 */
+export function getCollectionOptions(
+  userId: string,
+): Promise<CollectionOption[]> {
+  return prisma.collection.findMany({
+    where: { userId, deletedAt: null },
+    orderBy: [{ name: "asc" }, { id: "asc" }],
+    select: { id: true, name: true },
+  });
+}
+
+/** ids 中屬於該使用者且未刪除的 collection id；不存在、屬於別人或已刪除的不會出現 */
+export async function findOwnedCollectionIds(
+  userId: string,
+  ids: string[],
+  client: Pick<Prisma.TransactionClient, "collection"> = prisma,
+): Promise<string[]> {
+  if (ids.length === 0) {
+    return [];
+  }
+  const owned = await client.collection.findMany({
+    where: { id: { in: ids }, userId, deletedAt: null },
+    select: { id: true },
+  });
+  return owned.map(({ id }) => id);
 }
 
 export type CreateCollectionResult =

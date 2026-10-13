@@ -16,15 +16,23 @@ import {
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useItemDetail, type ItemDetailRequest } from "@/hooks/use-item-detail";
+import type { CollectionOption } from "@/types/collections";
 import type { ItemDetail } from "@/types/items";
 
 interface ItemDrawerProps {
   request: ItemDetailRequest | null;
+  /** 編輯模式可加入的 collections */
+  collections: CollectionOption[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function ItemDrawer({ request, open, onOpenChange }: ItemDrawerProps) {
+export function ItemDrawer({
+  request,
+  collections,
+  open,
+  onOpenChange,
+}: ItemDrawerProps) {
   const { item, error, isLoading, replaceItem } = useItemDetail(request);
 
   return (
@@ -35,6 +43,7 @@ export function ItemDrawer({ request, open, onOpenChange }: ItemDrawerProps) {
           <ItemDrawerPanel
             key={request.key}
             item={item}
+            collections={collections}
             onItemChange={replaceItem}
             onDeleted={() => onOpenChange(false)}
           />
@@ -63,6 +72,7 @@ export function ItemDrawer({ request, open, onOpenChange }: ItemDrawerProps) {
 
 interface ItemDrawerPanelProps {
   item: ItemDetail;
+  collections: CollectionOption[];
   onItemChange: (item: ItemDetail) => void;
   onDeleted: () => void;
 }
@@ -70,6 +80,7 @@ interface ItemDrawerPanelProps {
 /** 檢視與編輯模式的切換；編輯模式下操作列換成 Save／Cancel */
 function ItemDrawerPanel({
   item,
+  collections,
   onItemChange,
   onDeleted,
 }: ItemDrawerPanelProps) {
@@ -86,6 +97,7 @@ function ItemDrawerPanel({
       {isEditing ? (
         <ItemEditForm
           item={item}
+          collections={collections}
           onCancel={() => setIsEditing(false)}
           onSaved={handleSaved}
         />

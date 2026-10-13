@@ -182,7 +182,7 @@ function FileSection({
   );
 }
 
-/** 檢視與編輯模式共用；collections 另行管理，編輯模式下只顯示 */
+/** 檢視模式的 collections；編輯模式改用 CollectionSelect */
 export function CollectionsSection({ item }: { item: ItemDetail }) {
   if (item.collections.length === 0) {
     return null;
