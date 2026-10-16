@@ -110,7 +110,7 @@ export async function changePasswordAction(
   // 而 auth() 讀的是原始請求的舊 token（版本已不符），會被 layout 導回登入頁。
   // redirect 時 Next.js 會把新 cookie 合併進轉址請求（action-handler.js 的
   // getForwardedHeaders），轉址後的頁面讀得到新 token
-  redirect("/profile?passwordChanged=1");
+  redirect("/settings?passwordChanged=1");
 }
 
 async function reissueSession(email: string, password: string) {

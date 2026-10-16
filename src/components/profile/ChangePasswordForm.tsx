@@ -15,7 +15,7 @@ const INITIAL_STATE: ChangePasswordState = { success: false };
 interface ChangePasswordFormProps {
   // 讓密碼管理器把新密碼存到這個帳號
   email: string;
-  // 成功後 action 以 redirect 回到 /profile?passwordChanged=1，由頁面傳入
+  // 成功後 action 以 redirect 回到 /settings?passwordChanged=1，由頁面傳入
   passwordChanged: boolean;
 }
 

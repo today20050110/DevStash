@@ -3,23 +3,13 @@ import { redirect } from "next/navigation";
 import { connection } from "next/server";
 
 import { SIGN_IN_PATH } from "@/auth.config";
-import { ChangePasswordForm } from "@/components/profile/ChangePasswordForm";
-import { DeleteAccountDialog } from "@/components/profile/DeleteAccountDialog";
 import { ProfileInfo } from "@/components/profile/ProfileInfo";
 import { ProfileStats } from "@/components/profile/ProfileStats";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCollectionCounts } from "@/lib/db/collections";
 import { getSystemItemTypesWithCounts } from "@/lib/db/item-types";
 import { getItemCounts } from "@/lib/db/items";
 import { getUserProfile } from "@/lib/db/users";
-import { firstParam } from "@/lib/search-params";
 
 export const metadata: Metadata = {
   title: "Profile — DevStash",
@@ -49,10 +39,7 @@ async function getProfileData() {
   return { profile, itemCounts, collectionCounts, itemTypes };
 }
 
-export default async function ProfilePage({
-  searchParams,
-}: PageProps<"/profile">) {
-  const { passwordChanged } = await searchParams;
+export default async function ProfilePage() {
   const { profile, itemCounts, collectionCounts, itemTypes } =
     await getProfileData();
 
@@ -72,37 +59,6 @@ export default async function ProfilePage({
           collections={collectionCounts.collections}
           itemTypes={itemTypes}
         />
-      </section>
-
-      <section className="space-y-4">
-        <h2 className="text-xl font-semibold">Account</h2>
-        {profile.hasPassword && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Change password</CardTitle>
-              <CardDescription>
-                Enter your current password, then choose a new one.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ChangePasswordForm
-                email={profile.email}
-                passwordChanged={firstParam(passwordChanged) === "1"}
-              />
-            </CardContent>
-          </Card>
-        )}
-        <Card className="border-destructive/40">
-          <CardHeader>
-            <CardTitle>Delete account</CardTitle>
-            <CardDescription>
-              Permanently delete your account and everything you have stashed.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <DeleteAccountDialog email={profile.email} />
-          </CardContent>
-        </Card>
       </section>
     </div>
   );

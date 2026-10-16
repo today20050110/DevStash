@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronsUpDown, LogOut, User } from "lucide-react";
+import { ChevronsUpDown, LogOut, Settings, User } from "lucide-react";
 
 import { signOutAction } from "@/actions/auth";
 import { UserAvatar } from "@/components/user/UserAvatar";
@@ -54,6 +54,12 @@ export function UserMenu({ user }: { user: CurrentUser }) {
               <Link href="/profile">
                 <User />
                 Profile
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/settings">
+                <Settings />
+                Settings
               </Link>
             </DropdownMenuItem>
             <form action={signOutAction}>
