@@ -19,7 +19,7 @@ const SIDEBAR_RECENT_COLLECTIONS_LIMIT = 10;
 type TypeFields = Omit<CollectionTypeSummary, "count">;
 
 /** 同數量時以名稱排序，讓主要型別（決定邊框色）的結果穩定 */
-function summarizeTypes(types: TypeFields[]): CollectionTypeSummary[] {
+export function summarizeTypes(types: TypeFields[]): CollectionTypeSummary[] {
   const byId = new Map<string, CollectionTypeSummary>();
   for (const type of types) {
     const existing = byId.get(type.id);
