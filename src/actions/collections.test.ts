@@ -3,11 +3,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createCollection,
   deleteCollection,
+  setCollectionFavorite,
   updateCollection,
 } from "@/actions/collections";
+import {
+  GENERIC_ERROR_MESSAGE,
+  NOT_SIGNED_IN_MESSAGE,
+} from "@/lib/action-errors";
 import { getCurrentUserId } from "@/lib/current-user";
 import {
   createCollection as createCollectionInDb,
+  setCollectionFavorite as setCollectionFavoriteInDb,
   softDeleteCollection,
   updateCollection as updateCollectionInDb,
 } from "@/lib/db/collections";
@@ -19,6 +25,7 @@ vi.mock("@/lib/prisma", () => ({ prisma: {} }));
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 vi.mock("@/lib/db/collections", () => ({
   createCollection: vi.fn(),
+  setCollectionFavorite: vi.fn(),
   softDeleteCollection: vi.fn(),
   updateCollection: vi.fn(),
 }));
@@ -255,6 +262,67 @@ describe("deleteCollection action", () => {
     await expect(deleteCollection("col-1")).resolves.toEqual({
       success: false,
       error: "Something went wrong, please try again",
+    });
+  });
+});
+
+describe("setCollectionFavorite action", () => {
+  beforeEach(() => {
+    vi.mocked(getCurrentUserId).mockResolvedValue("user-1");
+    vi.mocked(setCollectionFavoriteInDb).mockResolvedValue(true);
+  });
+
+  it.each([true, false])(
+    "以目前使用者寫入目標值 %s 並回傳",
+    async (isFavorite) => {
+      await expect(setCollectionFavorite("col-1", isFavorite)).resolves.toEqual(
+        { success: true, data: { isFavorite } },
+      );
+      expect(setCollectionFavoriteInDb).toHaveBeenCalledWith(
+        "user-1",
+        "col-1",
+        isFavorite,
+      );
+    },
+  );
+
+  it("不屬於目前使用者、不存在或已刪除時回「Collection not found」", async () => {
+    vi.mocked(setCollectionFavoriteInDb).mockResolvedValue(false);
+
+    await expect(setCollectionFavorite("col-1", true)).resolves.toEqual({
+      success: false,
+      error: "Collection not found",
+    });
+  });
+
+  it.each([
+    ["空的 id", "", true],
+    ["不是布林值的目標值", "col-1", "true"],
+  ])("%s：不查 session 也不寫入", async (_, id, value) => {
+    const result = await setCollectionFavorite(id, value);
+
+    expect(result.success).toBe(false);
+    expect(getCurrentUserId).not.toHaveBeenCalled();
+    expect(setCollectionFavoriteInDb).not.toHaveBeenCalled();
+  });
+
+  it("未登入時不寫入", async () => {
+    vi.mocked(getCurrentUserId).mockResolvedValue(null);
+
+    await expect(setCollectionFavorite("col-1", true)).resolves.toEqual({
+      success: false,
+      error: NOT_SIGNED_IN_MESSAGE,
+    });
+    expect(setCollectionFavoriteInDb).not.toHaveBeenCalled();
+  });
+
+  it("資料庫錯誤時回傳通用訊息", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(setCollectionFavoriteInDb).mockRejectedValue(new Error("db"));
+
+    await expect(setCollectionFavorite("col-1", true)).resolves.toEqual({
+      success: false,
+      error: GENERIC_ERROR_MESSAGE,
     });
   });
 });

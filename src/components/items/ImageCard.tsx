@@ -1,3 +1,4 @@
+import { FavoriteButton } from "@/components/favorites/FavoriteButton";
 import { ItemCardTrigger } from "@/components/items/ItemCardTrigger";
 import { ItemStatusIcons } from "@/components/items/ItemStatusIcons";
 import { Card } from "@/components/ui/card";
@@ -30,6 +31,15 @@ export function ImageCard({ item }: ImageCardProps) {
       <div className="flex items-center gap-2 px-4 py-3">
         <span className="truncate font-semibold">{item.title}</span>
         <ItemStatusIcons item={item} />
+        <div className="ml-auto">
+          <FavoriteButton
+            kind="item"
+            id={item.id}
+            name={item.title}
+            isFavorite={item.isFavorite}
+            variant="icon"
+          />
+        </div>
       </div>
       {/* 放在最後：放大中的圖片（scale）會被提升到定位層，按鈕在前面時會被圖片蓋住而點不到 */}
       <ItemCardTrigger id={item.id} title={item.title} />

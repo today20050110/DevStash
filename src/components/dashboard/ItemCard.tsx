@@ -1,4 +1,5 @@
 import { TypeIconTile } from "@/components/dashboard/TypeIconTile";
+import { FavoriteButton } from "@/components/favorites/FavoriteButton";
 import { CopyItemButton } from "@/components/items/CopyItemButton";
 import { ItemCardTrigger } from "@/components/items/ItemCardTrigger";
 import { ItemStatusIcons } from "@/components/items/ItemStatusIcons";
@@ -50,6 +51,13 @@ export function ItemCard({ item }: ItemCardProps) {
         >
           {formatDate(item.createdAt)}
         </time>
+        <FavoriteButton
+          kind="item"
+          id={item.id}
+          name={item.title}
+          isFavorite={item.isFavorite}
+          variant="icon"
+        />
         {/* 圖片、檔案與沒有內容的 item 沒有東西可複製 */}
         {item.hasCopyValue && (
           <CopyItemButton id={item.id} title={item.title} />

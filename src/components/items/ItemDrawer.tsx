@@ -107,6 +107,9 @@ function ItemDrawerPanel({
             item={item}
             onEdit={() => setIsEditing(true)}
             onDeleted={onDeleted}
+            onFavoriteChange={(isFavorite) =>
+              onItemChange({ ...item, isFavorite })
+            }
           />
           <ItemDrawerBody item={item} />
         </>

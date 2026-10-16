@@ -123,6 +123,21 @@ export async function softDeleteItem(
   return count > 0 ? item : null;
 }
 
+/**
+ * 設定收藏狀態（不是翻轉）：重複送出結果相同。擁有者與「尚未刪除」放在 updateMany 的條件裡，
+ * count 為 0 代表不存在、屬於別人或已刪除。@updatedAt 會一併更新，/favorites 依它排序
+ */
+export async function setItemFavorite(
+  userId: string,
+  itemId: string,
+  isFavorite: boolean,
+): Promise<boolean> {
+  const { count } = await prisma.item.updateMany({
+    where: { id: itemId, userId, deletedAt: null },
+    data: { isFavorite },
+  });
+  return count > 0;
+}
 /** R2 物件刪除失敗時記下來，留給日後的 sweeper 重試（§3.3） */
 export async function recordPendingDeletion(
   storageKey: string,

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createItem,
   recordPendingDeletion,
+  setItemFavorite,
   softDeleteItem,
   updateItem,
 } from "@/lib/db/item-mutations";
@@ -418,6 +419,28 @@ describe("createItem", () => {
 
     expect(tx.item.create.mock.calls[0][0].data).not.toHaveProperty(
       "storageKey",
+    );
+  });
+});
+
+describe("setItemFavorite", () => {
+  const updateMany = vi.mocked(prisma.item.updateMany);
+
+  it("只更新該使用者且尚未刪除的 item，寫入目標值", async () => {
+    updateMany.mockResolvedValue({ count: 1 });
+
+    await expect(setItemFavorite("user-1", "item-1", true)).resolves.toBe(true);
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: "item-1", userId: "user-1", deletedAt: null },
+      data: { isFavorite: true },
+    });
+  });
+
+  it("沒有符合的 item 時回傳 false", async () => {
+    updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(setItemFavorite("user-1", "item-1", false)).resolves.toBe(
+      false,
     );
   });
 });

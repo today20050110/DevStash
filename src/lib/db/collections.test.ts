@@ -6,6 +6,7 @@ import {
   findOwnedCollectionIds,
   getCollectionsPage,
   getCollectionById,
+  setCollectionFavorite,
   softDeleteCollection,
   updateCollection,
 } from "@/lib/db/collections";
@@ -270,5 +271,29 @@ describe("softDeleteCollection", () => {
     updateMany.mockResolvedValue({ count: 0 });
 
     await expect(softDeleteCollection("user-1", "col-x")).resolves.toBe(false);
+  });
+});
+
+describe("setCollectionFavorite", () => {
+  const updateMany = vi.mocked(prisma.collection.updateMany);
+
+  it("只更新該使用者且尚未刪除的 collection，寫入目標值", async () => {
+    updateMany.mockResolvedValue({ count: 1 });
+
+    await expect(setCollectionFavorite("user-1", "col-1", false)).resolves.toBe(
+      true,
+    );
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: "col-1", userId: "user-1", deletedAt: null },
+      data: { isFavorite: false },
+    });
+  });
+
+  it("沒有符合的 collection 時回傳 false", async () => {
+    updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(setCollectionFavorite("user-1", "col-1", true)).resolves.toBe(
+      false,
+    );
   });
 });

@@ -233,6 +233,19 @@ export async function softDeleteCollection(
   return count > 0;
 }
 
+/** 設定收藏狀態（不是翻轉）；count 為 0 代表不存在、屬於別人或已刪除 */
+export async function setCollectionFavorite(
+  userId: string,
+  collectionId: string,
+  isFavorite: boolean,
+): Promise<boolean> {
+  const { count } = await prisma.collection.updateMany({
+    where: { id: collectionId, userId, deletedAt: null },
+    data: { isFavorite },
+  });
+  return count > 0;
+}
+
 export async function getCollectionCounts(
   userId: string,
 ): Promise<{ collections: number; favoriteCollections: number }> {

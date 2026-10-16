@@ -11,12 +11,14 @@ import { collectionSchema } from "@/lib/collection-schemas";
 import { getCurrentUserId } from "@/lib/current-user";
 import {
   createCollection as createCollectionInDb,
+  setCollectionFavorite as setCollectionFavoriteInDb,
   softDeleteCollection,
   updateCollection as updateCollectionInDb,
 } from "@/lib/db/collections";
 import { getUserIsPro } from "@/lib/db/users";
 import { collectionLimitMessage, getCollectionLimit } from "@/lib/plan";
 import { checkRateLimit, rateLimitMessage } from "@/lib/rate-limit";
+import type { FavoriteResult } from "@/types/favorites";
 
 export type CollectionField = "name" | "description";
 
@@ -108,6 +110,45 @@ export async function updateCollection(
     return { success: true, data: updated };
   } catch (error) {
     console.error("Failed to update collection", error);
+    return { success: false, error: GENERIC_ERROR_MESSAGE };
+  }
+}
+
+const isFavoriteSchema = z.boolean();
+
+/**
+ * 設定 collection 的收藏狀態（傳入目標值，不是翻轉）。
+ * 不屬於目前使用者、不存在或已刪除時一律回「Collection not found」。
+ */
+export async function setCollectionFavorite(
+  collectionId: unknown,
+  isFavorite: unknown,
+): Promise<FavoriteResult> {
+  const parsedId = collectionIdSchema.safeParse(collectionId);
+  if (!parsedId.success) {
+    return { success: false, error: COLLECTION_NOT_FOUND };
+  }
+  const parsedValue = isFavoriteSchema.safeParse(isFavorite);
+  if (!parsedValue.success) {
+    return { success: false, error: GENERIC_ERROR_MESSAGE };
+  }
+
+  try {
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      return { success: false, error: NOT_SIGNED_IN_MESSAGE };
+    }
+    const updated = await setCollectionFavoriteInDb(
+      userId,
+      parsedId.data,
+      parsedValue.data,
+    );
+    if (!updated) {
+      return { success: false, error: COLLECTION_NOT_FOUND };
+    }
+    return { success: true, data: { isFavorite: parsedValue.data } };
+  } catch (error) {
+    console.error("Failed to update collection favorite", error);
     return { success: false, error: GENERIC_ERROR_MESSAGE };
   }
 }

@@ -22,3 +22,10 @@ export interface FavoriteCollection {
   /** 數量最多的型別；沒有 item 時為 null */
   type: FavoriteType | null;
 }
+
+/** setItemFavorite／setCollectionFavorite 的回應；data 為寫入後的狀態 */
+export interface FavoriteResult {
+  success: boolean;
+  data?: { isFavorite: boolean };
+  error?: string;
+}

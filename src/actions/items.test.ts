@@ -1,11 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createItem, deleteItem, updateItem } from "@/actions/items";
+import {
+  createItem,
+  deleteItem,
+  setItemFavorite,
+  updateItem,
+} from "@/actions/items";
+import {
+  GENERIC_ERROR_MESSAGE,
+  NOT_SIGNED_IN_MESSAGE,
+} from "@/lib/action-errors";
 import { getCurrentUserId } from "@/lib/current-user";
 import { findOwnedCollectionIds } from "@/lib/db/collections";
 import {
   createItem as createItemInDb,
   recordPendingDeletion,
+  setItemFavorite as setItemFavoriteInDb,
   softDeleteItem,
   updateItem as updateItemInDb,
 } from "@/lib/db/item-mutations";
@@ -23,6 +33,7 @@ vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 vi.mock("@/lib/db/item-mutations", () => ({
   createItem: vi.fn(),
   recordPendingDeletion: vi.fn(),
+  setItemFavorite: vi.fn(),
   softDeleteItem: vi.fn(),
   updateItem: vi.fn(),
 }));
@@ -542,6 +553,68 @@ describe("deleteItem action", () => {
     await expect(deleteItem("item-1")).resolves.toEqual({
       success: false,
       error: "Something went wrong, please try again",
+    });
+  });
+});
+
+describe("setItemFavorite action", () => {
+  beforeEach(() => {
+    vi.mocked(getCurrentUserId).mockResolvedValue("user-1");
+    vi.mocked(setItemFavoriteInDb).mockResolvedValue(true);
+  });
+
+  it.each([true, false])(
+    "以目前使用者寫入目標值 %s 並回傳",
+    async (isFavorite) => {
+      await expect(setItemFavorite("item-1", isFavorite)).resolves.toEqual({
+        success: true,
+        data: { isFavorite },
+      });
+      expect(setItemFavoriteInDb).toHaveBeenCalledWith(
+        "user-1",
+        "item-1",
+        isFavorite,
+      );
+    },
+  );
+
+  it("不屬於目前使用者、不存在或已刪除時回「Item not found」", async () => {
+    vi.mocked(setItemFavoriteInDb).mockResolvedValue(false);
+
+    await expect(setItemFavorite("item-1", true)).resolves.toEqual({
+      success: false,
+      error: "Item not found",
+    });
+  });
+
+  it.each([
+    ["空的 id", "", true],
+    ["不是布林值的目標值", "item-1", 1],
+  ])("%s：不查 session 也不寫入", async (_, id, value) => {
+    const result = await setItemFavorite(id, value);
+
+    expect(result.success).toBe(false);
+    expect(getCurrentUserId).not.toHaveBeenCalled();
+    expect(setItemFavoriteInDb).not.toHaveBeenCalled();
+  });
+
+  it("未登入時不寫入", async () => {
+    vi.mocked(getCurrentUserId).mockResolvedValue(null);
+
+    await expect(setItemFavorite("item-1", true)).resolves.toEqual({
+      success: false,
+      error: NOT_SIGNED_IN_MESSAGE,
+    });
+    expect(setItemFavoriteInDb).not.toHaveBeenCalled();
+  });
+
+  it("資料庫錯誤時回傳通用訊息", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(setItemFavoriteInDb).mockRejectedValue(new Error("db"));
+
+    await expect(setItemFavorite("item-1", true)).resolves.toEqual({
+      success: false,
+      error: GENERIC_ERROR_MESSAGE,
     });
   });
 });

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { MoreHorizontal, Pencil, Star, Trash2 } from "lucide-react";
 
-import { FAVORITE_COMING_SOON } from "@/components/collections/CollectionActions";
+import { setCollectionFavorite } from "@/actions/collections";
 import { DeleteCollectionDialog } from "@/components/collections/DeleteCollectionDialog";
 import { EditCollectionDialog } from "@/components/collections/EditCollectionDialog";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useFavoriteToggle } from "@/hooks/use-favorite-toggle";
+import { cn } from "@/lib/utils";
 import type { CollectionHeader } from "@/types/collections";
 
 /**
@@ -29,6 +31,10 @@ export function CollectionCardMenu({
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const favorite = useFavoriteToggle({
+    isFavorite: collection.isFavorite,
+    save: (next) => setCollectionFavorite(collection.id, next),
+  });
 
   return (
     <>
@@ -38,7 +44,7 @@ export function CollectionCardMenu({
           <Button
             variant="ghost"
             size="icon-sm"
-            className="relative z-10 -mt-1 -mr-2 text-muted-foreground"
+            className="relative z-10 -mr-2 text-muted-foreground"
           >
             <MoreHorizontal />
             <span className="sr-only">Actions for {collection.name}</span>
@@ -49,11 +55,16 @@ export function CollectionCardMenu({
             <Pencil />
             Edit
           </DropdownMenuItem>
-          {/* 停用的項目收不到滑鼠事件，title 不會出現；直接標示，螢幕閱讀器念完整說明 */}
-          <DropdownMenuItem disabled aria-label={FAVORITE_COMING_SOON}>
-            <Star />
-            {collection.isFavorite ? "Unfavorite" : "Favorite"}
-            <span className="ml-auto text-xs text-muted-foreground">Soon</span>
+          <DropdownMenuItem
+            disabled={favorite.isPending}
+            onSelect={favorite.toggle}
+          >
+            <Star
+              className={cn(
+                favorite.isFavorite && "fill-yellow-400 text-yellow-400",
+              )}
+            />
+            {favorite.isFavorite ? "Unfavorite" : "Favorite"}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem

@@ -1,21 +1,17 @@
-import { Pin, Star } from "lucide-react";
+import { Pin } from "lucide-react";
 
 import type { ItemSummary } from "@/types/items";
 
-/** 卡片標題旁的釘選與收藏狀態圖示；ItemCard 與 ImageCard 共用 */
+/**
+ * 卡片標題旁的釘選狀態圖示；ItemCard 與 ImageCard 共用。
+ * 收藏狀態改由卡片上可點的 FavoriteButton 顯示，這裡不再重複一顆星
+ */
 export function ItemStatusIcons({
   item,
 }: {
-  item: Pick<ItemSummary, "pinnedAt" | "isFavorite">;
+  item: Pick<ItemSummary, "pinnedAt">;
 }) {
   return (
-    <>
-      {item.pinnedAt && (
-        <Pin className="size-3.5 shrink-0 text-muted-foreground" />
-      )}
-      {item.isFavorite && (
-        <Star className="size-3.5 shrink-0 fill-yellow-400 text-yellow-400" />
-      )}
-    </>
+    item.pinnedAt && <Pin className="size-3.5 shrink-0 text-muted-foreground" />
   );
 }

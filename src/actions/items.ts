@@ -12,6 +12,7 @@ import { getCurrentUserId } from "@/lib/current-user";
 import {
   createItem as createItemInDb,
   recordPendingDeletion,
+  setItemFavorite as setItemFavoriteInDb,
   softDeleteItem,
   updateItem as updateItemInDb,
   type NewItemFile,
@@ -29,6 +30,7 @@ import {
 import { deleteObject } from "@/lib/r2";
 import { checkRateLimit, rateLimitMessage } from "@/lib/rate-limit";
 import { getFileCategory, verifyUploadedFile } from "@/lib/uploads";
+import type { FavoriteResult } from "@/types/favorites";
 import type { ItemDetail } from "@/types/items";
 
 export type UpdateItemField =
@@ -245,6 +247,40 @@ export async function deleteItem(itemId: unknown): Promise<DeleteItemResult> {
     return { success: true };
   } catch (error) {
     console.error("Failed to delete item", error);
+    return { success: false, error: GENERIC_ERROR_MESSAGE };
+  }
+}
+
+const isFavoriteSchema = z.boolean();
+
+/**
+ * 設定 item 的收藏狀態（傳入目標值，不是翻轉）。
+ * 不屬於目前使用者、不存在或已刪除時一律回「Item not found」。
+ */
+export async function setItemFavorite(
+  itemId: unknown,
+  isFavorite: unknown,
+): Promise<FavoriteResult> {
+  const parsedId = itemIdSchema.safeParse(itemId);
+  if (!parsedId.success) {
+    return { success: false, error: ITEM_NOT_FOUND };
+  }
+  const parsedValue = isFavoriteSchema.safeParse(isFavorite);
+  if (!parsedValue.success) {
+    return { success: false, error: GENERIC_ERROR_MESSAGE };
+  }
+
+  try {
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      return { success: false, error: NOT_SIGNED_IN_MESSAGE };
+    }
+    if (!(await setItemFavoriteInDb(userId, parsedId.data, parsedValue.data))) {
+      return { success: false, error: ITEM_NOT_FOUND };
+    }
+    return { success: true, data: { isFavorite: parsedValue.data } };
+  } catch (error) {
+    console.error("Failed to update item favorite", error);
     return { success: false, error: GENERIC_ERROR_MESSAGE };
   }
 }

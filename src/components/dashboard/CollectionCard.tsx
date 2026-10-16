@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { Star } from "lucide-react";
 
 import { CollectionCardMenu } from "@/components/collections/CollectionCardMenu";
 import { TypeIcon } from "@/components/dashboard/TypeIcon";
+import { FavoriteButton } from "@/components/favorites/FavoriteButton";
 import { Card, CardContent } from "@/components/ui/card";
 import type { CollectionSummary } from "@/types/collections";
 
@@ -28,16 +28,23 @@ export function CollectionCard({ collection }: CollectionCardProps) {
               className="flex items-center gap-2 font-semibold outline-none after:absolute after:inset-0 hover:underline"
             >
               <span className="truncate">{collection.name}</span>
-              {collection.isFavorite && (
-                <Star className="size-4 shrink-0 fill-yellow-400 text-yellow-400" />
-              )}
             </Link>
             <p className="text-sm text-muted-foreground">
               {collection.itemCount}{" "}
               {collection.itemCount === 1 ? "item" : "items"}
             </p>
           </div>
-          <CollectionCardMenu collection={collection} />
+          {/* 不能放進連結裡（button 不可巢狀於 a）；與選單同樣疊在連結的覆蓋層之上 */}
+          <div className="-mt-1 flex shrink-0 items-center">
+            <FavoriteButton
+              kind="collection"
+              id={collection.id}
+              name={collection.name}
+              isFavorite={collection.isFavorite}
+              variant="icon"
+            />
+            <CollectionCardMenu collection={collection} />
+          </div>
         </div>
 
         {collection.description && (
