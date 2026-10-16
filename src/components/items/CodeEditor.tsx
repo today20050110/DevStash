@@ -2,12 +2,18 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
-import type { BeforeMount, OnMount } from "@monaco-editor/react";
+import type { OnMount } from "@monaco-editor/react";
 import { Check, Copy } from "lucide-react";
 
+import {
+  defineEditorThemes,
+  MONACO_THEME_NAMES,
+} from "@/components/items/editor-themes";
+import { useEditorPreferences } from "@/components/settings/EditorPreferencesProvider";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
+import { getEditorLineHeight } from "@/lib/editor-preferences";
 import { cn } from "@/lib/utils";
 
 // monaco-editor 載入時就存取 window，只能在瀏覽器端載入；也讓數 MB 的 monaco
@@ -17,11 +23,9 @@ const Editor = dynamic(() => import("@/components/items/MonacoEditor"), {
   loading: () => <Skeleton className="size-full rounded-none" />,
 });
 
-const THEME = "devstash-dark";
 const MAX_HEIGHT = 400;
 /** 編輯模式的最低高度，與原本 Textarea 的 min-h-40 相同 */
 const EDIT_MIN_HEIGHT = 160;
-const LINE_HEIGHT = 20;
 const VERTICAL_PADDING = 12;
 
 interface CodeEditorProps {
@@ -52,9 +56,11 @@ export function CodeEditor({
   invalid = false,
 }: CodeEditorProps) {
   const readOnly = !onChange;
+  const { preferences } = useEditorPreferences();
+  const lineHeight = getEditorLineHeight(preferences.fontSize);
   const minHeight = readOnly ? 0 : EDIT_MIN_HEIGHT;
   const [height, setHeight] = useState(() =>
-    clampHeight(estimateHeight(value), minHeight),
+    clampHeight(estimateHeight(value, lineHeight), minHeight),
   );
   const { copied, copy } = useCopyToClipboard();
 
@@ -102,25 +108,26 @@ export function CodeEditor({
           // 父層不會在編輯中從外部改動內容（新增 dialog 關閉時整個卸載）
           {...(readOnly ? { value } : { defaultValue: value })}
           onChange={(next) => onChange?.(next ?? "")}
-          theme={THEME}
-          beforeMount={defineTheme}
+          theme={MONACO_THEME_NAMES[preferences.theme]}
+          beforeMount={defineEditorThemes}
           onMount={handleMount}
           options={{
             ariaLabel,
             readOnly,
             domReadOnly: readOnly,
             renderLineHighlight: readOnly ? "none" : "line",
-            fontSize: 13,
-            lineHeight: LINE_HEIGHT,
+            fontSize: preferences.fontSize,
+            lineHeight,
             padding: { top: VERTICAL_PADDING, bottom: VERTICAL_PADDING },
-            minimap: { enabled: false },
+            minimap: { enabled: preferences.minimap },
             scrollBeyondLastLine: false,
             overviewRulerLanes: 0,
             hideCursorInOverviewRuler: true,
             folding: false,
             lineNumbersMinChars: 3,
             automaticLayout: true,
-            tabSize: 2,
+            tabSize: preferences.tabSize,
+            wordWrap: preferences.wordWrap ? "on" : "off",
             contextmenu: false,
             scrollbar: {
               verticalScrollbarSize: 8,
@@ -136,34 +143,10 @@ export function CodeEditor({
   );
 }
 
-function estimateHeight(value: string): number {
-  return value.split("\n").length * LINE_HEIGHT + VERTICAL_PADDING * 2;
+function estimateHeight(value: string, lineHeight: number): number {
+  return value.split("\n").length * lineHeight + VERTICAL_PADDING * 2;
 }
 
 function clampHeight(contentHeight: number, minHeight: number): number {
   return Math.min(MAX_HEIGHT, Math.max(minHeight, contentHeight));
 }
-
-/** Monaco 的色彩只吃 hex；背景、邊框與捲軸對齊 globals.css 的深色 token（card／muted） */
-const defineTheme: BeforeMount = (monaco) => {
-  monaco.editor.defineTheme(THEME, {
-    base: "vs-dark",
-    inherit: true,
-    rules: [],
-    colors: {
-      "editor.background": "#171717",
-      "editorGutter.background": "#171717",
-      "editor.lineHighlightBackground": "#ffffff0a",
-      "editor.lineHighlightBorder": "#00000000",
-      "editorLineNumber.foreground": "#525252",
-      "editorLineNumber.activeForeground": "#a3a3a3",
-      "editorWidget.background": "#262626",
-      "editorWidget.border": "#ffffff1a",
-      focusBorder: "#00000000",
-      "scrollbar.shadow": "#00000000",
-      "scrollbarSlider.background": "#ffffff1f",
-      "scrollbarSlider.hoverBackground": "#ffffff33",
-      "scrollbarSlider.activeBackground": "#ffffff47",
-    },
-  });
-};

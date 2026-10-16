@@ -5,6 +5,7 @@ import { connection } from "next/server";
 import { SIGN_IN_PATH } from "@/auth.config";
 import { ChangePasswordForm } from "@/components/profile/ChangePasswordForm";
 import { DeleteAccountDialog } from "@/components/profile/DeleteAccountDialog";
+import { EditorPreferencesForm } from "@/components/settings/EditorPreferencesForm";
 import {
   Card,
   CardContent,
@@ -47,8 +48,24 @@ export default async function SettingsPage({
     <div className="max-w-4xl space-y-10">
       <div className="space-y-1">
         <h1 className="text-3xl font-bold">Settings</h1>
-        <p className="text-muted-foreground">Manage your account</p>
+        <p className="text-muted-foreground">Editor preferences and account</p>
       </div>
+
+      <section className="space-y-4">
+        <h2 className="text-xl font-semibold">Editor</h2>
+        <Card>
+          <CardHeader>
+            <CardTitle>Editor preferences</CardTitle>
+            <CardDescription>
+              Applies to the code editor for snippets and commands. Changes are
+              saved automatically.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <EditorPreferencesForm />
+          </CardContent>
+        </Card>
+      </section>
 
       <section className="space-y-4">
         <h2 className="text-xl font-semibold">Account</h2>

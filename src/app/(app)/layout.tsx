@@ -5,6 +5,7 @@ import { AppSidebar } from "@/components/dashboard/AppSidebar";
 import { Topbar } from "@/components/dashboard/Topbar";
 import { ItemDrawerProvider } from "@/components/items/ItemDrawerProvider";
 import { CommandPaletteProvider } from "@/components/search/CommandPalette";
+import { EditorPreferencesProvider } from "@/components/settings/EditorPreferencesProvider";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { getCurrentUser } from "@/lib/current-user";
 import { getCreatableItemTypes } from "@/lib/db/item-types";
@@ -32,17 +33,19 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   }));
 
   return (
-    <SidebarProvider>
-      <AppSidebar />
-      <SidebarInset>
-        {/* drawer 包住 top bar：palette 在 top bar 開啟，選 item 時要能開啟 drawer */}
-        <ItemDrawerProvider collections={collections}>
-          <CommandPaletteProvider data={searchData}>
-            <Topbar itemTypes={itemTypes} collections={collections} />
-            <main className="flex-1 overflow-y-auto p-8">{children}</main>
-          </CommandPaletteProvider>
-        </ItemDrawerProvider>
-      </SidebarInset>
-    </SidebarProvider>
+    <EditorPreferencesProvider initialPreferences={user.editorPreferences}>
+      <SidebarProvider>
+        <AppSidebar />
+        <SidebarInset>
+          {/* drawer 包住 top bar：palette 在 top bar 開啟，選 item 時要能開啟 drawer */}
+          <ItemDrawerProvider collections={collections}>
+            <CommandPaletteProvider data={searchData}>
+              <Topbar itemTypes={itemTypes} collections={collections} />
+              <main className="flex-1 overflow-y-auto p-8">{children}</main>
+            </CommandPaletteProvider>
+          </ItemDrawerProvider>
+        </SidebarInset>
+      </SidebarProvider>
+    </EditorPreferencesProvider>
   );
 }

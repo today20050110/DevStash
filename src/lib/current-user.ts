@@ -1,6 +1,7 @@
 import { cache } from "react";
 
 import { auth } from "@/auth";
+import { parseEditorPreferences } from "@/lib/editor-preferences";
 import { isPro } from "@/lib/plan";
 import { prisma } from "@/lib/prisma";
 import type { CurrentUser } from "@/types/user";
@@ -31,6 +32,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
       plan: true,
       subscriptionStatus: true,
       currentPeriodEnd: true,
+      editorPreferences: true,
     },
   });
   if (!user || user.sessionVersion !== session.user.sessionVersion) {
@@ -42,6 +44,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     email: user.email,
     image: user.image,
     isPro: isPro(user),
+    editorPreferences: parseEditorPreferences(user.editorPreferences),
   };
 });
 

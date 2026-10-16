@@ -1,3 +1,4 @@
+import type { EditorPreferences } from "@/lib/editor-preferences";
 import { isPro } from "@/lib/plan";
 import { prisma } from "@/lib/prisma";
 import type { UserProfile } from "@/types/user";
@@ -31,4 +32,15 @@ export async function getUserIsPro(userId: string): Promise<boolean> {
     select: { plan: true, subscriptionStatus: true, currentPeriodEnd: true },
   });
   return user ? isPro(user) : false;
+}
+
+/** 整筆覆寫編輯器偏好；呼叫端已以 editorPreferencesSchema 驗證 */
+export async function updateEditorPreferences(
+  userId: string,
+  preferences: EditorPreferences,
+): Promise<void> {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { editorPreferences: preferences },
+  });
 }
