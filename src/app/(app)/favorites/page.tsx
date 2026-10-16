@@ -4,9 +4,7 @@ import { connection } from "next/server";
 import { Star } from "lucide-react";
 
 import { SIGN_IN_PATH } from "@/auth.config";
-import { FavoriteItemRow } from "@/components/favorites/FavoriteItemRow";
-import { FavoriteCollectionRow } from "@/components/favorites/FavoriteRow";
-import { FavoritesSection } from "@/components/favorites/FavoritesSection";
+import { FavoritesList } from "@/components/favorites/FavoritesList";
 import { getCurrentUserId } from "@/lib/current-user";
 import { listFavoriteCollections, listFavoriteItems } from "@/lib/db/favorites";
 
@@ -33,49 +31,34 @@ async function getFavoritesData() {
 
 export default async function FavoritesPage() {
   const { items, collections } = await getFavoritesData();
+  const heading = (
+    <div className="space-y-1">
+      <h1 className="text-3xl font-bold">Favorites</h1>
+      <p className="text-muted-foreground">
+        Your starred items and collections
+      </p>
+    </div>
+  );
 
   return (
     <div className="max-w-4xl space-y-8">
-      <div className="space-y-1">
-        <h1 className="text-3xl font-bold">Favorites</h1>
-        <p className="text-muted-foreground">
-          Your starred items and collections, most recently updated first
-        </p>
-      </div>
-
       {items.length === 0 && collections.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 border-y py-16 text-center">
-          <Star className="size-8 text-muted-foreground" aria-hidden />
-          <p className="font-medium">No favorites yet</p>
-          <p className="text-sm text-muted-foreground">
-            Starred items and collections will show up here.
-          </p>
-        </div>
-      ) : (
         <>
-          <FavoritesSection
-            title="Items"
-            count={items.length}
-            emptyMessage="No favorite items"
-          >
-            {items.map((item) => (
-              <li key={item.id}>
-                <FavoriteItemRow item={item} />
-              </li>
-            ))}
-          </FavoritesSection>
-          <FavoritesSection
-            title="Collections"
-            count={collections.length}
-            emptyMessage="No favorite collections"
-          >
-            {collections.map((collection) => (
-              <li key={collection.id}>
-                <FavoriteCollectionRow collection={collection} />
-              </li>
-            ))}
-          </FavoritesSection>
+          {heading}
+          <div className="flex flex-col items-center gap-2 border-y py-16 text-center">
+            <Star className="size-8 text-muted-foreground" aria-hidden />
+            <p className="font-medium">No favorites yet</p>
+            <p className="text-sm text-muted-foreground">
+              Starred items and collections will show up here.
+            </p>
+          </div>
         </>
+      ) : (
+        <FavoritesList
+          heading={heading}
+          items={items}
+          collections={collections}
+        />
       )}
     </div>
   );
