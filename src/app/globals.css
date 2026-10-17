@@ -230,3 +230,28 @@
   scrollbar-width: thin;
   scrollbar-color: oklch(1 0 0 / 15%) transparent;
 }
+
+/* 首頁行銷頁的型別色盤（沿用 prototypes/homepage，與 app 的型別色刻意不同）與箭頭脈動動畫 */
+@theme {
+  --color-home-snippet: #3b82f6;
+  --color-home-prompt: #f59e0b;
+  --color-home-command: #06b6d4;
+  --color-home-note: #22c55e;
+  --color-home-file: #64748b;
+  --color-home-image: #ec4899;
+  --color-home-url: #6366f1;
+
+  --animate-arrow-pulse: arrow-pulse 2s ease-in-out infinite;
+
+  @keyframes arrow-pulse {
+    0%,
+    100% {
+      scale: 1;
+      box-shadow: 0 0 0 0 --alpha(var(--color-home-url) / 45%);
+    }
+    50% {
+      scale: 1.08;
+      box-shadow: 0 0 0 14px --alpha(var(--color-home-url) / 0%);
+    }
+  }
+}
