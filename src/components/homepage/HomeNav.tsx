@@ -3,15 +3,18 @@
 import { useEffect, useState } from "react";
 
 import { CtaLink } from "@/components/homepage/CtaLink";
-import { NAV_SECTION_LINKS, type NavAction } from "@/components/homepage/homepage-content";
+import { HomeAnchor } from "@/components/homepage/HomeAnchor";
+import type { HomeLink, NavAction } from "@/components/homepage/homepage-content";
 import { Logo } from "@/components/homepage/Logo";
 import { cn } from "@/lib/utils";
 
 interface HomeNavProps {
   actions: NavAction[];
+  /** 首頁傳 #features 等頁內錨點；其他頁傳 /#features 連回首頁 */
+  sectionLinks: HomeLink[];
 }
 
-export function HomeNav({ actions }: HomeNavProps) {
+export function HomeNav({ actions, sectionLinks }: HomeNavProps) {
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -31,10 +34,14 @@ export function HomeNav({ actions }: HomeNavProps) {
       <div className="mx-auto flex h-16 max-w-6xl items-center gap-8 px-4 sm:px-6">
         <Logo />
         <nav aria-label="Primary" className="hidden gap-6 text-sm text-muted-foreground md:flex">
-          {NAV_SECTION_LINKS.map((link) => (
-            <a key={link.href} href={link.href} className="transition-colors hover:text-foreground">
+          {sectionLinks.map((link) => (
+            <HomeAnchor
+              key={link.href}
+              href={link.href}
+              className="transition-colors hover:text-foreground"
+            >
               {link.label}
-            </a>
+            </HomeAnchor>
           ))}
         </nav>
         <div className="ml-auto flex gap-2">

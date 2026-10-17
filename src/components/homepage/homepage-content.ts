@@ -127,6 +127,12 @@ export const SECTION_LINKS: HomeLink[] = [
 
 export const NAV_SECTION_LINKS = SECTION_LINKS.filter((link) => link.label !== "AI");
 
+// 首頁以外的頁面（auth 頁）沒有這些區塊，改連回首頁的錨點
+export const NAV_SECTION_LINKS_FROM_OTHER_PAGES = NAV_SECTION_LINKS.map((link) => ({
+  ...link,
+  href: `/${link.href}`,
+}));
+
 export interface ChaosIcon {
   label: string;
   Icon: ComponentType<{ className?: string }>;

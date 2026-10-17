@@ -155,11 +155,10 @@ export async function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <Link href="/dashboard">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                  <Layers className="size-4" />
-                </div>
-                <span className="text-base font-semibold">DevStash</span>
+              {/* 與首頁導覽列的 Logo 相同樣式；選單按鈕預設把 svg 設為 size-4，以 ! 覆寫 */}
+              <Link href="/dashboard" className="gap-2.5">
+                <Layers className="size-6! text-home-url" aria-hidden="true" />
+                <span className="text-lg font-bold">DevStash</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

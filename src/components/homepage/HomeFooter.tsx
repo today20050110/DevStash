@@ -1,5 +1,4 @@
-import Link from "next/link";
-
+import { HomeAnchor } from "@/components/homepage/HomeAnchor";
 import { SECTION_LINKS, type HomeLink } from "@/components/homepage/homepage-content";
 import { Logo } from "@/components/homepage/Logo";
 
@@ -11,18 +10,15 @@ function FooterColumn({ title, links }: { title: string; links: HomeLink[] }) {
   return (
     <div className="flex flex-col gap-2.5">
       <h4 className="mb-1 text-[13px] font-semibold">{title}</h4>
-      {links.map((link) => {
-        const className = "text-muted-foreground transition-colors hover:text-foreground";
-        return link.href.startsWith("#") ? (
-          <a key={link.href} href={link.href} className={className}>
-            {link.label}
-          </a>
-        ) : (
-          <Link key={link.href} href={link.href} className={className}>
-            {link.label}
-          </Link>
-        );
-      })}
+      {links.map((link) => (
+        <HomeAnchor
+          key={link.href}
+          href={link.href}
+          className="text-muted-foreground transition-colors hover:text-foreground"
+        >
+          {link.label}
+        </HomeAnchor>
+      ))}
     </div>
   );
 }

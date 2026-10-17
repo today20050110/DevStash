@@ -7,7 +7,7 @@ import { FeaturesSection } from "@/components/homepage/FeaturesSection";
 import { HeroSection } from "@/components/homepage/HeroSection";
 import { HomeFooter } from "@/components/homepage/HomeFooter";
 import { HomeNav } from "@/components/homepage/HomeNav";
-import { getHomeLinks } from "@/components/homepage/homepage-content";
+import { getHomeLinks, NAV_SECTION_LINKS } from "@/components/homepage/homepage-content";
 import { PricingSection } from "@/components/homepage/PricingSection";
 
 export const metadata: Metadata = {
@@ -23,7 +23,7 @@ export default async function Home() {
 
   return (
     <>
-      <HomeNav actions={links.navActions} />
+      <HomeNav actions={links.navActions} sectionLinks={NAV_SECTION_LINKS} />
       <main className="[:root:has(&)]:scroll-smooth">
         <HeroSection start={links.start} />
         <FeaturesSection />
