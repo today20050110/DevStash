@@ -138,6 +138,24 @@ export async function setItemFavorite(
   });
   return count > 0;
 }
+
+/**
+ * 設定釘選狀態（不是翻轉）：釘選寫入現在時間，取消設為 null；條件與 setItemFavorite 相同。
+ * 回傳寫入的 pinnedAt；找不到時回傳 null
+ */
+export async function setItemPinned(
+  userId: string,
+  itemId: string,
+  isPinned: boolean,
+): Promise<{ pinnedAt: Date | null } | null> {
+  const pinnedAt = isPinned ? new Date() : null;
+  const { count } = await prisma.item.updateMany({
+    where: { id: itemId, userId, deletedAt: null },
+    data: { pinnedAt },
+  });
+  return count > 0 ? { pinnedAt } : null;
+}
+
 /** R2 物件刪除失敗時記下來，留給日後的 sweeper 重試（§3.3） */
 export async function recordPendingDeletion(
   storageKey: string,

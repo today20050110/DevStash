@@ -148,7 +148,7 @@ describe("getItemsInCollectionPage", () => {
     deletedAt: null,
   };
 
-  it("計數與列表用同一組條件，只取當頁，由新到舊", async () => {
+  it("計數與列表用同一組條件，只取當頁，釘選的在前，其餘由新到舊", async () => {
     count.mockResolvedValue(50);
     findMany.mockResolvedValue([]);
 
@@ -157,7 +157,11 @@ describe("getItemsInCollectionPage", () => {
     expect(count).toHaveBeenCalledWith({ where: owned });
     const args = findMany.mock.calls[0][0];
     expect(args?.where).toEqual(owned);
-    expect(args?.orderBy).toEqual([{ createdAt: "desc" }, { id: "desc" }]);
+    expect(args?.orderBy).toEqual([
+      { pinnedAt: { sort: "desc", nulls: "last" } },
+      { createdAt: "desc" },
+      { id: "desc" },
+    ]);
     expect(args?.skip).toBe(ITEMS_PER_PAGE);
     expect(args?.take).toBe(ITEMS_PER_PAGE);
     expect(page).toMatchObject({ total: 50, page: 2, pageCount: 3 });

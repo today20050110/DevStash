@@ -45,7 +45,8 @@ function toTagNames(tags: { tag: { name: string } }[]): string[] {
 
 interface ItemSummaryQuery {
   where?: Prisma.ItemWhereInput;
-  orderBy: Prisma.ItemOrderByWithRelationInput;
+  /** 依序比較；最後一律再依 id，同值時順序固定 */
+  orderBy: Prisma.ItemOrderByWithRelationInput[];
   skip?: number;
   take?: number;
 }
@@ -91,7 +92,7 @@ async function findItemSummaries(
     where: { ...where, ...owned },
     // 同一次巢狀 create 建立的 items 時間戳相同，以 id 決定同值時的順序，
     // 否則重新整理後列表順序可能改變
-    orderBy: [orderBy, { id: "desc" }],
+    orderBy: [...orderBy, { id: "desc" }],
     skip,
     take,
     select: {
@@ -141,13 +142,13 @@ export function getPinnedItems(
 ): Promise<ItemSummary[]> {
   return findItemSummaries(userId, {
     where: { pinnedAt: { not: null } },
-    orderBy: { pinnedAt: "desc" },
+    orderBy: [{ pinnedAt: "desc" }],
     take: limit,
   });
 }
 
 /**
- * 型別頁與 collection 頁共用：符合 where 的 items，依建立時間由新到舊，一次只取一頁。
+ * 型別頁與 collection 頁共用：符合 where 的 items，釘選的在前，其餘依建立時間由新到舊，一次只取一頁。
  * 計數與列表用同一組條件（含 userId 與 deletedAt），總數與實際列出的不會對不上
  */
 function getItemsPage(
@@ -162,7 +163,11 @@ function getItemsPage(
     (skip, take) =>
       findItemSummaries(userId, {
         where,
-        orderBy: { createdAt: "desc" },
+        // 最近釘選的在最上面；Postgres 的 DESC 預設把 NULL 排在最前，要明確指定 nulls last
+        orderBy: [
+          { pinnedAt: { sort: "desc", nulls: "last" } },
+          { createdAt: "desc" },
+        ],
         skip,
         take,
       }),
@@ -199,7 +204,7 @@ export function getRecentItems(
   limit = DASHBOARD_RECENT_ITEMS_LIMIT,
 ): Promise<ItemSummary[]> {
   return findItemSummaries(userId, {
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }],
     take: limit,
   });
 }

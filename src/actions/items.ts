@@ -13,6 +13,7 @@ import {
   createItem as createItemInDb,
   recordPendingDeletion,
   setItemFavorite as setItemFavoriteInDb,
+  setItemPinned,
   softDeleteItem,
   updateItem as updateItemInDb,
   type NewItemFile,
@@ -31,7 +32,7 @@ import { deleteObject } from "@/lib/r2";
 import { checkRateLimit, rateLimitMessage } from "@/lib/rate-limit";
 import { getFileCategory, verifyUploadedFile } from "@/lib/uploads";
 import type { FavoriteResult } from "@/types/favorites";
-import type { ItemDetail } from "@/types/items";
+import type { ItemDetail, PinResult } from "@/types/items";
 
 export type UpdateItemField =
   "title" | "description" | "content" | "language" | "url" | "tags";
@@ -281,6 +282,39 @@ export async function setItemFavorite(
     return { success: true, data: { isFavorite: parsedValue.data } };
   } catch (error) {
     console.error("Failed to update item favorite", error);
+    return { success: false, error: GENERIC_ERROR_MESSAGE };
+  }
+}
+
+/**
+ * 設定 item 的釘選狀態（傳入目標值，不是翻轉；重複送出不會出錯），錯誤對應與 setItemFavorite 相同。
+ * 回傳寫入的 pinnedAt，drawer 以它更新狀態
+ */
+export async function toggleItemPin(
+  itemId: unknown,
+  isPinned: unknown,
+): Promise<PinResult> {
+  const parsedId = itemIdSchema.safeParse(itemId);
+  if (!parsedId.success) {
+    return { success: false, error: ITEM_NOT_FOUND };
+  }
+  const parsedValue = z.boolean().safeParse(isPinned);
+  if (!parsedValue.success) {
+    return { success: false, error: GENERIC_ERROR_MESSAGE };
+  }
+
+  try {
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      return { success: false, error: NOT_SIGNED_IN_MESSAGE };
+    }
+    const saved = await setItemPinned(userId, parsedId.data, parsedValue.data);
+    if (!saved) {
+      return { success: false, error: ITEM_NOT_FOUND };
+    }
+    return { success: true, data: saved };
+  } catch (error) {
+    console.error("Failed to update item pin", error);
     return { success: false, error: GENERIC_ERROR_MESSAGE };
   }
 }

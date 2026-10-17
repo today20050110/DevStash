@@ -1,21 +1,14 @@
 "use client";
 
-import { Check, Copy, Pencil, Pin } from "lucide-react";
+import { Check, Copy, Pencil } from "lucide-react";
 
 import { FavoriteButton } from "@/components/favorites/FavoriteButton";
 import { DeleteItemDialog } from "@/components/items/DeleteItemDialog";
+import { PinButton } from "@/components/items/PinButton";
 import { Button } from "@/components/ui/button";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { getCopyValue } from "@/lib/item-copy";
-import { cn } from "@/lib/utils";
 import type { ItemDetail } from "@/types/items";
-
-/** Pin 尚未接上功能，先顯示狀態；以 aria-disabled 而非 disabled，保留啟用時的顏色 */
-const NOT_YET_AVAILABLE = {
-  "aria-disabled": true,
-  title: "Coming soon",
-  className: "cursor-not-allowed",
-} as const;
 
 interface ItemDrawerActionsProps {
   item: ItemDetail;
@@ -23,6 +16,8 @@ interface ItemDrawerActionsProps {
   onDeleted: () => void;
   /** 收藏切換成功後更新 drawer 內的 item */
   onFavoriteChange: (isFavorite: boolean) => void;
+  /** 釘選切換成功後更新 drawer 內的 item */
+  onPinChange: (pinnedAt: Date | null) => void;
 }
 
 export function ItemDrawerActions({
@@ -30,6 +25,7 @@ export function ItemDrawerActions({
   onEdit,
   onDeleted,
   onFavoriteChange,
+  onPinChange,
 }: ItemDrawerActionsProps) {
   const copyValue = getCopyValue(item);
   const { copied, copy } = useCopyToClipboard();
@@ -44,10 +40,11 @@ export function ItemDrawerActions({
         variant="labeled"
         onSaved={onFavoriteChange}
       />
-      <Button variant="ghost" size="sm" {...NOT_YET_AVAILABLE}>
-        <Pin className={cn(item.pinnedAt && "fill-current")} />
-        {item.pinnedAt ? "Pinned" : "Pin"}
-      </Button>
+      <PinButton
+        itemId={item.id}
+        isPinned={item.pinnedAt !== null}
+        onSaved={onPinChange}
+      />
       <Button
         variant="ghost"
         size="sm"

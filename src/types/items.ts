@@ -82,3 +82,10 @@ export interface ItemDetail {
 export interface CreatableItemType extends ItemTypeDetail {
   kind: ItemKind;
 }
+
+/** toggleItemPin 的回應；data 為寫入後的狀態，未釘選時 pinnedAt 為 null */
+export interface PinResult {
+  success: boolean;
+  data?: { pinnedAt: Date | null };
+  error?: string;
+}

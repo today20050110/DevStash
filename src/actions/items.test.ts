@@ -4,6 +4,7 @@ import {
   createItem,
   deleteItem,
   setItemFavorite,
+  toggleItemPin,
   updateItem,
 } from "@/actions/items";
 import {
@@ -16,6 +17,7 @@ import {
   createItem as createItemInDb,
   recordPendingDeletion,
   setItemFavorite as setItemFavoriteInDb,
+  setItemPinned,
   softDeleteItem,
   updateItem as updateItemInDb,
 } from "@/lib/db/item-mutations";
@@ -34,6 +36,7 @@ vi.mock("@/lib/db/item-mutations", () => ({
   createItem: vi.fn(),
   recordPendingDeletion: vi.fn(),
   setItemFavorite: vi.fn(),
+  setItemPinned: vi.fn(),
   softDeleteItem: vi.fn(),
   updateItem: vi.fn(),
 }));
@@ -613,6 +616,70 @@ describe("setItemFavorite action", () => {
     vi.mocked(setItemFavoriteInDb).mockRejectedValue(new Error("db"));
 
     await expect(setItemFavorite("item-1", true)).resolves.toEqual({
+      success: false,
+      error: GENERIC_ERROR_MESSAGE,
+    });
+  });
+});
+
+describe("toggleItemPin action", () => {
+  const PINNED_AT = new Date("2026-10-17T00:00:00Z");
+
+  beforeEach(() => {
+    vi.mocked(getCurrentUserId).mockResolvedValue("user-1");
+  });
+
+  it.each([
+    [true, PINNED_AT],
+    [false, null],
+  ])(
+    "以目前使用者寫入目標值 %s，回傳寫入的 pinnedAt",
+    async (isPinned, pinnedAt) => {
+      vi.mocked(setItemPinned).mockResolvedValue({ pinnedAt });
+
+      await expect(toggleItemPin("item-1", isPinned)).resolves.toEqual({
+        success: true,
+        data: { pinnedAt },
+      });
+      expect(setItemPinned).toHaveBeenCalledWith("user-1", "item-1", isPinned);
+    },
+  );
+
+  it("不屬於目前使用者、不存在或已刪除時回「Item not found」", async () => {
+    vi.mocked(setItemPinned).mockResolvedValue(null);
+
+    await expect(toggleItemPin("item-1", true)).resolves.toEqual({
+      success: false,
+      error: "Item not found",
+    });
+  });
+
+  it.each([
+    ["空的 id", "", true],
+    ["不是布林值的目標值", "item-1", "true"],
+  ])("%s：不查 session 也不寫入", async (_, id, value) => {
+    const result = await toggleItemPin(id, value);
+
+    expect(result.success).toBe(false);
+    expect(getCurrentUserId).not.toHaveBeenCalled();
+    expect(setItemPinned).not.toHaveBeenCalled();
+  });
+
+  it("未登入時不寫入", async () => {
+    vi.mocked(getCurrentUserId).mockResolvedValue(null);
+
+    await expect(toggleItemPin("item-1", true)).resolves.toEqual({
+      success: false,
+      error: NOT_SIGNED_IN_MESSAGE,
+    });
+    expect(setItemPinned).not.toHaveBeenCalled();
+  });
+
+  it("資料庫錯誤時回傳通用訊息", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(setItemPinned).mockRejectedValue(new Error("db"));
+
+    await expect(toggleItemPin("item-1", true)).resolves.toEqual({
       success: false,
       error: GENERIC_ERROR_MESSAGE,
     });

@@ -4,6 +4,7 @@ import {
   createItem,
   recordPendingDeletion,
   setItemFavorite,
+  setItemPinned,
   softDeleteItem,
   updateItem,
 } from "@/lib/db/item-mutations";
@@ -442,5 +443,40 @@ describe("setItemFavorite", () => {
     await expect(setItemFavorite("user-1", "item-1", false)).resolves.toBe(
       false,
     );
+  });
+});
+
+describe("setItemPinned", () => {
+  const updateMany = vi.mocked(prisma.item.updateMany);
+
+  it("釘選時寫入現在時間，只更新該使用者且尚未刪除的 item", async () => {
+    vi.useFakeTimers({ now: new Date("2026-10-17T00:00:00Z") });
+    updateMany.mockResolvedValue({ count: 1 });
+
+    await expect(setItemPinned("user-1", "item-1", true)).resolves.toEqual({
+      pinnedAt: new Date("2026-10-17T00:00:00Z"),
+    });
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: "item-1", userId: "user-1", deletedAt: null },
+      data: { pinnedAt: new Date("2026-10-17T00:00:00Z") },
+    });
+    vi.useRealTimers();
+  });
+
+  it("取消釘選時設為 null", async () => {
+    updateMany.mockResolvedValue({ count: 1 });
+
+    await expect(setItemPinned("user-1", "item-1", false)).resolves.toEqual({
+      pinnedAt: null,
+    });
+    expect(updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { pinnedAt: null } }),
+    );
+  });
+
+  it("沒有符合的 item 時回傳 null", async () => {
+    updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(setItemPinned("user-1", "item-1", true)).resolves.toBeNull();
   });
 });

@@ -110,6 +110,7 @@ function ItemDrawerPanel({
             onFavoriteChange={(isFavorite) =>
               onItemChange({ ...item, isFavorite })
             }
+            onPinChange={(pinnedAt) => onItemChange({ ...item, pinnedAt })}
           />
           <ItemDrawerBody item={item} />
         </>
