@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import type { RefObject } from "react";
 import { FolderPlus } from "lucide-react";
 
 import { createCollection } from "@/actions/collections";
@@ -8,35 +8,33 @@ import {
   CollectionFormDialog,
   EMPTY_COLLECTION_VALUES,
 } from "@/components/collections/CollectionFormDialog";
-import { Button } from "@/components/ui/button";
 
-/** 頂部列的 New Collection 按鈕與新增 dialog */
-export function NewCollectionDialog() {
-  const [open, setOpen] = useState(false);
+interface NewCollectionDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** 關閉後焦點要回到的觸發按鈕 */
+  returnFocusRef?: RefObject<HTMLElement | null>;
+}
 
+/** 新增 collection 的 dialog；開啟的按鈕由 TopbarActions 提供 */
+export function NewCollectionDialog({
+  open,
+  onOpenChange,
+  returnFocusRef,
+}: NewCollectionDialogProps) {
   return (
-    <>
-      <Button
-        variant="outline"
-        size="lg"
-        className="hidden sm:inline-flex"
-        onClick={() => setOpen(true)}
-      >
-        <FolderPlus />
-        New Collection
-      </Button>
-      <CollectionFormDialog
-        open={open}
-        onOpenChange={setOpen}
-        title="New Collection"
-        description="Group related items under a name."
-        initialValues={EMPTY_COLLECTION_VALUES}
-        submitLabel="Create"
-        submitIcon={<FolderPlus />}
-        submit={createCollection}
-        successMessage={(name) => `Created "${name}"`}
-        failureMessage="Failed to create collection"
-      />
-    </>
+    <CollectionFormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      returnFocusRef={returnFocusRef}
+      title="New Collection"
+      description="Group related items under a name."
+      initialValues={EMPTY_COLLECTION_VALUES}
+      submitLabel="Create"
+      submitIcon={<FolderPlus />}
+      submit={createCollection}
+      successMessage={(name) => `Created "${name}"`}
+      failureMessage="Failed to create collection"
+    />
   );
 }

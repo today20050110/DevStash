@@ -167,6 +167,22 @@ export async function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
+        {/* top bar 的 Favorites 星星在 sm 以下隱藏，手機上由這裡（drawer）進入 */}
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <Link href="/favorites">
+                    <Star />
+                    <span>Favorites</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
         {itemTypes.length > 0 && (
           <SidebarGroup>
             <SidebarGroupLabel>Types</SidebarGroupLabel>

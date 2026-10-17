@@ -1,6 +1,11 @@
 "use client";
 
-import { useState, useTransition, type FormEvent } from "react";
+import {
+  useState,
+  useTransition,
+  type FormEvent,
+  type RefObject,
+} from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -23,7 +28,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { getUploadCategory } from "@/lib/file-types";
 import { getItemTypeFields } from "@/lib/item-fields";
@@ -41,14 +45,23 @@ interface NewItemDialogProps {
   itemTypes: CreatableItemType[];
   /** 可加入的 collections */
   collections: CollectionOption[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** 沒有 DialogTrigger 時，關閉後要把焦點還給的元素；Radix 只會還給自己的 trigger */
+  returnFocusRef?: RefObject<HTMLElement | null>;
 }
 
 type CreateErrors = Partial<Record<CreateItemField, string>>;
 
-/** 頂部列的 New Item 按鈕與新增 dialog；欄位依選擇的型別顯示 */
-export function NewItemDialog({ itemTypes, collections }: NewItemDialogProps) {
+/** 新增 item 的 dialog，欄位依選擇的型別顯示；開啟的按鈕由 TopbarActions 提供 */
+export function NewItemDialog({
+  itemTypes,
+  collections,
+  open,
+  onOpenChange,
+  returnFocusRef,
+}: NewItemDialogProps) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
   const [typeId, setTypeId] = useState(itemTypes[0]?.id ?? "");
   const [values, setValues] = useState(EMPTY_ITEM_FORM_VALUES);
   const [collectionIds, setCollectionIds] = useState<string[]>([]);
@@ -88,7 +101,7 @@ export function NewItemDialog({ itemTypes, collections }: NewItemDialogProps) {
     if (isCreating) {
       return;
     }
-    setOpen(next);
+    onOpenChange(next);
     if (!next) {
       reset();
     }
@@ -139,7 +152,7 @@ export function NewItemDialog({ itemTypes, collections }: NewItemDialogProps) {
         return;
       }
       toast.success(`Created "${result.data.title}"`);
-      setOpen(false);
+      onOpenChange(false);
       reset();
       // 卡片列表、統計與側邊欄數量都是 server component
       router.refresh();
@@ -148,13 +161,14 @@ export function NewItemDialog({ itemTypes, collections }: NewItemDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        <Button size="lg">
-          <Plus />
-          New Item
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col sm:max-w-xl">
+      <DialogContent
+        className="flex max-h-[calc(100dvh-2rem)] flex-col sm:max-w-xl"
+        onCloseAutoFocus={(event) => {
+          if (!returnFocusRef?.current) return;
+          event.preventDefault();
+          returnFocusRef.current.focus();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>New Item</DialogTitle>
           <DialogDescription>

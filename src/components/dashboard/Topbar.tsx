@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { Star } from "lucide-react";
 
-import { NewCollectionDialog } from "@/components/collections/NewCollectionDialog";
-import { NewItemDialog } from "@/components/items/NewItemDialog";
+import { TopbarActions } from "@/components/dashboard/TopbarActions";
 import { SearchButton } from "@/components/search/SearchButton";
 import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -18,7 +17,7 @@ interface TopbarProps {
 
 /**
  * Dashboard top bar: sidebar trigger, search (opens the command palette),
- * Favorites link, New Collection and New Item.
+ * Favorites link (sm and up), and the create actions (one "+" menu below sm).
  */
 export function Topbar({ itemTypes, collections }: TopbarProps) {
   return (
@@ -28,13 +27,18 @@ export function Topbar({ itemTypes, collections }: TopbarProps) {
       <SearchButton />
 
       <div className="ml-auto flex items-center gap-2">
-        <Button variant="ghost" size="icon" asChild>
+        {/* sm 以下改由側邊欄（手機上是 drawer）的 Favorites 連結進入 */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="hidden sm:inline-flex"
+          asChild
+        >
           <Link href="/favorites" aria-label="Favorites" title="Favorites">
             <Star />
           </Link>
         </Button>
-        <NewCollectionDialog />
-        <NewItemDialog itemTypes={itemTypes} collections={collections} />
+        <TopbarActions itemTypes={itemTypes} collections={collections} />
       </div>
     </header>
   );

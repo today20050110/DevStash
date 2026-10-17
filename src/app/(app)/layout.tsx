@@ -36,7 +36,8 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     <EditorPreferencesProvider initialPreferences={user.editorPreferences}>
       <SidebarProvider>
         <AppSidebar />
-        <SidebarInset>
+        {/* min-w-0：flex 子元素預設不會縮到內容寬度以下，桌面側邊欄出現時 top bar 會把整頁撐出橫向捲動 */}
+        <SidebarInset className="min-w-0">
           {/* drawer 包住 top bar：palette 在 top bar 開啟，選 item 時要能開啟 drawer */}
           <ItemDrawerProvider collections={collections}>
             <CommandPaletteProvider data={searchData}>

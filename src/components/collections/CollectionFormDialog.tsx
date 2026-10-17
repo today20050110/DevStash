@@ -1,6 +1,12 @@
 "use client";
 
-import { useState, useTransition, type FormEvent, type ReactNode } from "react";
+import {
+  useState,
+  useTransition,
+  type FormEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -53,6 +59,8 @@ interface CollectionFormDialogProps {
   /** 成功時的 toast 文字 */
   successMessage: (name: string) => string;
   failureMessage: string;
+  /** 沒有 DialogTrigger 時，關閉後要把焦點還給的元素；Radix 只會還給自己的 trigger */
+  returnFocusRef?: RefObject<HTMLElement | null>;
 }
 
 /**
@@ -70,6 +78,7 @@ export function CollectionFormDialog({
   submit,
   successMessage,
   failureMessage,
+  returnFocusRef,
 }: CollectionFormDialogProps) {
   const router = useRouter();
   const [values, setValues] = useState(initialValues);
@@ -117,7 +126,14 @@ export function CollectionFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent
+        className="sm:max-w-md"
+        onCloseAutoFocus={(event) => {
+          if (!returnFocusRef?.current) return;
+          event.preventDefault();
+          returnFocusRef.current.focus();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
