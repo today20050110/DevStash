@@ -8,11 +8,13 @@ import { TypeIconTile } from "@/components/dashboard/TypeIconTile";
 import { FileList } from "@/components/items/FileList";
 import { ItemGrid } from "@/components/items/ItemGrid";
 import { ListPagination } from "@/components/pagination/ListPagination";
-import { getCurrentUserId } from "@/lib/current-user";
+import { ProUpgradePrompt } from "@/components/billing/ProUpgradePrompt";
+import { getCurrentUser } from "@/lib/current-user";
 import { getItemTypeBySlug } from "@/lib/db/item-types";
 import { getItemsByTypePage } from "@/lib/db/items";
 import { getUploadCategory } from "@/lib/file-types";
 import { parsePageParam } from "@/lib/pagination";
+import { canUploadFiles } from "@/lib/plan";
 
 /**
  * generateMetadata 與頁面都需要型別；以 cache() 包起來，同一個請求只查一次。
@@ -22,19 +24,21 @@ const getItemType = cache(async (slug: string) => {
   // 與 dashboard 相同：明確宣告動態渲染，避免 build 時預先渲染
   await connection();
 
-  const userId = await getCurrentUserId();
+  const user = await getCurrentUser();
   // proxy 只驗 JWT 簽章；帳號已刪除但 token 未過期時，在這裡擋下
-  if (!userId) {
+  if (!user) {
     redirect(
       `${SIGN_IN_PATH}?callbackUrl=${encodeURIComponent(`/items/${slug}`)}`,
     );
   }
 
-  const itemType = await getItemTypeBySlug(userId, slug);
+  const itemType = await getItemTypeBySlug(user.id, slug);
   if (!itemType) {
     notFound();
   }
-  return { userId, itemType };
+  // Files／Images 的列表是 Pro 限定，與新增 item、上傳 route 用同一個判斷
+  const locked = itemType.kind === "FILE" && !canUploadFiles(user.isPro);
+  return { userId: user.id, itemType, locked };
 });
 
 export async function generateMetadata({
@@ -50,7 +54,22 @@ export default async function ItemsByTypePage({
   searchParams,
 }: PageProps<"/items/[type]">) {
   const { type } = await params;
-  const { userId, itemType } = await getItemType(type);
+  const { userId, itemType, locked } = await getItemType(type);
+  if (locked) {
+    return (
+      <div className="space-y-8">
+        <div className="flex items-center gap-3">
+          <TypeIconTile icon={itemType.icon} color={itemType.color} />
+          <h1 className="text-3xl font-bold">{itemType.name}</h1>
+        </div>
+        <ProUpgradePrompt
+          typeName={itemType.name}
+          icon={itemType.icon}
+          color={itemType.color}
+        />
+      </div>
+    );
+  }
   const { page: pageParam } = await searchParams;
   const {
     rows: items,

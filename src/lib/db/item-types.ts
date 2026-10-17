@@ -88,7 +88,14 @@ export function getItemTypeBySlug(
   return prisma.itemType.findFirst({
     where: { slug, OR: [{ isSystem: true, userId: null }, { userId }] },
     orderBy: { userId: { sort: "asc", nulls: "first" } },
-    select: { id: true, name: true, slug: true, icon: true, color: true },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      icon: true,
+      color: true,
+      kind: true,
+    },
   });
 }
 

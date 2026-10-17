@@ -11,6 +11,8 @@ export interface ItemTypeSummary {
 export interface ItemTypeDetail extends ItemTypeSummary {
   id: string;
   slug: string;
+  /** FILE kind 的列表頁是 Pro 限定（canUploadFiles） */
+  kind: ItemKind;
 }
 
 export interface ItemTypeWithCount {
