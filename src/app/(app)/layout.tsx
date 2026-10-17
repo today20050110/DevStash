@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { SIGN_IN_PATH } from "@/auth.config";
 import { AppSidebar } from "@/components/dashboard/AppSidebar";
+import { SidebarCloseOnNavigate } from "@/components/dashboard/SidebarCloseOnNavigate";
 import { Topbar } from "@/components/dashboard/Topbar";
 import { ItemDrawerProvider } from "@/components/items/ItemDrawerProvider";
 import { CommandPaletteProvider } from "@/components/search/CommandPalette";
@@ -35,7 +36,9 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   return (
     <EditorPreferencesProvider initialPreferences={user.editorPreferences}>
       <SidebarProvider>
-        <AppSidebar />
+        <SidebarCloseOnNavigate>
+          <AppSidebar />
+        </SidebarCloseOnNavigate>
         {/* min-w-0：flex 子元素預設不會縮到內容寬度以下，桌面側邊欄出現時 top bar 會把整頁撐出橫向捲動 */}
         <SidebarInset className="min-w-0">
           {/* drawer 包住 top bar：palette 在 top bar 開啟，選 item 時要能開啟 drawer */}
