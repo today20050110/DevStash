@@ -198,6 +198,18 @@ export function getItemsInCollectionPage(
   );
 }
 
+/**
+ * 貼了該標籤的 items。標籤的擁有者由呼叫端先以 getTagBySlug 確認；
+ * item 本身的 userId 與 deletedAt 由 getItemsPage 限制
+ */
+export function getItemsByTagPage(
+  userId: string,
+  tagId: string,
+  page: number,
+): Promise<Page<ItemSummary>> {
+  return getItemsPage(userId, { tags: { some: { tagId } } }, page);
+}
+
 /** pinned 與 recent 是不同維度，已釘選的項目同樣會出現在這裡 */
 export function getRecentItems(
   userId: string,

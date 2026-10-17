@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { connection } from "next/server";
-import { Folder, Layers, Star } from "lucide-react";
+import { Folder, Layers, Star, Tag } from "lucide-react";
 
 import { TypeIcon } from "@/components/dashboard/TypeIcon";
 import { UserMenu } from "@/components/dashboard/UserMenu";
@@ -175,6 +175,14 @@ export async function AppSidebar() {
                   <Link href="/favorites">
                     <Star />
                     <span>Favorites</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <Link href="/tags">
+                    <Tag />
+                    <span>Tags</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

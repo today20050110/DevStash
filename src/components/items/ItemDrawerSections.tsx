@@ -3,6 +3,7 @@ import { CalendarDays, Download, FileIcon, Folder, Tag } from "lucide-react";
 
 import { CodeEditor } from "@/components/items/CodeEditor";
 import { MarkdownEditor } from "@/components/items/MarkdownEditor";
+import { TagLink } from "@/components/items/TagLink";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getEditorLanguage } from "@/lib/code-language";
@@ -43,8 +44,14 @@ export function Section({ title, icon, htmlFor, children }: SectionProps) {
   );
 }
 
-/** 檢視模式的內容區 */
-export function ItemDrawerBody({ item }: { item: ItemDetail }) {
+/** 檢視模式的內容區；onNavigate 在點了換頁的連結（標籤）時關閉 drawer */
+export function ItemDrawerBody({
+  item,
+  onNavigate,
+}: {
+  item: ItemDetail;
+  onNavigate: () => void;
+}) {
   return (
     <div className="flex-1 space-y-6 overflow-y-auto p-4">
       {item.description && (
@@ -59,9 +66,7 @@ export function ItemDrawerBody({ item }: { item: ItemDetail }) {
         <Section title="Tags" icon={<Tag />}>
           <div className="flex flex-wrap gap-1.5">
             {item.tags.map((tag) => (
-              <Badge key={tag} variant="secondary">
-                {tag}
-              </Badge>
+              <TagLink key={tag} name={tag} onClick={onNavigate} />
             ))}
           </div>
         </Section>

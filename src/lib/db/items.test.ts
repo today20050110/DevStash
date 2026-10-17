@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getItemDetail,
   getItemFile,
+  getItemsByTagPage,
   getItemsByTypePage,
   getItemsInCollectionPage,
 } from "@/lib/db/items";
@@ -174,6 +175,25 @@ describe("getItemsInCollectionPage", () => {
       getItemsInCollectionPage("user-1", "col-1", 1),
     ).resolves.toEqual({ rows: [], total: 0, page: 1, pageCount: 1 });
     expect(findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("getItemsByTagPage", () => {
+  it("條件是貼了該標籤，並限制使用者與未刪除", async () => {
+    const findMany = vi.mocked(prisma.item.findMany);
+    const count = vi.mocked(prisma.item.count);
+    count.mockResolvedValue(1);
+    findMany.mockResolvedValue([]);
+
+    await getItemsByTagPage("user-1", "tag-1", 1);
+
+    const owned = {
+      tags: { some: { tagId: "tag-1" } },
+      userId: "user-1",
+      deletedAt: null,
+    };
+    expect(count).toHaveBeenCalledWith({ where: owned });
+    expect(findMany.mock.calls[0][0]?.where).toEqual(owned);
   });
 });
 

@@ -5,12 +5,14 @@ import { AppSidebar } from "@/components/dashboard/AppSidebar";
 import { SidebarCloseOnNavigate } from "@/components/dashboard/SidebarCloseOnNavigate";
 import { Topbar } from "@/components/dashboard/Topbar";
 import { ItemDrawerProvider } from "@/components/items/ItemDrawerProvider";
+import { TagOptionsProvider } from "@/components/items/TagOptionsProvider";
 import { CommandPaletteProvider } from "@/components/search/CommandPalette";
 import { EditorPreferencesProvider } from "@/components/settings/EditorPreferencesProvider";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { getCurrentUser } from "@/lib/current-user";
 import { getCreatableItemTypes } from "@/lib/db/item-types";
 import { getSearchData } from "@/lib/db/search";
+import { getTagsWithCounts } from "@/lib/db/tags";
 import { canUploadFiles } from "@/lib/plan";
 
 // 登入後的頁面（/dashboard、/profile、/settings、/favorites 等）共用側邊欄與頂部列；route group 不影響網址
@@ -23,10 +25,13 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   }
   // command palette 的資料與新增／編輯 item 表單的 collection 選項；
   // 新增、編輯、刪除後的 router.refresh() 會重新取得
-  const [itemTypes, searchData] = await Promise.all([
+  // 標籤供 Tags 欄位自動完成
+  const [itemTypes, searchData, tags] = await Promise.all([
     getCreatableItemTypes(canUploadFiles(user.isPro)),
     getSearchData(user.id),
+    getTagsWithCounts(user.id),
   ]);
+  const tagOptions = tags.map(({ name, itemCount }) => ({ name, itemCount }));
   // 搜尋資料的 collections 已依名稱排序，表單選項只取 id 與名稱，不另查一次
   const collections = searchData.collections.map(({ id, name }) => ({
     id,
@@ -42,13 +47,15 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
         {/* min-w-0：flex 子元素預設不會縮到內容寬度以下，桌面側邊欄出現時 top bar 會把整頁撐出橫向捲動 */}
         <SidebarInset className="min-w-0">
           {/* drawer 包住 top bar：palette 在 top bar 開啟，選 item 時要能開啟 drawer */}
-          <ItemDrawerProvider collections={collections}>
-            <CommandPaletteProvider data={searchData}>
-              <Topbar itemTypes={itemTypes} collections={collections} />
-              {/* SidebarInset 本身就是 <main>，這裡用 div 避免巢狀的 main landmark */}
-              <div className="flex-1 overflow-y-auto p-8">{children}</div>
-            </CommandPaletteProvider>
-          </ItemDrawerProvider>
+          <TagOptionsProvider options={tagOptions}>
+            <ItemDrawerProvider collections={collections}>
+              <CommandPaletteProvider data={searchData}>
+                <Topbar itemTypes={itemTypes} collections={collections} />
+                {/* SidebarInset 本身就是 <main>，這裡用 div 避免巢狀的 main landmark */}
+                <div className="flex-1 overflow-y-auto p-8">{children}</div>
+              </CommandPaletteProvider>
+            </ItemDrawerProvider>
+          </TagOptionsProvider>
         </SidebarInset>
       </SidebarProvider>
     </EditorPreferencesProvider>

@@ -3,7 +3,7 @@ import { FavoriteButton } from "@/components/favorites/FavoriteButton";
 import { CopyItemButton } from "@/components/items/CopyItemButton";
 import { ItemCardTrigger } from "@/components/items/ItemCardTrigger";
 import { ItemStatusIcons } from "@/components/items/ItemStatusIcons";
-import { Badge } from "@/components/ui/badge";
+import { TagLink } from "@/components/items/TagLink";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate } from "@/lib/format";
 import type { ItemSummary } from "@/types/items";
@@ -66,9 +66,8 @@ export function ItemCard({ item }: ItemCardProps) {
         {item.tags.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {item.tags.map((tag) => (
-              <Badge key={tag} variant="secondary">
-                {tag}
-              </Badge>
+              // relative z-10：疊在開啟 drawer 的覆蓋層之上，點標籤才會換頁
+              <TagLink key={tag} name={tag} className="relative z-10" />
             ))}
           </div>
         )}

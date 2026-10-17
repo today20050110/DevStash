@@ -45,7 +45,7 @@ export function ItemDrawer({
             item={item}
             collections={collections}
             onItemChange={replaceItem}
-            onDeleted={() => onOpenChange(false)}
+            onClose={() => onOpenChange(false)}
           />
         ) : (
           <SheetHeader className="pr-12">
@@ -74,7 +74,8 @@ interface ItemDrawerPanelProps {
   item: ItemDetail;
   collections: CollectionOption[];
   onItemChange: (item: ItemDetail) => void;
-  onDeleted: () => void;
+  /** 刪除後，或點了 drawer 內換頁的連結（標籤）時關閉 drawer */
+  onClose: () => void;
 }
 
 /** 檢視與編輯模式的切換；編輯模式下操作列換成 Save／Cancel */
@@ -82,7 +83,7 @@ function ItemDrawerPanel({
   item,
   collections,
   onItemChange,
-  onDeleted,
+  onClose,
 }: ItemDrawerPanelProps) {
   const [isEditing, setIsEditing] = useState(false);
 
@@ -106,13 +107,13 @@ function ItemDrawerPanel({
           <ItemDrawerActions
             item={item}
             onEdit={() => setIsEditing(true)}
-            onDeleted={onDeleted}
+            onDeleted={onClose}
             onFavoriteChange={(isFavorite) =>
               onItemChange({ ...item, isFavorite })
             }
             onPinChange={(pinnedAt) => onItemChange({ ...item, pinnedAt })}
           />
-          <ItemDrawerBody item={item} />
+          <ItemDrawerBody item={item} onNavigate={onClose} />
         </>
       )}
     </>

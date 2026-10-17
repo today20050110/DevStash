@@ -25,5 +25,6 @@ export const config = {
     "/profile/:path*",
     "/settings/:path*",
     "/favorites/:path*",
+    "/tags/:path*",
   ],
 };

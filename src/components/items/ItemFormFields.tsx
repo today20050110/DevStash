@@ -4,6 +4,7 @@ import type { UpdateItemField } from "@/actions/items";
 import { CodeEditor } from "@/components/items/CodeEditor";
 import { MarkdownEditor } from "@/components/items/MarkdownEditor";
 import { Section } from "@/components/items/ItemDrawerSections";
+import { TagInput } from "@/components/items/TagInput";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { getEditorLanguage } from "@/lib/code-language";
@@ -144,12 +145,11 @@ export function ItemFormFields({
         </ItemFormField>
       )}
       <ItemFormField id="item-tags" label="Tags" error={errors.tags}>
-        <Input
+        <TagInput
           id="item-tags"
           {...errorProps("item-tags", errors.tags)}
           value={values.tags}
-          onChange={(event) => setValue("tags", event.target.value)}
-          placeholder="react, hooks, auth"
+          onChange={(value) => setValue("tags", value)}
         />
       </ItemFormField>
     </>
