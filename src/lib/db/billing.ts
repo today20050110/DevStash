@@ -19,6 +19,14 @@ export interface BillingWrite {
   data: Partial<BillingState> & { stripeCustomerId?: string };
 }
 
+/** 從 Checkout 回來時的主動同步：直接更新該使用者，不經 StripeEvent（沒有事件 id） */
+export async function saveBillingForUser(
+  userId: string,
+  data: BillingWrite["data"],
+): Promise<void> {
+  await prisma.user.update({ where: { id: userId }, data });
+}
+
 function targetWhere(target: BillingTarget): Prisma.UserWhereInput {
   if ("userId" in target) {
     return { id: target.userId };

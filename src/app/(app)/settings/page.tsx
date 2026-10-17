@@ -14,6 +14,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { BillingSettings } from "@/components/settings/BillingSettings";
+import { syncCheckoutSession } from "@/lib/billing-checkout";
 import { getCurrentUser } from "@/lib/current-user";
 import { getUserProfile } from "@/lib/db/users";
 import { getUserUsage } from "@/lib/usage";
@@ -25,7 +26,27 @@ export const metadata: Metadata = {
   title: "Settings — DevStash",
 };
 
-async function getSettingsData() {
+/**
+ * 從 Checkout 回來時先向 Stripe 同步，回傳同步後的 isPro；沒有 session id 或同步失敗時回傳 null。
+ * 失敗不影響頁面：webhook 之後仍會更新
+ */
+async function syncReturnedCheckout(
+  userId: string,
+  sessionId: string | undefined,
+): Promise<boolean | null> {
+  if (!sessionId) {
+    return null;
+  }
+  try {
+    const state = await syncCheckoutSession(userId, sessionId);
+    return state?.isPro ?? null;
+  } catch (error) {
+    console.error("Failed to sync checkout session", error);
+    return null;
+  }
+}
+
+async function getSettingsData(checkoutSessionId: string | undefined) {
   // 與 dashboard 相同：明確宣告動態渲染，避免 build 時預先渲染
   await connection();
 
@@ -35,21 +56,27 @@ async function getSettingsData() {
     redirect(`${SIGN_IN_PATH}?callbackUrl=/settings`);
   }
 
+  // getCurrentUser() 是同步前讀的，剛同步完要以同步結果為準
+  const isPro =
+    (await syncReturnedCheckout(user.id, checkoutSessionId)) ?? user.isPro;
   const [profile, usage] = await Promise.all([
     getUserProfile(user.id),
-    getUserUsage(user.id, user.isPro),
+    getUserUsage(user.id, isPro),
   ]);
   if (!profile) {
     redirect(`${SIGN_IN_PATH}?callbackUrl=/settings`);
   }
-  return { profile, usage, isPro: user.isPro };
+  return { profile, usage, isPro };
 }
 
 export default async function SettingsPage({
   searchParams,
 }: PageProps<"/settings">) {
-  const { passwordChanged, upgraded } = await searchParams;
-  const { profile, usage, isPro } = await getSettingsData();
+  const { passwordChanged, upgraded, session_id: sessionId } = await searchParams;
+  const isUpgradeReturn = firstParam(upgraded) === "true";
+  const { profile, usage, isPro } = await getSettingsData(
+    isUpgradeReturn ? firstParam(sessionId) : undefined,
+  );
 
   return (
     <div className={cn(NARROW_PAGE_CLASS, "space-y-10")}>
@@ -80,7 +107,7 @@ export default async function SettingsPage({
         isPro={isPro}
         itemCount={usage.itemCount}
         collectionCount={usage.collectionCount}
-        upgraded={firstParam(upgraded) === "true"}
+        upgraded={isUpgradeReturn}
       />
 
       <section className="space-y-4">

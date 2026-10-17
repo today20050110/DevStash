@@ -4,6 +4,7 @@ import { Prisma } from "@/generated/prisma/client";
 import {
   applyStripeEvent,
   getStripeCustomerId,
+  saveBillingForUser,
   saveStripeCustomerId,
 } from "@/lib/db/billing";
 import { prisma } from "@/lib/prisma";
@@ -15,7 +16,7 @@ const tx = {
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    user: { findUnique: vi.fn(), updateMany: vi.fn() },
+    user: { findUnique: vi.fn(), updateMany: vi.fn(), update: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -50,6 +51,19 @@ describe("saveStripeCustomerId", () => {
     updateMany.mockResolvedValue({ count: 0 });
 
     await expect(saveStripeCustomerId("user-1", "cus_2")).resolves.toBe(false);
+  });
+});
+
+describe("saveBillingForUser", () => {
+  it("直接以使用者 id 更新帳務欄位", async () => {
+    const update = vi.mocked(prisma.user.update);
+
+    await saveBillingForUser("user-1", { isPro: true, stripeCustomerId: "cus_1" });
+
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      data: { isPro: true, stripeCustomerId: "cus_1" },
+    });
   });
 });
 

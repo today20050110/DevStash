@@ -76,7 +76,8 @@ export async function POST(request: Request) {
       line_items: [{ price: priceId, quantity: 1 }],
       // webhook（Phase 2）以它找回使用者
       metadata: { userId: user.id },
-      success_url: `${appUrl}/settings?upgraded=true`,
+      // session_id 讓 Settings 頁回來時主動同步訂閱，不必等 webhook；{CHECKOUT_SESSION_ID} 由 Stripe 代入
+      success_url: `${appUrl}/settings?upgraded=true&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/settings`,
     });
     if (!session.url) {
