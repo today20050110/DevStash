@@ -60,10 +60,17 @@ const DEMO_PASSWORD = "12345678";
 /** 各 demo collection 的型別組成。與 prisma/seed.ts 的 DEMO_COLLECTIONS 對照。 */
 const EXPECTED_DEMO_COLLECTIONS: Record<string, Record<string, number>> = {
   "ai-workflows": { prompts: 3 },
-  "design-resources": { links: 4 },
   devops: { commands: 1, links: 2, snippets: 1 },
   "react-patterns": { snippets: 3 },
-  "terminal-commands": { commands: 4 },
+};
+
+/**
+ * 不屬於任何 collection 的 item 的型別組成，與 prisma/seed.ts 的 DEMO_LOOSE_ITEMS 對照。
+ * demo 是 Free 方案，最多 3 個 collection，其餘示範內容不放進 collection
+ */
+const EXPECTED_DEMO_LOOSE_ITEMS: Record<string, number> = {
+  commands: 4,
+  links: 4,
 };
 
 const DEMO_INCLUDE = {
@@ -76,6 +83,11 @@ const DEMO_INCLUDE = {
         include: { item: { include: { itemType: true } } },
       },
     },
+  },
+  items: {
+    where: { collections: { none: {} } },
+    orderBy: { title: "asc" },
+    include: { itemType: true },
   },
 } satisfies Prisma.UserInclude;
 
@@ -176,6 +188,14 @@ async function findAccountProblems(user: DemoUser): Promise<string[]> {
   return problems;
 }
 
+function countByType(items: DemoItem[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const item of items) {
+    counts[item.itemType.slug] = (counts[item.itemType.slug] ?? 0) + 1;
+  }
+  return counts;
+}
+
 function findContentProblems(user: DemoUser): string[] {
   const problems: string[] = [];
   const expectedSlugs = Object.keys(EXPECTED_DEMO_COLLECTIONS).sort();
@@ -187,20 +207,29 @@ function findContentProblems(user: DemoUser): string[] {
   for (const collection of user.collections) {
     const expected = EXPECTED_DEMO_COLLECTIONS[collection.slug];
     if (!expected) continue;
-    const counts: Record<string, number> = {};
-    for (const { item } of collection.items) {
-      counts[item.itemType.slug] = (counts[item.itemType.slug] ?? 0) + 1;
-    }
+    const counts = countByType(collection.items.map(({ item }) => item));
     if (formatComposition(counts) !== formatComposition(expected)) {
       problems.push(`${collection.slug} 組成為 ${formatComposition(counts)}`);
     }
   }
 
-  const items = user.collections.flatMap((c) => c.items.map((ic) => ic.item));
+  const looseCounts = countByType(user.items);
+  if (formatComposition(looseCounts) !== formatComposition(EXPECTED_DEMO_LOOSE_ITEMS)) {
+    problems.push(`不屬於 collection 的 item 組成為 ${formatComposition(looseCounts) || "（無）"}`);
+  }
+
+  // 同一個 item 可能在多個 collection，以 id 去重後再與總數比對
+  const items = [
+    ...new Map(
+      [...user.collections.flatMap((c) => c.items.map((ic) => ic.item)), ...user.items].map(
+        (item) => [item.id, item],
+      ),
+    ).values(),
+  ];
   const mismatched = items.filter(hasKindMismatch).length;
   if (mismatched > 0) problems.push(`${mismatched} 筆 item 的欄位與型別不符`);
   if (items.length !== user._count.items) {
-    problems.push(`${user._count.items - items.length} 筆 item 不屬於任何 collection`);
+    problems.push(`item 總數 ${user._count.items}，與 collection 內外合計 ${items.length} 不符`);
   }
   return problems;
 }
@@ -224,7 +253,7 @@ async function checkDemoData(user: DemoUser | null): Promise<CheckResult> {
     ok: problems.length === 0,
     detail:
       problems.length === 0
-        ? `collection ${user.collections.length} / item ${user._count.items}，內容符合 seed`
+        ? `collection ${user.collections.length} / item ${user._count.items}（不在 collection 的 ${user.items.length}），內容符合 seed`
         : problems.join("；"),
   };
 }
@@ -234,17 +263,21 @@ function printDemoData(user: DemoUser): void {
   console.log(`\nDemo 資料 —— ${user.name} <${user.email}>`);
   console.log(`  plan ${user.plan} · emailVerified ${verified}`);
 
+  const printItem = (item: DemoItem) => {
+    const extra = item.url ?? item.language ?? "";
+    console.log(
+      `    [${item.itemType.slug.padEnd(8)}] ${item.title}${extra ? `  · ${extra}` : ""}`,
+    );
+  };
+
   for (const collection of user.collections) {
     console.log(
       `\n  ${collection.name} (${collection.items.length}) — ${collection.description ?? ""}`,
     );
-    for (const { item } of collection.items) {
-      const extra = item.url ?? item.language ?? "";
-      console.log(
-        `    [${item.itemType.slug.padEnd(8)}] ${item.title}${extra ? `  · ${extra}` : ""}`,
-      );
-    }
+    collection.items.forEach(({ item }) => printItem(item));
   }
+  console.log(`\n  不屬於 collection (${user.items.length})`);
+  user.items.forEach(printItem);
 }
 
 /**

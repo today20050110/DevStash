@@ -114,7 +114,7 @@ interface DemoItem {
   language?: string;
   /** 標籤名稱，slug 由名稱正規化而來 */
   tags: string[];
-  /** 釘選時間依在 DEMO_COLLECTIONS 中出現的順序遞減 */
+  /** 釘選時間依在 allDemoItems() 中出現的順序遞減 */
   pinned?: boolean;
 }
 
@@ -362,18 +362,21 @@ vercel deploy --prebuilt --prod`,
       },
     ],
   },
+];
+
+/**
+ * 不屬於任何 collection 的 item。demo 使用者是 Free 方案，最多 3 個 collection
+ * （plan.ts 的 FREE_COLLECTION_LIMIT），其餘示範內容放在這裡，每種型別的示範都保留
+ */
+const DEMO_LOOSE_ITEMS: DemoItem[] = [
+  // 終端機常用指令
   {
-    name: "Terminal Commands",
-    slug: "terminal-commands",
-    description: "Useful shell commands for everyday development",
-    items: [
-      {
-        title: "Git: undo and inspect",
-        tags: ["git"],
-        description: "Undo the last commit safely and view branch history",
-        typeSlug: "commands",
-        language: "bash",
-        content: `# Undo the last commit but keep the changes staged
+    title: "Git: undo and inspect",
+    tags: ["git"],
+    description: "Undo the last commit safely and view branch history",
+    typeSlug: "commands",
+    language: "bash",
+    content: `# Undo the last commit but keep the changes staged
 git reset --soft HEAD~1
 
 # Compact history graph of all branches
@@ -381,14 +384,14 @@ git log --oneline --graph --decorate --all
 
 # Delete local branches already merged into the current branch
 git branch --merged | grep -v '\\*' | xargs -n 1 git branch -d`,
-      },
-      {
-        title: "Docker: logs, shell and cleanup",
-        tags: ["docker", "debugging"],
-        description: "Everyday container debugging and disk cleanup",
-        typeSlug: "commands",
-        language: "bash",
-        content: `# Follow the last 100 log lines of a compose service
+  },
+  {
+    title: "Docker: logs, shell and cleanup",
+    tags: ["docker", "debugging"],
+    description: "Everyday container debugging and disk cleanup",
+    typeSlug: "commands",
+    language: "bash",
+    content: `# Follow the last 100 log lines of a compose service
 docker compose logs -f --tail=100 web
 
 # Open a shell inside a running container
@@ -396,26 +399,26 @@ docker exec -it <container> sh
 
 # Remove stopped containers, unused images and build cache
 docker system prune -af`,
-      },
-      {
-        title: "Free up a port",
-        tags: ["shell", "networking"],
-        description: "Find and kill the process listening on a port",
-        typeSlug: "commands",
-        language: "bash",
-        content: `# macOS / Linux
+  },
+  {
+    title: "Free up a port",
+    tags: ["shell", "networking"],
+    description: "Find and kill the process listening on a port",
+    typeSlug: "commands",
+    language: "bash",
+    content: `# macOS / Linux
 lsof -ti :3000 | xargs kill -9
 
 # Any OS with Node installed
 npx kill-port 3000`,
-      },
-      {
-        title: "npm: dependencies",
-        tags: ["npm"],
-        description: "Explain, update and reinstall packages",
-        typeSlug: "commands",
-        language: "bash",
-        content: `# Why is this package installed?
+  },
+  {
+    title: "npm: dependencies",
+    tags: ["npm"],
+    description: "Explain, update and reinstall packages",
+    typeSlug: "commands",
+    language: "bash",
+    content: `# Why is this package installed?
 npm explain <package>
 
 # Interactively pick dependency upgrades
@@ -423,43 +426,35 @@ npx npm-check-updates -i
 
 # Clean reinstall from the lockfile
 rm -rf node_modules && npm ci`,
-      },
-    ],
+  },
+  // UI／UX 參考資源
+  {
+    title: "Tailwind CSS documentation",
+    tags: ["css", "tailwind"],
+    description: "Utility class reference and v4 theme configuration",
+    typeSlug: "links",
+    url: "https://tailwindcss.com/docs",
   },
   {
-    name: "Design Resources",
-    slug: "design-resources",
-    description: "UI/UX resources and references",
-    items: [
-      {
-        title: "Tailwind CSS documentation",
-        tags: ["css", "tailwind"],
-        description: "Utility class reference and v4 theme configuration",
-        typeSlug: "links",
-        url: "https://tailwindcss.com/docs",
-      },
-      {
-        title: "shadcn/ui",
-        tags: ["react", "ui"],
-        description: "Accessible, copy-paste components built on Radix and Tailwind",
-        typeSlug: "links",
-        url: "https://ui.shadcn.com",
-      },
-      {
-        title: "Material Design 3",
-        tags: ["design-system"],
-        description: "Google's design system: foundations, styles and components",
-        typeSlug: "links",
-        url: "https://m3.material.io",
-      },
-      {
-        title: "Lucide icons",
-        tags: ["icons", "ui"],
-        description: "Open-source icon library used by DevStash",
-        typeSlug: "links",
-        url: "https://lucide.dev/icons",
-      },
-    ],
+    title: "shadcn/ui",
+    tags: ["react", "ui"],
+    description: "Accessible, copy-paste components built on Radix and Tailwind",
+    typeSlug: "links",
+    url: "https://ui.shadcn.com",
+  },
+  {
+    title: "Material Design 3",
+    tags: ["design-system"],
+    description: "Google's design system: foundations, styles and components",
+    typeSlug: "links",
+    url: "https://m3.material.io",
+  },
+  {
+    title: "Lucide icons",
+    tags: ["icons", "ui"],
+    description: "Open-source icon library used by DevStash",
+    typeSlug: "links",
+    url: "https://lucide.dev/icons",
   },
 ];
 
@@ -503,7 +498,9 @@ async function seedDemoUser(): Promise<string> {
     name: DEMO_USER.name,
     passwordHash,
     emailVerified: new Date(),
+    // demo 是 Free 使用者；isPro 才是判斷依據（Stripe Phase 1 起），兩者一起重設
     plan: "FREE" as const,
+    isPro: false,
   };
 
   const user = await prisma.user.upsert({
@@ -533,11 +530,14 @@ function resolveTagId(tagIds: Map<string, string>, name: string): string {
   return id;
 }
 
-/** 依在 DEMO_COLLECTIONS 中出現的順序給釘選時間，越前面越新，排序結果穩定 */
+/** collection 內的 item 在前、不屬於 collection 的在後 */
+function allDemoItems(): DemoItem[] {
+  return [...DEMO_COLLECTIONS.flatMap((c) => c.items), ...DEMO_LOOSE_ITEMS];
+}
+
+/** 依在 allDemoItems() 中出現的順序給釘選時間，越前面越新，排序結果穩定 */
 function buildPinnedAt(now: Date): Map<string, Date> {
-  const pinned = DEMO_COLLECTIONS.flatMap((c) => c.items).filter(
-    (item) => item.pinned,
-  );
+  const pinned = allDemoItems().filter((item) => item.pinned);
   return new Map(
     pinned.map((item, index) => [
       item.title,
@@ -551,7 +551,7 @@ async function createDemoTags(
   userId: string,
 ): Promise<Map<string, string>> {
   const bySlug = new Map<string, string>();
-  for (const item of DEMO_COLLECTIONS.flatMap((c) => c.items)) {
+  for (const item of allDemoItems()) {
     for (const name of item.tags) bySlug.set(toTagSlug(name), name);
   }
 
@@ -581,41 +581,42 @@ async function seedDemoCollections(
       // 無法巢狀 connectOrCreate tag —— 先建好 tags 再以 tagId 連結
       const tagIds = await createDemoTags(tx, userId);
 
+      // collection 內與不屬於 collection 的 item 共用同一份建立資料
+      const itemData = ({ typeSlug, tags, pinned, ...item }: DemoItem) => ({
+        ...item,
+        userId,
+        itemTypeId: resolveTypeId(typeIds, typeSlug),
+        pinnedAt: pinned ? pinnedAt.get(item.title) : undefined,
+        tags: {
+          create: tags.map((name) => ({ tagId: resolveTagId(tagIds, name) })),
+        },
+      });
+
       for (const { items, ...collection } of DEMO_COLLECTIONS) {
         await tx.collection.create({
           data: {
             ...collection,
             userId,
             items: {
-              create: items.map(({ typeSlug, tags, pinned, ...item }, position) => ({
+              create: items.map((item, position) => ({
                 position,
-                item: {
-                  create: {
-                    ...item,
-                    userId,
-                    itemTypeId: resolveTypeId(typeIds, typeSlug),
-                    pinnedAt: pinned ? pinnedAt.get(item.title) : undefined,
-                    tags: {
-                      create: tags.map((name) => ({
-                        tagId: resolveTagId(tagIds, name),
-                      })),
-                    },
-                  },
-                },
+                item: { create: itemData(item) },
               })),
             },
           },
         });
+      }
+      for (const item of DEMO_LOOSE_ITEMS) {
+        await tx.item.create({ data: itemData(item) });
       }
       return tagIds.size;
     },
     { timeout: 30_000 },
   );
 
-  const itemCount = DEMO_COLLECTIONS.reduce((sum, c) => sum + c.items.length, 0);
   const favoriteCount = DEMO_COLLECTIONS.filter((c) => c.isFavorite).length;
   console.log(
-    `demo content — collections: ${DEMO_COLLECTIONS.length} (favorites: ${favoriteCount}), items: ${itemCount}, tags: ${tagCount}, pinned: ${pinnedAt.size}`,
+    `demo content — collections: ${DEMO_COLLECTIONS.length} (favorites: ${favoriteCount}), items: ${allDemoItems().length} (without collection: ${DEMO_LOOSE_ITEMS.length}), tags: ${tagCount}, pinned: ${pinnedAt.size}`,
   );
 }
 
