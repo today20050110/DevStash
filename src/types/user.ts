@@ -5,7 +5,7 @@ export interface CurrentUser {
   name: string | null;
   email: string;
   image: string | null;
-  /** 有效的 Pro 訂閱（plan.ts 的 isPro）；與帳號一起查出，layout 不必再查一次 User */
+  /** User.isPro（Stripe webhook 寫入）；與帳號一起查出，layout 不必再查一次 User */
   isPro: boolean;
   /** 已補上預設值；layout 傳給 EditorPreferencesProvider */
   editorPreferences: EditorPreferences;

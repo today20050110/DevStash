@@ -30,6 +30,8 @@ const LIMITS = {
   uploadFile: { tokens: 20, window: "1 h" },
   // userId：drawer 每次開啟圖片都會讀一次
   downloadFile: { tokens: 120, window: "1 m" },
+  // userId：結帳與 Customer Portal 每次都會呼叫 Stripe API（建立 customer／session）
+  billing: { tokens: 10, window: "1 m" },
 } satisfies Record<string, { tokens: number; window: Duration }>;
 
 export type RateLimitAction = keyof typeof LIMITS;

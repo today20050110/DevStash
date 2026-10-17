@@ -76,18 +76,26 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
   callbacks: {
     ...authConfig.callbacks,
     /**
-     * 只在剛登入（user 有值，帳號密碼與 GitHub 皆同）時從資料庫讀 sessionVersion。
+     * sessionVersion 只在剛登入（user 有值，帳號密碼與 GitHub 皆同）時從資料庫讀。
      * 刻意不處理 trigger === "update"：前端也能呼叫 /api/auth/session 觸發它，
      * 若在那裡重讀版本，被偷走的舊 token 就能自行更新到新版本而不會失效。
+     *
+     * isPro 則每次驗證 session 都從資料庫同步：Stripe webhook 更新 User.isPro 後，
+     * 重新載入頁面就會反映。代價是每次多一次以主鍵查單一欄位的查詢
      */
     async jwt({ token, user }) {
+      const userId = user?.id ?? token.sub;
+      if (!userId) {
+        return token;
+      }
+      const record = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { sessionVersion: true, isPro: true },
+      });
       if (user?.id) {
-        const record = await prisma.user.findUnique({
-          where: { id: user.id },
-          select: { sessionVersion: true },
-        });
         token.sessionVersion = record?.sessionVersion ?? 0;
       }
+      token.isPro = record?.isPro ?? false;
       return token;
     },
   },

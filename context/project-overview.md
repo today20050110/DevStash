@@ -56,16 +56,15 @@ R2 私有 bucket 的存取網址是簽名網址，有效期通常 15 分鐘到�
 **`ITEMTAG` join table 明確建模**
 原草稿只在 ITEM 下註記「fields for tag relations」。用 Prisma 的隱式 m-n 也可以，但顯式 join table 讓你能記錄 `source`，區分 AI 建議與使用者確認的標籤——這是 F 區 AI auto-tag 功能的前提。
 
-**`isPro: Boolean` → `plan` + `subscriptionStatus` + `currentPeriodEnd`**
-布林值裝不下訂閱生命週期。真實情境：使用者 10/1 取消訂閱，但已付到 10/31。這段期間 `isPro` 該是 true 還是 false？還有 `past_due`（扣款失敗但寬限中）、`trialing`、`unpaid`。用 enum 記錄 Stripe 的實際狀態，`isPro` 變成應用層的衍生判斷：
+**方案判斷：`isPro: Boolean` 欄位（Stripe Phase 1 改回）**
+最初的設計是不存 `isPro`，改存 `plan` + `subscriptionStatus` + `currentPeriodEnd`，在應用層推導：布林值裝不下訂閱生命週期（例如 10/1 取消但已付到 10/31、`past_due` 寬限期、`trialing`、`unpaid`）。
 
-```ts
-const isPro =
-  user.plan === "PRO" &&
-  (user.subscriptionStatus === "ACTIVE" ||
-    user.subscriptionStatus === "TRIALING") &&
-  (user.currentPeriodEnd ?? new Date(0)) > new Date();
-```
+Stripe Phase 1（`context/features/stripe-phase-1-spec.md`）依外部規格改為**直接存 `User.isPro`**，由 webhook 依 Stripe 的訂閱狀態寫入：
+
+- `isPro` 是唯一的判斷依據：`getCurrentUser()`、`getUserIsPro()` 與 session（`auth.ts` 的 jwt callback 每次從資料庫同步）都讀這個欄位；推導用的 `isPro()` 已移除
+- 上面那些生命週期的情境，改由 webhook 在寫入 `isPro` 時處理（例如期末取消要等 `customer.subscription.deleted` 才設為 false），規則集中在 webhook，不在讀取端
+- `plan`、`subscriptionStatus`、`currentPeriodEnd` 保留給 webhook 記錄 Stripe 的實際狀態，不再用於判斷
+- 新增 `stripeSubscriptionId`（`@unique`）：webhook 以它對應回使用者，帳號刪除時用來取消訂閱
 
 **`isPinned: Boolean` → `pinnedAt: DateTime?`**
 布林值無法排序。使用者釘選 5 個項目後，它們的順序是隨機的。時間戳同時提供狀態與排序。

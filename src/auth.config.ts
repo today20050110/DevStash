@@ -31,6 +31,8 @@ export default {
       }
       // 上線前簽發的 token 沒有版本，視為 0（與欄位預設值相同），不會被登出
       session.user.sessionVersion = token.sessionVersion ?? 0;
+      // proxy 只用這份設定、沒有 jwt callback，token 不會帶 isPro，視為 false
+      session.user.isPro = token.isPro ?? false;
       return session;
     },
   },

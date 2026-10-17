@@ -70,10 +70,15 @@ model User {
   /// 寫進 JWT，每次回查使用者時比對；重設或變更密碼時加一，讓既有登入全部失效
   sessionVersion Int @default(0)
 
-  plan               Plan                @default(FREE)
-  stripeCustomerId   String?             @unique
-  subscriptionStatus SubscriptionStatus?
-  currentPeriodEnd   DateTime?
+  /// 方案判斷的依據：由 Stripe webhook 依訂閱狀態寫入（Phase 2），session 與頁面直接讀這個欄位
+  isPro                Boolean             @default(false)
+  /// 以下三個欄位保留給 webhook 記錄 Stripe 的訂閱狀態，不再用來判斷是否為 Pro
+  plan                 Plan                @default(FREE)
+  stripeCustomerId     String?             @unique
+  /// 目前的訂閱；webhook 以它對應回使用者，帳號刪除時用來取消訂閱
+  stripeSubscriptionId String?             @unique
+  subscriptionStatus   SubscriptionStatus?
+  currentPeriodEnd     DateTime?
 
   /// Monaco 編輯器偏好；null 或缺欄位時讀取端補預設值（src/lib/editor-preferences.ts）
   editorPreferences Json?

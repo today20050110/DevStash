@@ -2,7 +2,6 @@ import { cache } from "react";
 
 import { auth } from "@/auth";
 import { parseEditorPreferences } from "@/lib/editor-preferences";
-import { isPro } from "@/lib/plan";
 import { prisma } from "@/lib/prisma";
 import type { CurrentUser } from "@/types/user";
 
@@ -29,9 +28,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
       email: true,
       image: true,
       sessionVersion: true,
-      plan: true,
-      subscriptionStatus: true,
-      currentPeriodEnd: true,
+      isPro: true,
       editorPreferences: true,
     },
   });
@@ -43,7 +40,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     name: user.name,
     email: user.email,
     image: user.image,
-    isPro: isPro(user),
+    isPro: user.isPro,
     editorPreferences: parseEditorPreferences(user.editorPreferences),
   };
 });

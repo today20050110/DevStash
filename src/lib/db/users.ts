@@ -1,5 +1,4 @@
 import type { EditorPreferences } from "@/lib/editor-preferences";
-import { isPro } from "@/lib/plan";
 import { prisma } from "@/lib/prisma";
 import type { UserProfile } from "@/types/user";
 
@@ -25,13 +24,13 @@ export async function getUserProfile(
   return { ...profile, hasPassword: passwordHash !== null };
 }
 
-/** 是否為有效的 Pro 訂閱；查無使用者時視為 Free */
+/** 是否為 Pro（User.isPro，由 Stripe webhook 寫入）；查無使用者時視為 Free */
 export async function getUserIsPro(userId: string): Promise<boolean> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { plan: true, subscriptionStatus: true, currentPeriodEnd: true },
+    select: { isPro: true },
   });
-  return user ? isPro(user) : false;
+  return user?.isPro ?? false;
 }
 
 /** 整筆覆寫編輯器偏好；呼叫端已以 editorPreferencesSchema 驗證 */

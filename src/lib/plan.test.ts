@@ -6,41 +6,8 @@ import {
   FREE_CONTENT_LIMIT_BYTES,
   getCollectionLimit,
   getItemLimit,
-  isPro,
   PRO_CONTENT_LIMIT_BYTES,
-  type PlanFields,
 } from "@/lib/plan";
-
-const NOW = new Date("2026-10-09T00:00:00Z");
-const NEXT_MONTH = new Date("2026-11-09T00:00:00Z");
-
-const ACTIVE_PRO: PlanFields = {
-  plan: "PRO",
-  subscriptionStatus: "ACTIVE",
-  currentPeriodEnd: NEXT_MONTH,
-};
-
-describe("isPro", () => {
-  it("有效的 Pro 訂閱（ACTIVE／TRIALING）", () => {
-    expect(isPro(ACTIVE_PRO, NOW)).toBe(true);
-    expect(isPro({ ...ACTIVE_PRO, subscriptionStatus: "TRIALING" }, NOW)).toBe(
-      true,
-    );
-  });
-
-  it("Free 方案、付費期間已過或沒有期間結束日都不是 Pro", () => {
-    expect(isPro({ ...ACTIVE_PRO, plan: "FREE" }, NOW)).toBe(false);
-    expect(isPro({ ...ACTIVE_PRO, currentPeriodEnd: NOW }, NOW)).toBe(false);
-    expect(isPro({ ...ACTIVE_PRO, currentPeriodEnd: null }, NOW)).toBe(false);
-  });
-
-  it.each(["PAST_DUE", "CANCELED", "UNPAID"] as const)(
-    "%s 不是 Pro",
-    (subscriptionStatus) => {
-      expect(isPro({ ...ACTIVE_PRO, subscriptionStatus }, NOW)).toBe(false);
-    },
-  );
-});
 
 describe("getItemLimit", () => {
   it("Free 50 筆、Pro 不限", () => {
