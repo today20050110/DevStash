@@ -44,7 +44,7 @@ export function CopyItemButton({ id, title }: CopyItemButtonProps) {
       onClick={handleClick}
       aria-label={copied ? "Copied" : `Copy ${title}`}
       title="Copy"
-      className="relative z-10 -my-1 shrink-0 text-muted-foreground hover:text-foreground"
+      className="relative z-10 -my-1 shrink-0 text-muted-foreground hover:text-foreground pointer-coarse:hit-area"
     >
       {copied ? <Check /> : <Copy />}
     </Button>

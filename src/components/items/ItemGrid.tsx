@@ -9,7 +9,8 @@ import type { ItemSummary } from "@/types/items";
  */
 export function ItemGrid({ items }: { items: ItemSummary[] }) {
   return (
-    <div className="grid gap-4 @3xl:grid-cols-2 @5xl:grid-cols-3">
+    // 三欄從 @6xl 起：@5xl（1366px 視窗、側邊欄展開）時卡片只有約 340px，標題剩約 105px
+    <div className="grid gap-4 @3xl:grid-cols-2 @6xl:grid-cols-3">
       {items.map((item) =>
         // 卡片依檔案本身逐筆判斷，而非型別 slug
         item.file && isImageMimeType(item.file.mimeType) ? (

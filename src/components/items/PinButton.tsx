@@ -31,6 +31,7 @@ export function PinButton({
       onClick={toggle}
       disabled={isPending}
       aria-pressed={isPinned}
+      className="relative pointer-coarse:hit-area"
     >
       <Pin className={cn(isPinned && "fill-current")} />
       {isPinned ? "Pinned" : "Pin"}

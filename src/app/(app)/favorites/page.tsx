@@ -7,6 +7,8 @@ import { SIGN_IN_PATH } from "@/auth.config";
 import { FavoritesList } from "@/components/favorites/FavoritesList";
 import { getCurrentUserId } from "@/lib/current-user";
 import { listFavoriteCollections, listFavoriteItems } from "@/lib/db/favorites";
+import { NARROW_PAGE_CLASS } from "@/lib/page-width";
+import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Favorites — DevStash",
@@ -41,7 +43,7 @@ export default async function FavoritesPage() {
   );
 
   return (
-    <div className="max-w-4xl space-y-8">
+    <div className={cn(NARROW_PAGE_CLASS, "space-y-8")}>
       {items.length === 0 && collections.length === 0 ? (
         <>
           {heading}

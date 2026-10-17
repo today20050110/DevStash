@@ -225,6 +225,22 @@
   }
 }
 
+/*
+ * 把點擊範圍擴大到至少 40×40px，外觀不變；搭配 pointer-coarse: 只在觸控裝置套用。
+ * 不設定 position：元素本身必須已是 relative／absolute，否則 ::before 會對齊到別的祖先
+ */
+@utility hit-area {
+  &::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 2.5rem);
+    height: max(100%, 2.5rem);
+    translate: -50% -50%;
+  }
+}
+
 /* 細捲軸，對齊 CodeEditor 的 Monaco 主題（半透明白、無軌道） */
 @utility scrollbar-subtle {
   scrollbar-width: thin;

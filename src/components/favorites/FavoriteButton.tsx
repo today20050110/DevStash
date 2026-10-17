@@ -52,7 +52,7 @@ export function FavoriteButton({
         aria-pressed={isFavorite}
         aria-label={`${isFavorite ? "Unfavorite" : "Favorite"} ${name}`}
         title={isFavorite ? "Unfavorite" : "Favorite"}
-        className="relative z-10 -my-1 shrink-0 text-muted-foreground hover:text-foreground"
+        className="relative z-10 -my-1 shrink-0 text-muted-foreground hover:text-foreground pointer-coarse:hit-area"
       >
         {star}
       </Button>
@@ -66,6 +66,7 @@ export function FavoriteButton({
       onClick={toggle}
       disabled={isPending}
       aria-pressed={isFavorite}
+      className="relative pointer-coarse:hit-area"
     >
       {star}
       <span className={cn(isFavorite && "text-yellow-400")}>

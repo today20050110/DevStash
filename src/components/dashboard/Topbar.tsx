@@ -22,7 +22,7 @@ interface TopbarProps {
 export function Topbar({ itemTypes, collections }: TopbarProps) {
   return (
     <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4">
-      <SidebarTrigger />
+      <SidebarTrigger className="relative pointer-coarse:hit-area" />
 
       <SearchButton />
 

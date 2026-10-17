@@ -15,7 +15,9 @@ import {
 } from "@/components/ui/card";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getUserProfile } from "@/lib/db/users";
+import { NARROW_PAGE_CLASS } from "@/lib/page-width";
 import { firstParam } from "@/lib/search-params";
+import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Settings — DevStash",
@@ -45,7 +47,7 @@ export default async function SettingsPage({
   const profile = await getSettingsData();
 
   return (
-    <div className="max-w-4xl space-y-10">
+    <div className={cn(NARROW_PAGE_CLASS, "space-y-10")}>
       <div className="space-y-1">
         <h1 className="text-3xl font-bold">Settings</h1>
         <p className="text-muted-foreground">Editor preferences and account</p>

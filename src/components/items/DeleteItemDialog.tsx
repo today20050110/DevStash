@@ -76,7 +76,7 @@ export function DeleteItemDialog({
         <Button
           variant="ghost"
           size="icon-sm"
-          className="text-destructive hover:text-destructive"
+          className="relative text-destructive hover:text-destructive pointer-coarse:hit-area"
         >
           <Trash2 />
           <span className="sr-only">Delete</span>

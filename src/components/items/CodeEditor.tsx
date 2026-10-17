@@ -91,6 +91,7 @@ export function CodeEditor({
           type="button"
           variant="ghost"
           size="icon-xs"
+          className="relative pointer-coarse:hit-area"
           onClick={() => copy(value)}
           aria-label={copied ? "Copied" : "Copy code"}
           title={copied ? "Copied" : "Copy code"}

@@ -50,13 +50,20 @@ export function ItemDrawerActions({
         size="sm"
         disabled={!copyValue}
         onClick={() => copyValue && copy(copyValue)}
+        className="relative pointer-coarse:hit-area"
       >
         {copied ? <Check /> : <Copy />}
         {copied ? "Copied" : "Copy"}
       </Button>
 
-      <div className="ml-auto flex items-center gap-1">
-        <Button variant="ghost" size="sm" onClick={onEdit}>
+      {/* 觸控裝置上刪除鈕的點擊範圍會往左擴大，間距加大以免蓋到 Edit */}
+      <div className="ml-auto flex items-center gap-1 pointer-coarse:gap-3">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onEdit}
+          className="relative pointer-coarse:hit-area"
+        >
           <Pencil />
           Edit
         </Button>
