@@ -9,7 +9,7 @@ import {
   rateLimitMessage,
   retryAfterSeconds,
 } from "@/lib/rate-limit";
-import { stripe } from "@/lib/stripe";
+import { getStripe } from "@/lib/stripe";
 import { getAppUrl } from "@/lib/tokens";
 
 /** 用戶端只送方案名稱，price id 留在伺服器端，避免被換成別的價格 */
@@ -26,7 +26,7 @@ async function ensureCustomer(userId: string, email: string): Promise<string> {
   if (existing) {
     return existing;
   }
-  const customer = await stripe.customers.create({
+  const customer = await getStripe().customers.create({
     email,
     metadata: { userId },
   });
@@ -70,7 +70,7 @@ export async function POST(request: Request) {
   try {
     const customerId = await ensureCustomer(user.id, user.email);
     const appUrl = getAppUrl();
-    const session = await stripe.checkout.sessions.create({
+    const session = await getStripe().checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
       line_items: [{ price: priceId, quantity: 1 }],

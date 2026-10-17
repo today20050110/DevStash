@@ -3,14 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { handleStripeEvent } from "@/lib/billing-webhook";
 import { applyStripeEvent } from "@/lib/db/billing";
-import { stripe } from "@/lib/stripe";
+
+const { retrieve } = vi.hoisted(() => ({ retrieve: vi.fn() }));
 
 vi.mock("@/lib/stripe", () => ({
-  stripe: { subscriptions: { retrieve: vi.fn() } },
+  getStripe: () => ({ subscriptions: { retrieve } }),
 }));
 vi.mock("@/lib/db/billing", () => ({ applyStripeEvent: vi.fn() }));
 
-const retrieve = vi.mocked(stripe.subscriptions.retrieve);
 const apply = vi.mocked(applyStripeEvent);
 
 const PERIOD_END = 1_790_000_000;

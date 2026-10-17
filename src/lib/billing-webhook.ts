@@ -6,14 +6,14 @@ import {
   subscriptionToBillingState,
 } from "@/lib/billing";
 import { applyStripeEvent, type BillingWrite } from "@/lib/db/billing";
-import { stripe } from "@/lib/stripe";
+import { getStripe } from "@/lib/stripe";
 
 /**
  * 向 Stripe 取最新的訂閱狀態再寫入，不採用事件 payload：Stripe 不保證事件順序，
  * 晚到的舊事件若直接採用，會把新狀態蓋回舊的
  */
 async function syncSubscription(subscriptionId: string): Promise<BillingWrite | null> {
-  const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+  const subscription = await getStripe().subscriptions.retrieve(subscriptionId);
   const customerId = stripeId(subscription.customer);
   if (!customerId) {
     return null;
@@ -34,7 +34,7 @@ async function toBillingWrite(event: Stripe.Event): Promise<BillingWrite | null>
       if (!userId || !subscriptionId) {
         return null;
       }
-      const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+      const subscription = await getStripe().subscriptions.retrieve(subscriptionId);
       const customerId = stripeId(session.customer);
       return {
         target: { userId },

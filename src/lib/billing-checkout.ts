@@ -6,7 +6,7 @@ import {
   type BillingState,
 } from "@/lib/billing";
 import { saveBillingForUser } from "@/lib/db/billing";
-import { stripe } from "@/lib/stripe";
+import { getStripe } from "@/lib/stripe";
 
 /** Stripe Checkout Session 的 id 格式；不符合的就不呼叫 Stripe */
 const SESSION_ID_PATTERN = /^cs_[A-Za-z0-9_]+$/;
@@ -27,7 +27,7 @@ export async function syncCheckoutSession(
   if (!isCheckoutSessionId(sessionId)) {
     return null;
   }
-  const session = await stripe.checkout.sessions.retrieve(sessionId, {
+  const session = await getStripe().checkout.sessions.retrieve(sessionId, {
     expand: ["subscription"],
   });
   if (session.metadata?.userId !== userId || session.status !== "complete") {

@@ -3,7 +3,7 @@ import type Stripe from "stripe";
 
 import { apiError } from "@/lib/api-response";
 import { handleStripeEvent } from "@/lib/billing-webhook";
-import { stripe } from "@/lib/stripe";
+import { getStripe } from "@/lib/stripe";
 
 /**
  * Stripe webhook。驗簽需要原始 body，所以用 request.text()，不能先 JSON.parse。
@@ -17,14 +17,15 @@ export async function POST(request: Request) {
     return apiError("Missing signature", 400);
   }
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
-  if (!secret) {
-    console.error("STRIPE_WEBHOOK_SECRET is not set");
+  // 金鑰也在這裡檢查：getStripe() 缺金鑰時丟出的錯誤若落進下面的 catch，會被誤報成簽章錯誤
+  if (!secret || !process.env.STRIPE_SECRET_KEY) {
+    console.error("STRIPE_WEBHOOK_SECRET or STRIPE_SECRET_KEY is not set");
     return apiError("Webhook is not configured", 500);
   }
 
   let event: Stripe.Event;
   try {
-    event = stripe.webhooks.constructEvent(
+    event = getStripe().webhooks.constructEvent(
       await request.text(),
       signature,
       secret,

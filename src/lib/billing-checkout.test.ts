@@ -2,14 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { isCheckoutSessionId, syncCheckoutSession } from "@/lib/billing-checkout";
 import { saveBillingForUser } from "@/lib/db/billing";
-import { stripe } from "@/lib/stripe";
+
+const { retrieve } = vi.hoisted(() => ({ retrieve: vi.fn() }));
 
 vi.mock("@/lib/stripe", () => ({
-  stripe: { checkout: { sessions: { retrieve: vi.fn() } } },
+  getStripe: () => ({ checkout: { sessions: { retrieve } } }),
 }));
 vi.mock("@/lib/db/billing", () => ({ saveBillingForUser: vi.fn() }));
 
-const retrieve = vi.mocked(stripe.checkout.sessions.retrieve);
 const save = vi.mocked(saveBillingForUser);
 
 const PERIOD_END = 1_790_000_000;

@@ -8,7 +8,7 @@ import {
   rateLimitMessage,
   retryAfterSeconds,
 } from "@/lib/rate-limit";
-import { stripe } from "@/lib/stripe";
+import { getStripe } from "@/lib/stripe";
 import { getAppUrl } from "@/lib/tokens";
 
 /**
@@ -33,7 +33,7 @@ export async function POST() {
   }
 
   try {
-    const session = await stripe.billingPortal.sessions.create({
+    const session = await getStripe().billingPortal.sessions.create({
       customer: customerId,
       return_url: `${getAppUrl()}/settings`,
     });
