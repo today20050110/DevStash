@@ -11,7 +11,12 @@ import {
   validateUpload,
   type UploadCategory,
 } from "@/lib/file-types";
-import { canUploadFiles, getItemLimit, itemLimitMessage } from "@/lib/plan";
+import {
+  canUploadFiles,
+  FILE_UPLOADS_PRO_MESSAGE,
+  getItemLimit,
+  itemLimitMessage,
+} from "@/lib/plan";
 import { createUploadUrl, deleteObject, headObject } from "@/lib/r2";
 import type { CreatableItemType } from "@/types/items";
 
@@ -44,7 +49,7 @@ export async function prepareUpload(
     return {
       ok: false,
       reason: "pro-required",
-      error: "File and image uploads require the Pro plan",
+      error: FILE_UPLOADS_PRO_MESSAGE,
     };
   }
   const limit = getItemLimit(pro);

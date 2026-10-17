@@ -115,8 +115,28 @@ describe("createItem action", () => {
     });
   });
 
+  it("Free 使用者建立 FILE 型別時回傳 Pro 提示，不確認檔案也不建立", async () => {
+    vi.mocked(findCreatableItemType).mockResolvedValue(IMAGES);
+
+    const result = await createItem({
+      ...NEW_ITEM,
+      itemTypeId: IMAGES.id,
+      storageKey: "users/user-1/items/a.png",
+      fileName: "a.png",
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: "File and image uploads require a Pro subscription",
+    });
+    expect(verifyUploadedFile).not.toHaveBeenCalled();
+    expect(createItemInDb).not.toHaveBeenCalled();
+  });
+
   it("FILE 型別確認上傳的檔案後，連同檔案資訊建立", async () => {
     vi.mocked(findCreatableItemType).mockResolvedValue(IMAGES);
+    // 檔案與圖片上傳是 Pro 限定
+    vi.mocked(getUserIsPro).mockResolvedValue(true);
     vi.mocked(verifyUploadedFile).mockResolvedValue({
       ok: true,
       file: UPLOADED,
@@ -143,6 +163,7 @@ describe("createItem action", () => {
 
   it("FILE 型別的檔案確認失敗時顯示在檔案欄位，不建立", async () => {
     vi.mocked(findCreatableItemType).mockResolvedValue(IMAGES);
+    vi.mocked(getUserIsPro).mockResolvedValue(true);
     vi.mocked(verifyUploadedFile).mockResolvedValue({
       ok: false,
       error: "Upload a file first",
@@ -159,6 +180,7 @@ describe("createItem action", () => {
 
   it("檔案在建立時已被其他 item 使用，顯示在檔案欄位", async () => {
     vi.mocked(findCreatableItemType).mockResolvedValue(IMAGES);
+    vi.mocked(getUserIsPro).mockResolvedValue(true);
     vi.mocked(verifyUploadedFile).mockResolvedValue({
       ok: true,
       file: UPLOADED,
@@ -342,8 +364,11 @@ describe("createItem action", () => {
 
     const result = await createItem(NEW_ITEM);
 
-    expect(result.success).toBe(false);
-    expect(result.error).toMatch(/limited to 50 items/);
+    expect(result).toEqual({
+      success: false,
+      error:
+        "You have reached the free tier limit of 50 items. Upgrade to Pro for unlimited items.",
+    });
   });
 
   it("資料庫錯誤時回傳通用訊息", async () => {

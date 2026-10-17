@@ -36,7 +36,8 @@ describe("prepareUpload", () => {
 
   beforeEach(() => {
     vi.mocked(findCreatableItemType).mockResolvedValue(IMAGES);
-    vi.mocked(getUserIsPro).mockResolvedValue(false);
+    // 檔案與圖片上傳是 Pro 限定；Free 的情境在個別測試裡設定
+    vi.mocked(getUserIsPro).mockResolvedValue(true);
     vi.mocked(countActiveItems).mockResolvedValue(10);
     vi.mocked(createUploadUrl).mockResolvedValue("https://r2.example/signed");
   });
@@ -68,12 +69,13 @@ describe("prepareUpload", () => {
     expect(createUploadUrl).not.toHaveBeenCalled();
   });
 
-  it("Free 方案達到項目上限時，上傳前就拒絕", async () => {
-    vi.mocked(countActiveItems).mockResolvedValue(50);
+  it("Free 方案不能上傳，回傳 pro-required，不簽發網址", async () => {
+    vi.mocked(getUserIsPro).mockResolvedValue(false);
 
-    await expect(prepareUpload("user-1", input)).resolves.toMatchObject({
+    await expect(prepareUpload("user-1", input)).resolves.toEqual({
       ok: false,
-      reason: "limit-reached",
+      reason: "pro-required",
+      error: "File uploads require a Pro subscription",
     });
     expect(createUploadUrl).not.toHaveBeenCalled();
   });

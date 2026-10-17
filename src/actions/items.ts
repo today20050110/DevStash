@@ -25,6 +25,7 @@ import { createItemSchema, updateItemSchema } from "@/lib/item-schemas";
 import {
   canUploadFiles,
   checkContentSize,
+  FILE_ITEMS_PRO_MESSAGE,
   getItemLimit,
   itemLimitMessage,
 } from "@/lib/plan";
@@ -103,8 +104,11 @@ export async function createItem(data: unknown): Promise<CreateItemResult> {
     let file: NewItemFile | null = null;
     if (itemType.kind === "FILE") {
       const category = getFileCategory(itemType);
-      if (!category || !canUploadFiles(pro)) {
+      if (!category) {
         return fieldError("itemTypeId", "Choose a valid type");
+      }
+      if (!canUploadFiles(pro)) {
+        return { success: false, error: FILE_ITEMS_PRO_MESSAGE };
       }
       const upload = await verifyUploadedFile(
         userId,

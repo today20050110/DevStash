@@ -130,7 +130,7 @@ describe("createCollection action", () => {
     expect(result).toEqual({
       success: false,
       error:
-        "The Free plan is limited to 3 collections. Delete a collection or upgrade to Pro to add more.",
+        "You have reached the free tier limit of 3 collections. Upgrade to Pro for unlimited collections.",
     });
   });
 

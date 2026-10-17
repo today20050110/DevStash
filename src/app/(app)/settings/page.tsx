@@ -13,8 +13,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { getCurrentUserId } from "@/lib/current-user";
+import { BillingSettings } from "@/components/settings/BillingSettings";
+import { getCurrentUser } from "@/lib/current-user";
 import { getUserProfile } from "@/lib/db/users";
+import { getUserUsage } from "@/lib/usage";
 import { NARROW_PAGE_CLASS } from "@/lib/page-width";
 import { firstParam } from "@/lib/search-params";
 import { cn } from "@/lib/utils";
@@ -27,30 +29,35 @@ async function getSettingsData() {
   // 與 dashboard 相同：明確宣告動態渲染，避免 build 時預先渲染
   await connection();
 
-  const userId = await getCurrentUserId();
+  const user = await getCurrentUser();
   // proxy 只驗 JWT 簽章；帳號已刪除但 token 未過期時，在這裡擋下
-  if (!userId) {
+  if (!user) {
     redirect(`${SIGN_IN_PATH}?callbackUrl=/settings`);
   }
 
-  const profile = await getUserProfile(userId);
+  const [profile, usage] = await Promise.all([
+    getUserProfile(user.id),
+    getUserUsage(user.id, user.isPro),
+  ]);
   if (!profile) {
     redirect(`${SIGN_IN_PATH}?callbackUrl=/settings`);
   }
-  return profile;
+  return { profile, usage, isPro: user.isPro };
 }
 
 export default async function SettingsPage({
   searchParams,
 }: PageProps<"/settings">) {
-  const { passwordChanged } = await searchParams;
-  const profile = await getSettingsData();
+  const { passwordChanged, upgraded } = await searchParams;
+  const { profile, usage, isPro } = await getSettingsData();
 
   return (
     <div className={cn(NARROW_PAGE_CLASS, "space-y-10")}>
       <div className="space-y-1">
         <h1 className="text-3xl font-bold">Settings</h1>
-        <p className="text-muted-foreground">Editor preferences and account</p>
+        <p className="text-muted-foreground">
+          Editor preferences, billing and account
+        </p>
       </div>
 
       <section className="space-y-4">
@@ -68,6 +75,13 @@ export default async function SettingsPage({
           </CardContent>
         </Card>
       </section>
+
+      <BillingSettings
+        isPro={isPro}
+        itemCount={usage.itemCount}
+        collectionCount={usage.collectionCount}
+        upgraded={firstParam(upgraded) === "true"}
+      />
 
       <section className="space-y-4">
         <h2 className="text-xl font-semibold">Account</h2>
