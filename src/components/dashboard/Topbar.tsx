@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Star } from "lucide-react";
+import { Sparkles, Star } from "lucide-react";
 
 import { TopbarActions } from "@/components/dashboard/TopbarActions";
 import { SearchButton } from "@/components/search/SearchButton";
@@ -13,13 +13,16 @@ interface TopbarProps {
   itemTypes: CreatableItemType[];
   /** New Item dialog 可加入的 collections */
   collections: CollectionOption[];
+  /** Pro 使用者不顯示 Upgrade 按鈕 */
+  isPro: boolean;
 }
 
 /**
  * Dashboard top bar: sidebar trigger, search (opens the command palette),
- * Favorites link (sm and up), and the create actions (one "+" menu below sm).
+ * Upgrade link (Free users), Favorites link (sm and up), and the create actions
+ * (one "+" menu below sm).
  */
-export function Topbar({ itemTypes, collections }: TopbarProps) {
+export function Topbar({ itemTypes, collections, isPro }: TopbarProps) {
   return (
     <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4">
       <SidebarTrigger className="relative pointer-coarse:hit-area" />
@@ -27,6 +30,15 @@ export function Topbar({ itemTypes, collections }: TopbarProps) {
       <SearchButton />
 
       <div className="ml-auto flex items-center gap-2">
+        {/* ghost：比新增按鈕低調，不搶主要動作 */}
+        {!isPro && (
+          <Button variant="ghost" className="text-muted-foreground" asChild>
+            <Link href="/upgrade">
+              <Sparkles />
+              Upgrade
+            </Link>
+          </Button>
+        )}
         {/* sm 以下改由側邊欄（手機上是 drawer）的 Favorites 連結進入 */}
         <Button
           variant="ghost"

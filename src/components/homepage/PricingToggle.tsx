@@ -12,12 +12,22 @@ const OPTIONS: { period: BillingPeriod; label: string }[] = [
 
 interface PricingToggleProps {
   children: ReactNode;
+  /** 受控模式（/upgrade 頁要知道選了哪個週期）；首頁不傳，由元件自己保存狀態 */
+  period?: BillingPeriod;
+  onPeriodChange?: (period: BillingPeriod) => void;
 }
 
 // 只負責切換狀態：價格卡片由 server 端渲染，兩種價格都在 HTML 裡，
 // 以 data-period 搭配 group-data-[period=…]/pricing 決定顯示哪一個
-export function PricingToggle({ children }: PricingToggleProps) {
-  const [period, setPeriod] = useState<BillingPeriod>("monthly");
+export function PricingToggle({
+  children,
+  period: controlledPeriod,
+  onPeriodChange,
+}: PricingToggleProps) {
+  const [uncontrolledPeriod, setUncontrolledPeriod] =
+    useState<BillingPeriod>("monthly");
+  const period = controlledPeriod ?? uncontrolledPeriod;
+  const setPeriod = onPeriodChange ?? setUncontrolledPeriod;
 
   return (
     <div data-period={period} className="group/pricing">

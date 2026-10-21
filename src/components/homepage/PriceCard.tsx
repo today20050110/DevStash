@@ -5,16 +5,18 @@ import { CtaLink } from "@/components/homepage/CtaLink";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
-interface PriceCardProps {
+interface PriceCardBaseProps {
   name: string;
   price: ReactNode;
   features: string[];
-  cta: string;
-  href: string;
   featured?: boolean;
 }
 
-export function PriceCard({ name, price, features, cta, href, featured = false }: PriceCardProps) {
+/** 底部是 CTA 連結（首頁），或是自訂的 action（/upgrade 頁的 Checkout 按鈕），二擇一 */
+type PriceCardProps = PriceCardBaseProps &
+  ({ cta: string; href: string; action?: never } | { action: ReactNode; cta?: never; href?: never });
+
+export function PriceCard({ name, price, features, cta, href, featured = false, action }: PriceCardProps) {
   return (
     <Card
       className={cn(
@@ -31,9 +33,13 @@ export function PriceCard({ name, price, features, cta, href, featured = false }
       <h3 className="text-xl font-semibold">{name}</h3>
       {price}
       <CheckList items={features} className="mt-7 mb-8 flex-1 content-start" />
-      <CtaLink href={href} variant={featured ? "primary" : "outline"} className="w-full">
-        {cta}
-      </CtaLink>
+      {href === undefined ? (
+        action
+      ) : (
+        <CtaLink href={href} variant={featured ? "primary" : "outline"} className="w-full">
+          {cta}
+        </CtaLink>
+      )}
     </Card>
   );
 }

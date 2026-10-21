@@ -8,7 +8,6 @@ import { TypeIconTile } from "@/components/dashboard/TypeIconTile";
 import { FileList } from "@/components/items/FileList";
 import { ItemGrid } from "@/components/items/ItemGrid";
 import { ListPagination } from "@/components/pagination/ListPagination";
-import { ProUpgradePrompt } from "@/components/billing/ProUpgradePrompt";
 import { getCurrentUser } from "@/lib/current-user";
 import { getItemTypeBySlug } from "@/lib/db/item-types";
 import { getItemsByTypePage } from "@/lib/db/items";
@@ -36,9 +35,11 @@ const getItemType = cache(async (slug: string) => {
   if (!itemType) {
     notFound();
   }
-  // Files／Images 的列表是 Pro 限定，與新增 item、上傳 route 用同一個判斷
-  const locked = itemType.kind === "FILE" && !canUploadFiles(user.isPro);
-  return { userId: user.id, itemType, locked };
+  // Files／Images 的列表是 Pro 限定，與新增 item、上傳 route 用同一個判斷；Free 使用者導向升級頁
+  if (itemType.kind === "FILE" && !canUploadFiles(user.isPro)) {
+    redirect("/upgrade");
+  }
+  return { userId: user.id, itemType };
 });
 
 export async function generateMetadata({
@@ -54,22 +55,7 @@ export default async function ItemsByTypePage({
   searchParams,
 }: PageProps<"/items/[type]">) {
   const { type } = await params;
-  const { userId, itemType, locked } = await getItemType(type);
-  if (locked) {
-    return (
-      <div className="space-y-8">
-        <div className="flex items-center gap-3">
-          <TypeIconTile icon={itemType.icon} color={itemType.color} />
-          <h1 className="text-3xl font-bold">{itemType.name}</h1>
-        </div>
-        <ProUpgradePrompt
-          typeName={itemType.name}
-          icon={itemType.icon}
-          color={itemType.color}
-        />
-      </div>
-    );
-  }
+  const { userId, itemType } = await getItemType(type);
   const { page: pageParam } = await searchParams;
   const {
     rows: items,

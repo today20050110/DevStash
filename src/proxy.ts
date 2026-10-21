@@ -26,5 +26,6 @@ export const config = {
     "/settings/:path*",
     "/favorites/:path*",
     "/tags/:path*",
+    "/upgrade",
   ],
 };

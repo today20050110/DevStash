@@ -50,7 +50,11 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           <TagOptionsProvider options={tagOptions}>
             <ItemDrawerProvider collections={collections}>
               <CommandPaletteProvider data={searchData}>
-                <Topbar itemTypes={itemTypes} collections={collections} />
+                <Topbar
+                  itemTypes={itemTypes}
+                  collections={collections}
+                  isPro={user.isPro}
+                />
                 {/* SidebarInset 本身就是 <main>，這裡用 div 避免巢狀的 main landmark */}
                 <div className="flex-1 overflow-y-auto p-8">{children}</div>
               </CommandPaletteProvider>
