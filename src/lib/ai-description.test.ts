@@ -91,13 +91,19 @@ describe("parseDescription", () => {
 
 describe("generateDescription", () => {
   beforeEach(() => {
-    create.mockResolvedValue({ output_text: '{"description": "A hook."}' });
+    create.mockResolvedValue({
+      output_text: '{"description": "A hook."}',
+      usage: { input_tokens: 200, output_tokens: 30 },
+    });
   });
 
   it("用 Responses API 的 json_object 格式，不推理、不保存", async () => {
     await expect(
       generateDescription({ ...empty, title: "useDebounce" }),
-    ).resolves.toBe("A hook.");
+    ).resolves.toEqual({
+      value: "A hook.",
+      usage: { inputTokens: 200, outputTokens: 30 },
+    });
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
         model: "gpt-5.6-luna",

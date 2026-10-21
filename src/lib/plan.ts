@@ -72,6 +72,24 @@ export function canUseAi(pro: boolean): boolean {
 
 export const AI_PRO_MESSAGE = "AI features require a Pro subscription";
 
+/**
+ * Pro 每 24 小時（滾動窗口）的 AI 呼叫次數，所有 AI 功能共用。
+ * §6 建議 100，改用 GPT-5.6 Luna 後為控制最壞情況成本降為 50（docs/ai-integration-plan.md §7.1）
+ */
+export const AI_DAILY_LIMIT = 50;
+export const AI_USAGE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/** 達到每日上限時的訊息；resetAt 是窗口內最早一筆滿 24 小時、空出一個名額的時刻 */
+export function aiDailyLimitMessage(resetAt: Date, now = Date.now()): string {
+  const minutes = Math.max(1, Math.ceil((resetAt.getTime() - now) / 60_000));
+  const hours = Math.round(minutes / 60);
+  const wait =
+    minutes < 60
+      ? `${minutes} ${minutes === 1 ? "minute" : "minutes"}`
+      : `about ${hours} ${hours === 1 ? "hour" : "hours"}`;
+  return `You've used all ${AI_DAILY_LIMIT} AI requests for the last 24 hours. Try again in ${wait}.`;
+}
+
 /** 申請上傳網址時，非 Pro 使用者看到的訊息 */
 export const FILE_UPLOADS_PRO_MESSAGE =
   "File uploads require a Pro subscription";

@@ -226,7 +226,7 @@ Schema 中以 `Unsupported("tsvector")` 宣告，實際欄位由 migration 建�
 
 **額度執行的位置**：在 API route 的 transaction 內檢查，不要只在 UI 擋。查詢須排除 `deletedAt` 不為 null 的資料列。
 
-**AI 成本護欄**：Pro 也需要上限。`AiUsage` 表提供每使用者、每功能、每時間窗的用量統計，據此設每日上限（建議起始值：每日 100 次 AI 呼叫）。gpt-5-nano 單價低，但沒有上限就等於把 API key 交給使用者。
+**AI 成本護欄**：Pro 也需要上限。每次 AI 呼叫寫入一筆 `AiUsage`，**過去 24 小時最多 50 次**，所有 AI 功能共用（`plan.ts` 的 `AI_DAILY_LIMIT`；原建議 100 次，改用 GPT-5.6 Luna 後為控制最壞情況成本降為 50，見 `docs/ai-integration-plan.md` §7.1）。另有 Upstash 每小時 20 次擋短時間連發。沒有上限就等於把 API key 交給使用者。
 
 **權限判斷集中在 `src/lib/plan.ts`**：`getItemLimit`、`getCollectionLimit`、`canUploadFiles` 等函式接收 `isPro`，新增 item、上傳、型別頁都走同一組判斷。原本的開發期策略（讓判斷 `return true`、所有人可用全部功能）已隨 Stripe Phase 1 結束：`isPro` 由 webhook 依實際訂閱寫入（見 §3.3）。不要用 if 註解掉檢查——那些檢查永遠不會被加回去。
 
@@ -242,7 +242,7 @@ Schema 中以 `Unsupported("tsvector")` 宣告，實際欄位由 migration 建�
 | ORM       | Prisma 7.4+                 | 見下方版本注意事項             |
 | 檔案儲存  | Cloudflare R2               | presigned URL 直傳             |
 | 認證      | Auth.js v5 (NextAuth)       | Email/密碼 + GitHub OAuth      |
-| AI        | OpenAI gpt-5-nano           |                                |
+| AI        | OpenAI GPT-5.6 Luna         | Responses API，見 `docs/ai-integration-plan.md` |
 | 樣式      | Tailwind CSS v4 + shadcn/ui |                                |
 | 快取      | 無（v1）                    | Redis 不當快取                 |
 | 速率限制  | Upstash Redis               | `@upstash/ratelimit`，fail open |

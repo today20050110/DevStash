@@ -68,13 +68,19 @@ describe("buildAutoTagInput", () => {
 
 describe("generateTagSuggestions", () => {
   beforeEach(() => {
-    create.mockResolvedValue({ output_text: '{"tags": ["React"]}' });
+    create.mockResolvedValue({
+      output_text: '{"tags": ["React"]}',
+      usage: { input_tokens: 120, output_tokens: 15 },
+    });
   });
 
-  it("用 Responses API 的 json_object 格式，不推理、不保存", async () => {
+  it("用 Responses API 的 json_object 格式，不推理、不保存，並回傳 token 數", async () => {
     await expect(
       generateTagSuggestions({ title: "t", content: "c" }),
-    ).resolves.toEqual(["react"]);
+    ).resolves.toEqual({
+      value: ["react"],
+      usage: { inputTokens: 120, outputTokens: 15 },
+    });
     expect(getOpenAI).toHaveBeenCalled();
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({

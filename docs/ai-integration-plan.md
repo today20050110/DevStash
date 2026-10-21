@@ -3,7 +3,7 @@
 > 四個功能：自動標籤、摘要、程式碼解說、Prompt 優化。依據：`context/research/ai-integration-research.md`、`context/project-overview.md`（§3.3、§6、§10 第 10 步）、`prisma/schema.prisma`，以及現有程式碼（`src/actions/items.ts`、`src/lib/plan.ts`、`src/lib/rate-limit.ts`、`src/lib/server-action.ts`、`src/lib/action-errors.ts`）。
 > OpenAI 資訊查自官方文件（developers.openai.com，2026-10-22）與 npm 上的 `openai` 套件 v7.41.0。
 > 研究 prompt 指定 gpt-5-nano；依使用者決定（2026-10-22）改用 GPT-5.6 Luna，§11 記錄全部決定。
-> **實作狀態**：自動標籤（`beb1694`，依 `context/features/ai-auto-tag-spec.md`）與摘要（AI Description）已完成，實作現況與它們和本計畫的差異見 §0.1；程式碼解說、Prompt 優化尚未實作。
+> **實作狀態**：自動標籤（`beb1694`，依 `context/features/ai-auto-tag-spec.md`）、摘要（AI Description，`bcd1f65`）與每日上限（`AiUsage`，Pro 過去 24 小時 50 次）已完成，實作現況與它們和本計畫的差異見 §0.1；程式碼解說、Prompt 優化、Free 試用尚未實作。
 
 ## 0. 先修正研究 prompt 的前提
 
@@ -37,6 +37,10 @@
 | `src/components/items/SuggestTags.tsx` | Tags 欄位下方的按鈕與建議 badge |
 | `src/components/billing/PlanProvider.tsx` | 以 context 提供 `isPro`，client 元件據此隱藏 Pro 功能 |
 | `src/components/items/GenerateDescriptionButton.tsx`、`DescriptionUndo.tsx` | Description 標題列的「Generate」按鈕；欄位下方的 Undo 與 `useDescriptionReplacement` |
+| `src/lib/db/ai-usage.ts` | `reserveAiUsage`（先插入再計數，超過上限就刪除自己）、`completeAiUsage`（寫回 token 數）、`releaseAiUsage`（失敗時刪除）、`countRecentAiUsage` |
+| `src/lib/plan.ts` | `AI_DAILY_LIMIT = 50`、`AI_USAGE_WINDOW_MS`（24 小時）、`aiDailyLimitMessage()`（「Try again in about 4 hours」，以相對時間表示，避免伺服器 UTC 與使用者時區不同） |
+| `src/actions/ai.ts` 的 `runAiFeature` | 檢查 → 佔額度 → 呼叫 → 成功寫回 tokens／失敗釋放，兩個 action 共用 |
+| `src/components/settings/BillingSettings.tsx` | Pro 使用者顯示「AI requests today: 12/50」（過去 24 小時的筆數） |
 
 ### 自動標籤與本計畫的差異
 
@@ -46,7 +50,7 @@
 | --- | --- | --- | --- |
 | Free 使用者 | 每月 5 次試用 | **Pro 限定**，Free 不顯示按鈕 | 試用仍是目標，延後到有每日額度（§5.1 第 3 層）時一起做，並套用到自動標籤 |
 | 新增 item 時 | 不提供；action 只接受 `itemId` | **新增 dialog 也提供**，action 接受表單上的 title／content | 只有自動標籤例外；摘要、解說、優化仍只接受 `itemId`（§8 第 2 點） |
-| 用量上限 | Upstash 每分鐘 10 次 + `AiUsage` 每日 50 次 | **只有 Upstash 每小時 20 次**，不記錄 `AiUsage` | 加入 `AiUsage` 與每日 50 次時，自動標籤一併納入（§5.1） |
+| 用量上限 | Upstash 每分鐘 10 次 + `AiUsage` 每日 50 次 | 實作時只有 Upstash 每小時 20 次；**每日上限已補上**，自動標籤一併納入（§5.1） | 已完成 |
 | 輸出格式 | `responses.parse` + `zodTextFormat` | **`json_object` 自行解析** | 全部功能都改用 `json_object`（§3.3） |
 | 截斷長度 | 標籤 8,000 字元 | **2,000 字元**，只送 title + content | 其他功能維持 §5.3 的數字，實作時再依實測調整 |
 | 入口 | drawer 的「AI」下拉選單 | **Tags 欄位下方的按鈕** | 標籤的建議要放進 Tags 欄位，放在欄位旁較直覺；其他功能仍用 drawer 的 AI 選單（§6） |
@@ -62,7 +66,7 @@
 | 入口與套用 | drawer 的 AI 選單，產生後以卡片顯示「Use as description」／「Discard」 | **Description 標題列的「✨ Generate」按鈕，直接填入欄位** |
 | 已有描述時 | 按鈕改為「Replace description」 | **直接覆蓋**，欄位下方顯示「Description replaced by AI. ↶ Undo」 |
 | 截斷長度 | 16,000 字元 | **4,000 字元** |
-| 每日上限 | 加入第二個 AI 功能前先完成 | **尚未完成**，使用者決定先做功能、下一步再補（§7.1） |
+| 每日上限 | 加入第二個 AI 功能前先完成 | 先做功能、下一個工作補上（**已完成**，§5.1） |
 
 - **Undo 不放在 toast**：sonner 的 toast 在畫面右下角，被 drawer 蓋住；就算在最上層，Radix 的 Dialog／Sheet 也會擋住外面的點擊，點了還會關閉它們。之後的 AI 功能若要提供「還原」，一律放在 dialog 內
 - **按鈕放在標題列、帶文字**：原本是疊在輸入框右上角的純圖示按鈕，緊貼 Title 欄位下方，看起來像 Title 的按鈕。`Section` 因此多了 `action` 欄位，標題列右側可以放一個動作
@@ -263,7 +267,7 @@ export async function POST(request: Request) {
 
 ### 5.1 三層檢查（`checkAiAccess`）
 
-**目前已實作的部分**：自動標籤只有兩道檢查——`canUseAi(pro)`（Pro 限定）與 Upstash 的 `ai: 20 次／1 h`。下表是加入第二個 AI 功能前要補齊的完整設計；`checkAiAccess` 取代 action 裡的這兩道檢查，自動標籤一併改用。
+**已實作**（`src/actions/ai.ts` 的 `checkAiGate`）：登入 → `canUseAi(pro)`（Pro 限定）→ Upstash 的 `ai: 20 次／1 h` → `reserveAiUsage`（過去 24 小時 50 次），兩個 AI 功能都經過它。與下表的差異：**沒有 Free 試用**（使用者決定延後），所以第 1 層仍是 `canUseAi`，`getAiLimit`、`AI_FREE_TRIAL_LIMIT` 尚未加入；做 Free 試用時再把第 1 層換成下表的設計。
 
 依序執行，任一層失敗就不呼叫 OpenAI：
 
@@ -289,7 +293,9 @@ export const AI_FREE_TRIAL_LIMIT = 5;
 
 ### 5.2 每日額度的競態
 
-「先數、再呼叫、再寫入」在同時送出多個請求時會超額。做法：**呼叫前先插入一筆 `AiUsage`（tokens 為 0）佔額度，完成後再更新 token 數**；呼叫失敗時刪除該筆，不讓失敗的請求吃掉額度。最多超額的數量等於同一瞬間的並發數，加上第 2 層的每小時 20 次，實務上可以接受，不需要 transaction 鎖。
+「先數、再呼叫、再寫入」在同時送出多個請求時會超額。**已實作的做法**（`reserveAiUsage`）：呼叫前**先插入**一筆 `AiUsage`（tokens 為 0），**再計算**窗口內的筆數（包含自己）；超過上限就刪除自己這筆並拒絕。同時送出的請求彼此都看得到，不會一起擠進最後一個名額——最壞情況是兩個都被擋（偏保守），**永遠不會超額**，也不需要 transaction 鎖。完成後以 `completeAiUsage` 寫回 token 數；呼叫失敗（含回應無法解析）時以 `releaseAiUsage` 刪除，不讓失敗的請求吃掉額度。所有寫入都以 `id` + `userId` 一起限制。
+
+被擋時的訊息以「窗口內最早一筆滿 24 小時」的時刻計算，用相對時間表示（`aiDailyLimitMessage`）。
 
 ### 5.3 輸入與輸出的上限
 
@@ -394,7 +400,7 @@ Luna、`effort: "none"`（沒有 reasoning tokens）：
 
 Free 試用每人每月最多 5 次，最壞約 $0.015，可忽略。
 
-**現況（自動標籤與摘要、沒有每日上限）**：兩個功能共用每小時 20 次，一位 Pro 使用者理論上一天可呼叫 480 次；全部是摘要（每次約 $0.0007）時最壞約 $0.34／天、**約 $10／月**，超過月費。實際上不會有人整天每小時按 20 次，但這個上限只靠速率限制撐著。使用者決定先做摘要、**下一個工作立刻完成 §10 第 3 步的每日上限**；程式碼解說與 Prompt 優化更貴，在那之前不要加入。
+**現況（自動標籤與摘要、每日上限已完成）**：每位 Pro 使用者過去 24 小時最多 50 次，最壞（全是摘要）約 $0.035／天、**約 $1／月**。實測一次摘要是 357 輸入 + 50 輸出 tokens，約 **$0.00013**，遠低於上表的估算（上表是為解說與優化等較長的輸入估的）；之後可用 §7.3 的查詢依實際 token 數重新估算。
 
 ### 7.2 降低成本的做法
 
@@ -448,11 +454,11 @@ FROM "AiUsage" WHERE "createdAt" > now() - interval '7 days' GROUP BY feature;
 | --- | --- | --- |
 | 1 | Migration：`AiFeature` 加 `EXPLAIN_CODE`、`OPTIMIZE_PROMPT` | 未開始 |
 | 2 | `src/lib/openai.ts`（lazy client、`AI_MODEL`、`aiErrorMessage`）、`rate-limit.ts` 的 `ai` 限制；以一次實際呼叫確認 Luna 接受 `effort: "none"` | **完成**（`beb1694`）。`text.verbosity` 尚未驗證 |
-| 3 | `src/lib/ai-usage.ts`：`checkAiAccess`（Pro 滾動 24 小時、Free UTC 當月）、佔額度／更新／釋放（§5.2）；`plan.ts` 的 `getAiLimit`、`AI_DAILY_LIMIT`、`AI_FREE_TRIAL_LIMIT` 取代 `canUseAi`；自動標籤改用 `checkAiAccess`，並開放 Free 試用（`PlanProvider` 需要改為提供剩餘次數，而不只是 `isPro`）。附單元測試 | 未開始，**下一步**；做第二個 AI 功能前完成 |
+| 3 | `src/lib/ai-usage.ts`：`checkAiAccess`（Pro 滾動 24 小時、Free UTC 當月）、佔額度／更新／釋放（§5.2）；`plan.ts` 的 `getAiLimit`、`AI_DAILY_LIMIT`、`AI_FREE_TRIAL_LIMIT` 取代 `canUseAi`；自動標籤改用 `checkAiAccess`，並開放 Free 試用（`PlanProvider` 需要改為提供剩餘次數，而不只是 `isPro`）。附單元測試 | Pro 每日上限**完成**（`src/lib/db/ai-usage.ts` + `checkAiGate`，Settings 顯示用量）；**Free 試用未做**（使用者決定延後） |
 | 4 | 自動標籤：`src/lib/ai-tags.ts` + `generateAutoTags` action + Tags 欄位下方的建議 badge | **完成**（`beb1694`），差異見 §0.1 |
 | 5 | 摘要、Prompt 優化（§4.1 的 `itemId` 模式、§3.3 的 `json_object` 模式） | 摘要**完成**（接受表單上的值，差異見 §0.1）；Prompt 優化未開始，須在第 3 步之後 |
 | 6 | 程式碼解說（route handler 串流） | 未開始 |
-| 7 | Settings 顯示 AI 用量；`project-overview.md` §6 與首頁 pricing 的 Free 欄位補上「5 AI requests / month」，§6 的成本護欄（模型改為 `gpt-5.6-luna`、每日上限改為 50 次）與 §7 技術棧的 `gpt-5-nano` 改為 `gpt-5.6-luna`，並確認首頁 AI 文案與實際功能一致 | 未開始 |
+| 7 | Settings 顯示 AI 用量；`project-overview.md` §6 與首頁 pricing 的 Free 欄位補上「5 AI requests / month」，§6 的成本護欄（模型改為 `gpt-5.6-luna`、每日上限改為 50 次）與 §7 技術棧的 `gpt-5-nano` 改為 `gpt-5.6-luna`，並確認首頁 AI 文案與實際功能一致 | 部分完成：Settings 顯示 Pro 的 AI 用量；`project-overview.md` §6 的成本護欄與 §7 的模型已更新。Free 欄位的試用文案等 Free 試用實作時再改；首頁 AI 文案尚未核對 |
 
 每一步都獨立可上線。測試照 coding-standards：mock `openai` 與 `@/lib/prisma`，測流程（未登入、非 Pro、額度用完、截斷、拒答、逾時），不打真的 API。
 
@@ -486,6 +492,14 @@ FROM "AiUsage" WHERE "createdAt" > now() - interval '7 days' GROUP BY feature;
 | 12 | 是否先完成每日上限再做摘要 | **先做摘要**，下一個工作立刻補每日上限（§10 第 3 步） | §7.1、§10 |
 | 13 | 已有描述時 | **直接覆蓋並提供 Undo**；Undo 因技術限制放在欄位下方而非 toast | §0.1、§6.2 |
 | 14 | 按鈕的位置與文字 | **Description 標題列右側的「Generate」**（原為輸入框內的純圖示，容易被看成 Title 的按鈕） | §0.1、§6.2 |
+
+實作每日上限時，使用者決定：
+
+| # | 問題 | 決定 | 反映在 |
+| --- | --- | --- | --- |
+| 15 | Free 每月 5 次試用是否一起做 | **不做**，維持 Pro 限定 | §5.1、§10 第 3 步 |
+| 16 | 「每日」怎麼算 | **過去 24 小時的滾動窗口**，訊息以相對時間寫出多久後可再用 | §5.2 |
+| 17 | Settings 是否顯示今日用量 | **顯示**，Billing 區塊對 Pro 顯示「AI requests today: 12/50」 | §0.1 |
 
 ## 參考資料
 

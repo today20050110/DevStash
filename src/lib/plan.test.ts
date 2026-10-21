@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  aiDailyLimitMessage,
   canUploadFiles,
   checkContentSize,
   FREE_CONTENT_LIMIT_BYTES,
@@ -53,5 +54,28 @@ describe("canUploadFiles", () => {
   it("只有 Pro 可以上傳檔案與圖片（§6）", () => {
     expect(canUploadFiles(false)).toBe(false);
     expect(canUploadFiles(true)).toBe(true);
+  });
+});
+
+describe("aiDailyLimitMessage", () => {
+  const NOW = Date.UTC(2026, 9, 22, 12, 0);
+  const at = (minutes: number) => new Date(NOW + minutes * 60_000);
+
+  it("一小時內以分鐘表示", () => {
+    expect(aiDailyLimitMessage(at(1), NOW)).toMatch(/in 1 minute\.$/);
+    expect(aiDailyLimitMessage(at(45), NOW)).toMatch(/in 45 minutes\.$/);
+  });
+
+  it("超過一小時以約略的小時數表示", () => {
+    expect(aiDailyLimitMessage(at(70), NOW)).toMatch(/in about 1 hour\.$/);
+    expect(aiDailyLimitMessage(at(200), NOW)).toMatch(/in about 3 hours\.$/);
+  });
+
+  it("時間已過或很接近時至少顯示 1 分鐘", () => {
+    expect(aiDailyLimitMessage(at(-5), NOW)).toMatch(/in 1 minute\.$/);
+  });
+
+  it("訊息寫出上限次數", () => {
+    expect(aiDailyLimitMessage(at(30), NOW)).toContain("all 50 AI requests");
   });
 });

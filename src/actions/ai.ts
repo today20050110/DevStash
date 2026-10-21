@@ -18,10 +18,22 @@ import {
   generateTagSuggestions,
 } from "@/lib/ai-tags";
 import { getCurrentUserId } from "@/lib/current-user";
+import {
+  completeAiUsage,
+  releaseAiUsage,
+  reserveAiUsage,
+} from "@/lib/db/ai-usage";
 import { getUserIsPro } from "@/lib/db/users";
+import type { AiFeature } from "@/generated/prisma/client";
 import { TITLE_MAX_LENGTH } from "@/lib/item-schemas";
-import { aiErrorMessage } from "@/lib/openai";
-import { AI_PRO_MESSAGE, canUseAi, PRO_CONTENT_LIMIT_BYTES } from "@/lib/plan";
+import { aiErrorMessage, type AiResult } from "@/lib/openai";
+import {
+  AI_DAILY_LIMIT,
+  AI_PRO_MESSAGE,
+  aiDailyLimitMessage,
+  canUseAi,
+  PRO_CONTENT_LIMIT_BYTES,
+} from "@/lib/plan";
 import { checkRateLimit, rateLimitMessage } from "@/lib/rate-limit";
 
 export interface GenerateAutoTagsResult {
@@ -67,10 +79,15 @@ function validationError(error: z.ZodError, emptyMessage: string): string {
     : GENERIC_ERROR_MESSAGE;
 }
 
-type AiGate = { ok: true } | { ok: false; error: string };
+type AiGate =
+  | { ok: true; userId: string; usageId: string }
+  | { ok: false; error: string };
 
-/** 所有 AI action 共用的檢查：登入 → Pro → 速率限制（ai 一個額度，所有功能共用） */
-async function checkAiGate(): Promise<AiGate> {
+/**
+ * 所有 AI action 共用的檢查：登入 → Pro → 速率限制（Upstash 每小時 20 次，擋短時間連發）→
+ * 每日上限（AiUsage 過去 24 小時 50 次，成本的真正上限）。通過時已在 AiUsage 佔住一筆
+ */
+async function checkAiGate(feature: AiFeature): Promise<AiGate> {
   const userId = await getCurrentUserId();
   if (!userId) {
     return { ok: false, error: NOT_SIGNED_IN_MESSAGE };
@@ -82,7 +99,46 @@ async function checkAiGate(): Promise<AiGate> {
   if (!limit.success) {
     return { ok: false, error: rateLimitMessage(limit.reset) };
   }
-  return { ok: true };
+  const reservation = await reserveAiUsage(userId, feature, AI_DAILY_LIMIT);
+  if (reservation.status === "limit-reached") {
+    return { ok: false, error: aiDailyLimitMessage(reservation.resetAt) };
+  }
+  return { ok: true, userId, usageId: reservation.id };
+}
+
+type AiRun<T> = { success: true; data: T } | { success: false; error: string };
+
+/**
+ * 檢查通過後呼叫 AI：成功時把 token 數寫回佔住的 AiUsage，失敗時刪除它（失敗的請求不吃額度）。
+ * 錯誤一律換成固定訊息，原始錯誤只留在伺服器 log
+ */
+async function runAiFeature<T>(
+  feature: AiFeature,
+  failedMessage: string,
+  generate: () => Promise<AiResult<T>>,
+): Promise<AiRun<T>> {
+  let usage: { userId: string; id: string } | null = null;
+  try {
+    const gate = await checkAiGate(feature);
+    if (!gate.ok) {
+      return { success: false, error: gate.error };
+    }
+    usage = { userId: gate.userId, id: gate.usageId };
+    const result = await generate();
+    await completeAiUsage(usage.userId, usage.id, result.usage);
+    return { success: true, data: result.value };
+  } catch (error) {
+    console.error(`AI ${feature} failed`, error);
+    if (usage) {
+      // 釋放失敗只會讓這次失敗的請求多佔一個名額，不影響回給使用者的訊息
+      try {
+        await releaseAiUsage(usage.userId, usage.id);
+      } catch (releaseError) {
+        console.error("Failed to release AI usage", releaseError);
+      }
+    }
+    return { success: false, error: aiErrorMessage(error, failedMessage) };
+  }
 }
 
 /**
@@ -99,20 +155,9 @@ export async function generateAutoTags(
       error: validationError(parsed.error, AUTO_TAG_EMPTY_MESSAGE),
     };
   }
-  try {
-    const gate = await checkAiGate();
-    if (!gate.ok) {
-      return { success: false, error: gate.error };
-    }
-    const tags = await generateTagSuggestions(parsed.data);
-    return { success: true, data: tags };
-  } catch (error) {
-    console.error("Failed to generate tag suggestions", error);
-    return {
-      success: false,
-      error: aiErrorMessage(error, AUTO_TAG_FAILED_MESSAGE),
-    };
-  }
+  return runAiFeature("AUTO_TAG", AUTO_TAG_FAILED_MESSAGE, () =>
+    generateTagSuggestions(parsed.data),
+  );
 }
 
 /**
@@ -129,18 +174,7 @@ export async function generateDescription(
       error: validationError(parsed.error, DESCRIPTION_EMPTY_MESSAGE),
     };
   }
-  try {
-    const gate = await checkAiGate();
-    if (!gate.ok) {
-      return { success: false, error: gate.error };
-    }
-    const description = await generateDescriptionText(parsed.data);
-    return { success: true, data: description };
-  } catch (error) {
-    console.error("Failed to generate description", error);
-    return {
-      success: false,
-      error: aiErrorMessage(error, DESCRIPTION_FAILED_MESSAGE),
-    };
-  }
+  return runAiFeature("SUMMARIZE", DESCRIPTION_FAILED_MESSAGE, () =>
+    generateDescriptionText(parsed.data),
+  );
 }

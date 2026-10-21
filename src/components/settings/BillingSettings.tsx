@@ -16,12 +16,18 @@ import {
 } from "@/components/ui/card";
 import { useStripeRedirect } from "@/hooks/use-stripe-redirect";
 // usage.ts 會帶進 Prisma，client 元件改從沒有相依的 plan.ts 取上限
-import { FREE_COLLECTION_LIMIT, FREE_ITEM_LIMIT } from "@/lib/plan";
+import {
+  AI_DAILY_LIMIT,
+  FREE_COLLECTION_LIMIT,
+  FREE_ITEM_LIMIT,
+} from "@/lib/plan";
 
 interface BillingSettingsProps {
   isPro: boolean;
   itemCount: number;
   collectionCount: number;
+  /** 過去 24 小時的 AI 呼叫次數（只對 Pro 顯示） */
+  aiRequestCount: number;
   /** 從 Stripe Checkout 回來（/settings?upgraded=true）；由頁面讀 searchParams 傳入 */
   upgraded: boolean;
 }
@@ -47,6 +53,7 @@ export function BillingSettings({
   isPro,
   itemCount,
   collectionCount,
+  aiRequestCount,
   upgraded,
 }: BillingSettingsProps) {
   useEffect(() => {
@@ -95,6 +102,16 @@ export function BillingSettings({
                 <dt className="text-muted-foreground">Collections</dt>
                 <dd className="font-medium">
                   {collectionCount}/{FREE_COLLECTION_LIMIT} collections
+                </dd>
+              </div>
+            </dl>
+          )}
+          {isPro && (
+            <dl className="grid gap-2 text-sm sm:grid-cols-2">
+              <div className="flex justify-between rounded-lg border px-3 py-2">
+                <dt className="text-muted-foreground">AI requests today</dt>
+                <dd className="font-medium">
+                  {aiRequestCount}/{AI_DAILY_LIMIT}
                 </dd>
               </div>
             </dl>

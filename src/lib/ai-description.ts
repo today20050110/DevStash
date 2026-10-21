@@ -1,6 +1,11 @@
 import type { DescriptionInput } from "@/lib/ai-inputs";
 import { DESCRIPTION_MAX_LENGTH } from "@/lib/item-schemas";
-import { AI_MODEL, getOpenAI } from "@/lib/openai";
+import {
+  AI_MODEL,
+  getOpenAI,
+  toTokenUsage,
+  type AiResult,
+} from "@/lib/openai";
 
 /** 送給模型的 content 上限（字元）；摘要只需要開頭的脈絡，也限制這個端點能代送的內容量 */
 export const DESCRIPTION_CONTENT_LIMIT = 4000;
@@ -64,7 +69,7 @@ export function parseDescription(text: string): string | null {
 /** 以 Responses API 產生描述；做法與 generateTagSuggestions 相同（見 docs/ai-integration-plan.md §3.3） */
 export async function generateDescription(
   input: DescriptionInput,
-): Promise<string> {
+): Promise<AiResult<string>> {
   const response = await getOpenAI().responses.create({
     model: AI_MODEL,
     instructions: INSTRUCTIONS,
@@ -78,5 +83,5 @@ export async function generateDescription(
   if (!description) {
     throw new Error(`Unparseable description: ${response.output_text}`);
   }
-  return description;
+  return { value: description, usage: toTokenUsage(response.usage) };
 }

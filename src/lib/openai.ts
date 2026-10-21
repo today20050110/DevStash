@@ -21,6 +21,27 @@ export function getOpenAI(): OpenAI {
   return client;
 }
 
+export interface AiTokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
+/** AI 功能的結果與這次呼叫用掉的 tokens（寫入 AiUsage） */
+export interface AiResult<T> {
+  value: T;
+  usage: AiTokenUsage;
+}
+
+/** 寫入 AiUsage 的 token 數；回應沒有 usage 時記 0（仍算一次呼叫） */
+export function toTokenUsage(
+  usage: { input_tokens: number; output_tokens: number } | null | undefined,
+): AiTokenUsage {
+  return {
+    inputTokens: usage?.input_tokens ?? 0,
+    outputTokens: usage?.output_tokens ?? 0,
+  };
+}
+
 export const AI_BUSY_MESSAGE =
   "AI is busy right now, please try again in a moment";
 export const AI_TIMEOUT_MESSAGE = "The AI request timed out, please try again";

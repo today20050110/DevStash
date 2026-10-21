@@ -17,16 +17,26 @@ import {
   generateTagSuggestions,
 } from "@/lib/ai-tags";
 import { getCurrentUserId } from "@/lib/current-user";
+import {
+  completeAiUsage,
+  releaseAiUsage,
+  reserveAiUsage,
+} from "@/lib/db/ai-usage";
 import { getUserIsPro } from "@/lib/db/users";
 import { AI_BUSY_MESSAGE } from "@/lib/openai";
-import { AI_PRO_MESSAGE } from "@/lib/plan";
+import { AI_DAILY_LIMIT, AI_PRO_MESSAGE } from "@/lib/plan";
 import { checkRateLimit } from "@/lib/rate-limit";
 
-// action 的測試只驗證流程（驗證、登入、Pro、速率限制、錯誤對應）；
-// 解析與截斷在 src/lib/ai-tags.test.ts 與 ai-description.test.ts，OpenAI 不會被真的呼叫
+// action 的測試只驗證流程（驗證、登入、Pro、速率限制、每日上限、用量紀錄、錯誤對應）；
+// 解析與截斷在 src/lib/ai-tags.test.ts 與 ai-description.test.ts，資料庫邏輯在 src/lib/db/ai-usage.test.ts
 vi.mock("@/lib/prisma", () => ({ prisma: {} }));
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 vi.mock("@/lib/db/users", () => ({ getUserIsPro: vi.fn() }));
+vi.mock("@/lib/db/ai-usage", () => ({
+  reserveAiUsage: vi.fn(),
+  completeAiUsage: vi.fn(),
+  releaseAiUsage: vi.fn(),
+}));
 vi.mock("@/lib/rate-limit", () => ({
   checkRateLimit: vi.fn(),
   rateLimitMessage: () => "Too many attempts",
@@ -50,9 +60,83 @@ beforeEach(() => {
     remaining: 19,
     reset: 0,
   });
-  vi.mocked(generateTagSuggestions).mockResolvedValue(["react", "hooks"]);
-  vi.mocked(generateDescriptionText).mockResolvedValue("A debounce hook.");
+  vi.mocked(reserveAiUsage).mockResolvedValue({
+    status: "reserved",
+    id: "usage-1",
+  });
+  vi.mocked(completeAiUsage).mockResolvedValue();
+  vi.mocked(releaseAiUsage).mockResolvedValue();
+  vi.mocked(generateTagSuggestions).mockResolvedValue({
+    value: ["react", "hooks"],
+    usage: { inputTokens: 120, outputTokens: 15 },
+  });
+  vi.mocked(generateDescriptionText).mockResolvedValue({
+    value: "A debounce hook.",
+    usage: { inputTokens: 200, outputTokens: 30 },
+  });
   vi.spyOn(console, "error").mockImplementation(() => {});
+});
+
+describe("每日上限與用量紀錄", () => {
+  it("成功時以 feature 佔額度，並把 token 數寫回同一筆", async () => {
+    await generateAutoTags(input);
+    expect(reserveAiUsage).toHaveBeenCalledWith(
+      "user-1",
+      "AUTO_TAG",
+      AI_DAILY_LIMIT,
+    );
+    expect(completeAiUsage).toHaveBeenCalledWith("user-1", "usage-1", {
+      inputTokens: 120,
+      outputTokens: 15,
+    });
+    expect(releaseAiUsage).not.toHaveBeenCalled();
+  });
+
+  it("描述記為 SUMMARIZE", async () => {
+    await generateDescription({ type: "notes", title: "Meeting notes" });
+    expect(reserveAiUsage).toHaveBeenCalledWith(
+      "user-1",
+      "SUMMARIZE",
+      AI_DAILY_LIMIT,
+    );
+  });
+
+  it("達到每日上限時不呼叫 AI，訊息告知多久後可再用", async () => {
+    vi.mocked(reserveAiUsage).mockResolvedValue({
+      status: "limit-reached",
+      resetAt: new Date(Date.now() + 3 * 60 * 60 * 1000),
+    });
+    const result = await generateAutoTags(input);
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/about 3 hours/);
+    expect(generateTagSuggestions).not.toHaveBeenCalled();
+  });
+
+  it("AI 失敗時釋放佔住的額度", async () => {
+    vi.mocked(generateTagSuggestions).mockRejectedValue(new Error("boom"));
+    await generateAutoTags(input);
+    expect(releaseAiUsage).toHaveBeenCalledWith("user-1", "usage-1");
+    expect(completeAiUsage).not.toHaveBeenCalled();
+  });
+
+  it("釋放失敗也照樣回傳 AI 的錯誤訊息", async () => {
+    vi.mocked(generateTagSuggestions).mockRejectedValue(new Error("boom"));
+    vi.mocked(releaseAiUsage).mockRejectedValue(new Error("db down"));
+    await expect(generateAutoTags(input)).resolves.toEqual({
+      success: false,
+      error: AUTO_TAG_FAILED_MESSAGE,
+    });
+  });
+
+  it("被速率限制擋下時不佔每日額度", async () => {
+    vi.mocked(checkRateLimit).mockResolvedValue({
+      success: false,
+      remaining: 0,
+      reset: Date.now() + 60_000,
+    });
+    await generateAutoTags(input);
+    expect(reserveAiUsage).not.toHaveBeenCalled();
+  });
 });
 
 describe("generateAutoTags", () => {

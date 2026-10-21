@@ -16,6 +16,7 @@ import {
 import { BillingSettings } from "@/components/settings/BillingSettings";
 import { syncCheckoutSession } from "@/lib/billing-checkout";
 import { getCurrentUser } from "@/lib/current-user";
+import { countRecentAiUsage } from "@/lib/db/ai-usage";
 import { getUserProfile } from "@/lib/db/users";
 import { getUserUsage } from "@/lib/usage";
 import { NARROW_PAGE_CLASS } from "@/lib/page-width";
@@ -59,14 +60,16 @@ async function getSettingsData(checkoutSessionId: string | undefined) {
   // getCurrentUser() 是同步前讀的，剛同步完要以同步結果為準
   const isPro =
     (await syncReturnedCheckout(user.id, checkoutSessionId)) ?? user.isPro;
-  const [profile, usage] = await Promise.all([
+  // AI 只開放給 Pro，Free 不必查 AI 用量
+  const [profile, usage, aiRequestCount] = await Promise.all([
     getUserProfile(user.id),
     getUserUsage(user.id, isPro),
+    isPro ? countRecentAiUsage(user.id) : 0,
   ]);
   if (!profile) {
     redirect(`${SIGN_IN_PATH}?callbackUrl=/settings`);
   }
-  return { profile, usage, isPro };
+  return { profile, usage, isPro, aiRequestCount };
 }
 
 export default async function SettingsPage({
@@ -74,7 +77,7 @@ export default async function SettingsPage({
 }: PageProps<"/settings">) {
   const { passwordChanged, upgraded, session_id: sessionId } = await searchParams;
   const isUpgradeReturn = firstParam(upgraded) === "true";
-  const { profile, usage, isPro } = await getSettingsData(
+  const { profile, usage, isPro, aiRequestCount } = await getSettingsData(
     isUpgradeReturn ? firstParam(sessionId) : undefined,
   );
 
@@ -107,6 +110,7 @@ export default async function SettingsPage({
         isPro={isPro}
         itemCount={usage.itemCount}
         collectionCount={usage.collectionCount}
+        aiRequestCount={aiRequestCount}
         upgraded={isUpgradeReturn}
       />
 

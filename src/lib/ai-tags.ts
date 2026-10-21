@@ -1,4 +1,9 @@
-import { AI_MODEL, getOpenAI } from "@/lib/openai";
+import {
+  AI_MODEL,
+  getOpenAI,
+  toTokenUsage,
+  type AiResult,
+} from "@/lib/openai";
 import { TAG_MAX_LENGTH } from "@/lib/item-schemas";
 import { dedupeTagNames } from "@/lib/tags";
 
@@ -74,7 +79,7 @@ function isTagsObject(value: unknown): value is { tags: unknown[] } {
  */
 export async function generateTagSuggestions(
   input: AutoTagInput,
-): Promise<string[]> {
+): Promise<AiResult<string[]>> {
   const response = await getOpenAI().responses.create({
     model: AI_MODEL,
     instructions: INSTRUCTIONS,
@@ -88,5 +93,5 @@ export async function generateTagSuggestions(
   if (!tags) {
     throw new Error(`Unparseable tag suggestions: ${response.output_text}`);
   }
-  return tags;
+  return { value: tags, usage: toTokenUsage(response.usage) };
 }
