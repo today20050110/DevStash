@@ -32,6 +32,8 @@ const LIMITS = {
   downloadFile: { tokens: 120, window: "1 m" },
   // userId：結帳與 Customer Portal 每次都會呼叫 Stripe API（建立 customer／session）
   billing: { tokens: 10, window: "1 m" },
+  // userId：每次都會呼叫 OpenAI，所有 AI 功能共用
+  ai: { tokens: 20, window: "1 h" },
 } satisfies Record<string, { tokens: number; window: Duration }>;
 
 export type RateLimitAction = keyof typeof LIMITS;

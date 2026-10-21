@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { SIGN_IN_PATH } from "@/auth.config";
+import { PlanProvider } from "@/components/billing/PlanProvider";
 import { AppSidebar } from "@/components/dashboard/AppSidebar";
 import { SidebarCloseOnNavigate } from "@/components/dashboard/SidebarCloseOnNavigate";
 import { Topbar } from "@/components/dashboard/Topbar";
@@ -47,19 +48,22 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
         {/* min-w-0：flex 子元素預設不會縮到內容寬度以下，桌面側邊欄出現時 top bar 會把整頁撐出橫向捲動 */}
         <SidebarInset className="min-w-0">
           {/* drawer 包住 top bar：palette 在 top bar 開啟，選 item 時要能開啟 drawer */}
-          <TagOptionsProvider options={tagOptions}>
-            <ItemDrawerProvider collections={collections}>
-              <CommandPaletteProvider data={searchData}>
-                <Topbar
-                  itemTypes={itemTypes}
-                  collections={collections}
-                  isPro={user.isPro}
-                />
-                {/* SidebarInset 本身就是 <main>，這裡用 div 避免巢狀的 main landmark */}
-                <div className="flex-1 overflow-y-auto p-8">{children}</div>
-              </CommandPaletteProvider>
-            </ItemDrawerProvider>
-          </TagOptionsProvider>
+          {/* PlanProvider：新增 dialog 與 drawer 的表單依它決定是否顯示 Pro 功能 */}
+          <PlanProvider isPro={user.isPro}>
+            <TagOptionsProvider options={tagOptions}>
+              <ItemDrawerProvider collections={collections}>
+                <CommandPaletteProvider data={searchData}>
+                  <Topbar
+                    itemTypes={itemTypes}
+                    collections={collections}
+                    isPro={user.isPro}
+                  />
+                  {/* SidebarInset 本身就是 <main>，這裡用 div 避免巢狀的 main landmark */}
+                  <div className="flex-1 overflow-y-auto p-8">{children}</div>
+                </CommandPaletteProvider>
+              </ItemDrawerProvider>
+            </TagOptionsProvider>
+          </PlanProvider>
         </SidebarInset>
       </SidebarProvider>
     </EditorPreferencesProvider>

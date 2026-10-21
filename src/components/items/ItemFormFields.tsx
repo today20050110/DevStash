@@ -5,6 +5,7 @@ import { CodeEditor } from "@/components/items/CodeEditor";
 import { LanguageSelect } from "@/components/items/LanguageSelect";
 import { MarkdownEditor } from "@/components/items/MarkdownEditor";
 import { Section } from "@/components/items/ItemDrawerSections";
+import { SuggestTags } from "@/components/items/SuggestTags";
 import { TagInput } from "@/components/items/TagInput";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -153,6 +154,12 @@ export function ItemFormFields({
           {...errorProps("item-tags", errors.tags)}
           value={values.tags}
           onChange={(value) => setValue("tags", value)}
+        />
+        <SuggestTags
+          title={values.title}
+          content={fields.content ? values.content : ""}
+          tags={values.tags}
+          onTagsChange={(value) => setValue("tags", value)}
         />
       </ItemFormField>
     </>

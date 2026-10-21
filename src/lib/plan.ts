@@ -65,6 +65,13 @@ export function canUploadFiles(pro: boolean): boolean {
 export const FILE_ITEMS_PRO_MESSAGE =
   "File and image uploads require a Pro subscription";
 
+/** AI 功能（§6 規定為 Pro 限定） */
+export function canUseAi(pro: boolean): boolean {
+  return pro;
+}
+
+export const AI_PRO_MESSAGE = "AI features require a Pro subscription";
+
 /** 申請上傳網址時，非 Pro 使用者看到的訊息 */
 export const FILE_UPLOADS_PRO_MESSAGE =
   "File uploads require a Pro subscription";
