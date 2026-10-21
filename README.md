@@ -87,17 +87,17 @@ account ID。bucket 需要 CORS 允許 PUT，否則瀏覽器無法直傳：
 
 Preview 部署的網域不在清單內，在 Preview 上傳會被 CORS 擋下。
 
-根目錄的 `.env.production`（已 gitignore）放 production 的連線字串與 Auth 變數。
-Next.js 只在 `npm run build`／`start` 載入它，且優先於 `.env`，所以各指令連到的資料庫不同：
+根目錄的 `.env._production`（已 gitignore）是 production 連線字串與 Auth 變數的參考副本。
+Next.js 不會載入這個檔名，正式環境的值設定在 Vercel 上，所以本機所有指令都連到 Development：
 
 | 指令 | 資料庫 |
 | --- | --- |
 | `npm run dev` | Development（`.env`） |
-| `npm run build`／`npm run start` | **production**（`.env.production`） |
+| `npm run build`／`npm run start` | Development（`.env`） |
 | Prisma CLI、`npm run test:db` | Development（`dotenv` 只讀 `.env`） |
 
-本機 `start` 起來的網站會讀寫正式資料庫；其 GitHub 登入使用 production 的 OAuth App，
-callback 指向正式網域，在 localhost 上會失敗。
+不要把它改回 `.env.production`：Next.js 會在 `build`／`start` 時載入那個檔名且優先於 `.env`，
+本機 `start` 起來的網站就會讀寫正式資料庫。
 
 `DATABASE_URL_UNPOOLED` 不能省 —— `prisma.config.ts` 以 `env()` 讀取，缺值會直接
 拋 `PrismaConfigEnvError`。連線字串不要加引號。

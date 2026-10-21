@@ -12,13 +12,14 @@ Review the codebase for cleanup tasks:
 4. Check for stale TODO comments
 5. Find orphaned/unused files
 6. Check that context files match actual project state
-7. Check that `.env.production` has the same variable NAMES as `.env` (values
+7. Check that `.env._production` has the same variable NAMES as `.env` (values
    differ by design). `NEON_BRANCH` is expected to be missing from
-   `.env.production` — it only feeds the banner in `npm run test:db`. A missing key
-   matters: local `build`/`start` load `.env.production` over `.env`, so any key it
-   lacks silently falls back to the Development value from `.env`. Also flag it if
-   `.env.local` exists: Next.js would load it over both files. Report anything else
-   that is missing, and never print values.
+   `.env._production` — it only feeds the banner in `npm run test:db`. Next.js does
+   not load `.env._production` (it is a reference copy of the production values), so
+   a missing key means the reference is incomplete. Also flag it if `.env.local` or
+   `.env.production` exists: Next.js would load either over `.env`, and
+   `.env.production` would make local `build`/`start` use production values. Report
+   anything else that is missing, and never print values.
 8. Find `@ts-ignore` comments that might be stale
 
 **Mode: $ARGUMENTS**
