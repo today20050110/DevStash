@@ -228,7 +228,7 @@ Schema 中以 `Unsupported("tsvector")` 宣告，實際欄位由 migration 建�
 
 **AI 成本護欄**：Pro 也需要上限。`AiUsage` 表提供每使用者、每功能、每時間窗的用量統計，據此設每日上限（建議起始值：每日 100 次 AI 呼叫）。gpt-5-nano 單價低，但沒有上限就等於把 API key 交給使用者。
 
-**開發期策略**：所有使用者可存取全部功能，但**權限判斷的程式碼路徑必須從第一天就寫好**。做法是把 `isPro` 判斷集中在一個函式裡，開發期讓它 `return true`。不要用 if 註解掉檢查——那些檢查永遠不會被加回去。
+**權限判斷集中在 `src/lib/plan.ts`**：`getItemLimit`、`getCollectionLimit`、`canUploadFiles` 等函式接收 `isPro`，新增 item、上傳、型別頁都走同一組判斷。原本的開發期策略（讓判斷 `return true`、所有人可用全部功能）已隨 Stripe Phase 1 結束：`isPro` 由 webhook 依實際訂閱寫入（見 §3.3）。不要用 if 註解掉檢查——那些檢查永遠不會被加回去。
 
 ---
 
