@@ -47,43 +47,89 @@ const ALIASES: Record<string, string> = {
 };
 
 /**
- * 有打包上色規則的語言 id，須與 src/components/items/monaco-setup.ts 引入的語言模組一致；
+ * 有打包上色規則的語言 id 與顯示名稱，須與 src/components/items/monaco-setup.ts 引入的語言模組一致；
  * plaintext 為 Monaco 內建
  */
-const MONACO_LANGUAGES = new Set([
-  "c",
-  "cpp",
-  "csharp",
-  "css",
-  "dart",
-  "dockerfile",
-  "go",
-  "graphql",
-  "html",
-  "ini",
-  "java",
-  "javascript",
-  "kotlin",
-  "less",
-  "lua",
-  "markdown",
-  "mysql",
-  "pgsql",
-  "php",
-  "plaintext",
-  "powershell",
-  "python",
-  "r",
-  "ruby",
-  "rust",
-  "scss",
-  "shell",
-  "sql",
-  "swift",
-  "typescript",
-  "xml",
-  "yaml",
-]);
+const MONACO_LANGUAGE_LABELS: Record<string, string> = {
+  c: "C",
+  cpp: "C++",
+  csharp: "C#",
+  css: "CSS",
+  dart: "Dart",
+  dockerfile: "Dockerfile",
+  go: "Go",
+  graphql: "GraphQL",
+  html: "HTML",
+  ini: "INI",
+  java: "Java",
+  javascript: "JavaScript",
+  kotlin: "Kotlin",
+  less: "Less",
+  lua: "Lua",
+  markdown: "Markdown",
+  mysql: "MySQL",
+  pgsql: "PostgreSQL",
+  php: "PHP",
+  plaintext: "Plain text",
+  powershell: "PowerShell",
+  python: "Python",
+  r: "R",
+  ruby: "Ruby",
+  rust: "Rust",
+  scss: "SCSS",
+  shell: "Shell",
+  sql: "SQL",
+  swift: "Swift",
+  typescript: "TypeScript",
+  xml: "XML",
+  yaml: "YAML",
+};
+
+const MONACO_LANGUAGES = new Set(Object.keys(MONACO_LANGUAGE_LABELS));
+
+export interface LanguageOption {
+  /** 存進 item.language 的值 */
+  value: string;
+  label: string;
+}
+
+/**
+ * Language 下拉選單的選項，依名稱排序。值是 Monaco 的語言 id；
+ * JSON 另列一項（上色借用 JavaScript，見 ALIASES），讓使用者選得到、存下來也是 json
+ */
+export const LANGUAGE_OPTIONS: LanguageOption[] = [
+  ...Object.entries(MONACO_LANGUAGE_LABELS).map(([value, label]) => ({
+    value,
+    label,
+  })),
+  { value: "json", label: "JSON" },
+].sort((a, b) => a.label.localeCompare(b.label));
+
+const OPTION_VALUES = new Set(LANGUAGE_OPTIONS.map((option) => option.value));
+
+/**
+ * item.language（自由文字）對應到下拉選單的值：選項本身或其別名（ts → typescript）回傳選項的值，
+ * 空白回傳 ""（顯示 placeholder），其他不認得的值原樣回傳（trim 後），由選單另列一項保留
+ */
+export function toLanguageOptionValue(
+  language: string | null | undefined,
+): string {
+  const trimmed = language?.trim() ?? "";
+  const key = trimmed.toLowerCase();
+  if (!key) {
+    return "";
+  }
+  if (OPTION_VALUES.has(key)) {
+    return key;
+  }
+  const alias = ALIASES[key];
+  return alias && OPTION_VALUES.has(alias) ? alias : trimmed;
+}
+
+/** Monaco 語言 id 的顯示名稱；沒有對應時原樣回傳 */
+export function getLanguageLabel(id: string): string {
+  return MONACO_LANGUAGE_LABELS[id] ?? id;
+}
 
 /**
  * item 的 language 是使用者自由輸入的文字，轉成 Monaco 的語言 id；

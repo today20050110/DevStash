@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import type { UpdateItemField } from "@/actions/items";
 import { CodeEditor } from "@/components/items/CodeEditor";
+import { LanguageSelect } from "@/components/items/LanguageSelect";
 import { MarkdownEditor } from "@/components/items/MarkdownEditor";
 import { Section } from "@/components/items/ItemDrawerSections";
 import { TagInput } from "@/components/items/TagInput";
@@ -75,6 +76,23 @@ export function ItemFormFields({
           rows={2}
         />
       </ItemFormField>
+      {/* 放在 Content 上方：先選語言，輸入時就以該語言上色 */}
+      {fields.language && (
+        <ItemFormField
+          id="item-language"
+          label="Language"
+          error={errors.language}
+        >
+          <LanguageSelect
+            id="item-language"
+            value={values.language}
+            onChange={(value) => setValue("language", value)}
+            typeSlug={typeSlug}
+            invalid={Boolean(errors.language)}
+            describedBy={errors.language ? "item-language-error" : undefined}
+          />
+        </ItemFormField>
+      )}
       {fields.content && fields.language && (
         // Monaco 的輸入框無法以 <label htmlFor> 對應，標題不渲染成 label，改以 ariaLabel 命名
         <ItemFormField
@@ -113,21 +131,6 @@ export function ItemFormFields({
             onChange={(event) => setValue("content", event.target.value)}
             spellCheck={false}
             className="max-h-[50vh] min-h-40 font-mono text-xs md:text-xs"
-          />
-        </ItemFormField>
-      )}
-      {fields.language && (
-        <ItemFormField
-          id="item-language"
-          label="Language"
-          error={errors.language}
-        >
-          <Input
-            id="item-language"
-            {...errorProps("item-language", errors.language)}
-            value={values.language}
-            onChange={(event) => setValue("language", event.target.value)}
-            placeholder="typescript"
           />
         </ItemFormField>
       )}
