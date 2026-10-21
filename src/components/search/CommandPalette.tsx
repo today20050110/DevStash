@@ -61,7 +61,8 @@ export function CommandPaletteProvider({
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey)) {
+      // 瀏覽器自動填入（autofill）與部分擴充功能送出的 keydown 沒有 key，不能直接呼叫字串方法
+      if (event.key?.toLowerCase() === "k" && (event.metaKey || event.ctrlKey)) {
         // 瀏覽器的 Ctrl+K 會跳到網址列搜尋
         event.preventDefault();
         setOpen((previous) => !previous);
