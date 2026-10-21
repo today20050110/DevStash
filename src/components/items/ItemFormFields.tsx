@@ -2,6 +2,11 @@ import type { ReactNode } from "react";
 
 import type { UpdateItemField } from "@/actions/items";
 import { CodeEditor } from "@/components/items/CodeEditor";
+import {
+  DescriptionUndo,
+  useDescriptionReplacement,
+} from "@/components/items/DescriptionUndo";
+import { GenerateDescriptionButton } from "@/components/items/GenerateDescriptionButton";
 import { LanguageSelect } from "@/components/items/LanguageSelect";
 import { MarkdownEditor } from "@/components/items/MarkdownEditor";
 import { Section } from "@/components/items/ItemDrawerSections";
@@ -34,6 +39,8 @@ interface ItemFormFieldsProps {
   setValue: (field: UpdateItemField, value: string) => void;
   /** 新增時 URL 型別的 url 必填；編輯時沿用原本的選填 */
   urlRequired?: boolean;
+  /** files／images 的檔名（新增時是剛上傳的檔案），供 AI 產生描述 */
+  fileName?: string;
 }
 
 /**
@@ -49,8 +56,12 @@ export function ItemFormFields({
   errors,
   setValue,
   urlRequired = false,
+  fileName,
 }: ItemFormFieldsProps) {
   const editorLanguage = getEditorLanguage(typeSlug, values.language);
+  const description = useDescriptionReplacement(values.description, (value) =>
+    setValue("description", value),
+  );
 
   return (
     <>
@@ -68,6 +79,19 @@ export function ItemFormFields({
         id="item-description"
         label="Description"
         error={errors.description}
+        action={
+          <GenerateDescriptionButton
+            input={{
+              type: typeSlug,
+              title: values.title,
+              content: fields.content ? values.content : "",
+              language: fields.language ? values.language : "",
+              url: fields.url ? values.url : "",
+              fileName: fileName ?? "",
+            }}
+            onGenerated={description.replace}
+          />
+        }
       >
         <Textarea
           id="item-description"
@@ -76,6 +100,7 @@ export function ItemFormFields({
           onChange={(event) => setValue("description", event.target.value)}
           rows={2}
         />
+        {description.canUndo && <DescriptionUndo onUndo={description.undo} />}
       </ItemFormField>
       {/* 放在 Content 上方：先選語言，輸入時就以該語言上色 */}
       {fields.language && (
@@ -172,6 +197,8 @@ interface ItemFormFieldProps {
   error?: string;
   /** 標題渲染成對應 id 的 <label>；欄位不是原生輸入框時設為 false */
   asLabel?: boolean;
+  /** 標題列右側的動作 */
+  action?: ReactNode;
   children: ReactNode;
 }
 
@@ -180,10 +207,11 @@ export function ItemFormField({
   label,
   error,
   asLabel = true,
+  action,
   children,
 }: ItemFormFieldProps) {
   return (
-    <Section title={label} htmlFor={asLabel ? id : undefined}>
+    <Section title={label} htmlFor={asLabel ? id : undefined} action={action}>
       {children}
       {error && (
         <p id={`${id}-error`} role="alert" className="text-sm text-destructive">

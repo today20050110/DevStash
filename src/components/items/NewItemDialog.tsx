@@ -213,6 +213,7 @@ export function NewItemDialog({
               typeSlug={selectedType?.slug ?? ""}
               setValue={setValue}
               urlRequired
+              fileName={fields.file ? upload?.fileName : undefined}
             />
             <CollectionSelect
               collections={collections}

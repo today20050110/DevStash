@@ -3,7 +3,7 @@
 > 四個功能：自動標籤、摘要、程式碼解說、Prompt 優化。依據：`context/research/ai-integration-research.md`、`context/project-overview.md`（§3.3、§6、§10 第 10 步）、`prisma/schema.prisma`，以及現有程式碼（`src/actions/items.ts`、`src/lib/plan.ts`、`src/lib/rate-limit.ts`、`src/lib/server-action.ts`、`src/lib/action-errors.ts`）。
 > OpenAI 資訊查自官方文件（developers.openai.com，2026-10-22）與 npm 上的 `openai` 套件 v7.41.0。
 > 研究 prompt 指定 gpt-5-nano；依使用者決定（2026-10-22）改用 GPT-5.6 Luna，§11 記錄全部決定。
-> **實作狀態**：自動標籤已完成（`beb1694`，依 `context/features/ai-auto-tag-spec.md`），實作現況與它和本計畫的差異見 §0.1；摘要、程式碼解說、Prompt 優化尚未實作。
+> **實作狀態**：自動標籤（`beb1694`，依 `context/features/ai-auto-tag-spec.md`）與摘要（AI Description）已完成，實作現況與它們和本計畫的差異見 §0.1；程式碼解說、Prompt 優化尚未實作。
 
 ## 0. 先修正研究 prompt 的前提
 
@@ -23,17 +23,20 @@
 
 ## 0.1 實作現況（2026-10-22）
 
-### 已完成：自動標籤
+### 已完成：自動標籤、摘要（AI Description）
 
 | 檔案 | 內容 |
 | --- | --- |
 | `src/lib/openai.ts` | `getOpenAI()`（第一次使用時建立，30 秒逾時、重試 1 次）、`AI_MODEL = "gpt-5.6-luna"`、`aiErrorMessage()` |
 | `src/lib/ai-tags.ts` | `generateTagSuggestions()`、`buildAutoTagInput()`、`parseTagSuggestions()` |
-| `src/actions/ai.ts` | `generateAutoTags({ title, content })` |
+| `src/lib/ai-description.ts` | `generateDescription()`、`buildDescriptionInput()`、`parseDescription()` |
+| `src/lib/ai-inputs.ts` | `DescriptionInput`、`hasDescribableContent()`；不引入 openai SDK，供 client 元件與 server 共用 |
+| `src/actions/ai.ts` | `generateAutoTags({ title, content })`、`generateDescription({ type, title, content, language, url, fileName })`；兩者共用 `checkAiGate()`（登入 → Pro → 速率限制） |
 | `src/lib/plan.ts` | `canUseAi(pro)`、`AI_PRO_MESSAGE` |
 | `src/lib/rate-limit.ts` | `ai: { tokens: 20, window: "1 h" }`，鍵為 userId，所有 AI 功能共用 |
 | `src/components/items/SuggestTags.tsx` | Tags 欄位下方的按鈕與建議 badge |
 | `src/components/billing/PlanProvider.tsx` | 以 context 提供 `isPro`，client 元件據此隱藏 Pro 功能 |
+| `src/components/items/GenerateDescriptionButton.tsx`、`DescriptionUndo.tsx` | Description 標題列的「Generate」按鈕；欄位下方的 Undo 與 `useDescriptionReplacement` |
 
 ### 自動標籤與本計畫的差異
 
@@ -47,6 +50,22 @@
 | 輸出格式 | `responses.parse` + `zodTextFormat` | **`json_object` 自行解析** | 全部功能都改用 `json_object`（§3.3） |
 | 截斷長度 | 標籤 8,000 字元 | **2,000 字元**，只送 title + content | 其他功能維持 §5.3 的數字，實作時再依實測調整 |
 | 入口 | drawer 的「AI」下拉選單 | **Tags 欄位下方的按鈕** | 標籤的建議要放進 Tags 欄位，放在欄位旁較直覺；其他功能仍用 drawer 的 AI 選單（§6） |
+
+### 摘要與本計畫的差異
+
+依使用者的描述實作（「不需要先儲存，所有型別都適用」），在衝突處由使用者決定（§11 第 11–13 項）：
+
+| 項目 | 本計畫原本的設計（§6.2） | 實作 |
+| --- | --- | --- |
+| 適用型別 | 所有 TEXT 型別 | **所有型別**：links 送 url（不抓網頁），files／images 送檔名，snippets／commands 加 language |
+| 新增 item 時 | 不提供；只接受 `itemId` | **提供**，action 接受表單上的值——「只接受 `itemId`」的第二個例外（§8 第 2 點） |
+| 入口與套用 | drawer 的 AI 選單，產生後以卡片顯示「Use as description」／「Discard」 | **Description 標題列的「✨ Generate」按鈕，直接填入欄位** |
+| 已有描述時 | 按鈕改為「Replace description」 | **直接覆蓋**，欄位下方顯示「Description replaced by AI. ↶ Undo」 |
+| 截斷長度 | 16,000 字元 | **4,000 字元** |
+| 每日上限 | 加入第二個 AI 功能前先完成 | **尚未完成**，使用者決定先做功能、下一步再補（§7.1） |
+
+- **Undo 不放在 toast**：sonner 的 toast 在畫面右下角，被 drawer 蓋住；就算在最上層，Radix 的 Dialog／Sheet 也會擋住外面的點擊，點了還會關閉它們。之後的 AI 功能若要提供「還原」，一律放在 dialog 內
+- **按鈕放在標題列、帶文字**：原本是疊在輸入框右上角的純圖示按鈕，緊貼 Title 欄位下方，看起來像 Title 的按鈕。`Section` 因此多了 `action` 欄位，標題列右側可以放一個動作
 
 ### 實作時發現、spec 與本計畫都沒寫到的事
 
@@ -277,7 +296,7 @@ export const AI_FREE_TRIAL_LIMIT = 5;
 | 功能 | 送出的內容 | 輸入上限 | `max_output_tokens` |
 | --- | --- | --- | --- |
 | 自動標籤（已實作） | title + content 前段 | 2,000 字元 | 300 |
-| 摘要 | 同上 | 16,000 字元 | 1,000 |
+| 摘要（已實作） | type + title + language／url／檔名 + content 前段 | 4,000 字元 | 300 |
 | 程式碼解說 | content（+ `language`） | 24,000 字元 | 4,000 |
 | Prompt 優化 | content | 16,000 字元 | 4,000 |
 
@@ -322,11 +341,13 @@ Free 使用者（加入每月試用之後）照常使用，選單底部顯示「
 - **`ItemTag.source` 目前仍是 `USER`**：表單只送出標籤名稱，伺服器分不出哪些來自 AI。若要記錄 `AI_ACCEPTED`，表單需要另外送出「來自 AI 的標籤」清單，`createItem`／`updateItem` 據此設定 `source`——等 F 區需要這個資料時再做
 - `AI_SUGGESTED` 這個值不寫入資料庫（建議只存在於畫面上）；日後若要背景自動建議，再用它存「待確認」的標籤
 
-### 6.2 摘要（`SUMMARIZE`）
+### 6.2 摘要（`SUMMARIZE`，已實作）
 
-- 適用於所有 TEXT 型別
-- drawer 顯示產生的摘要卡片：「Use as description」／「Discard」
-- description 已有內容時，按鈕改為「Replace description」，避免無聲覆蓋
+- **入口**：Description 標題列右側的 ghost「✨ Generate」按鈕，新增 dialog 與 drawer 編輯模式都有；所有型別都適用
+- title、content、url、檔名都空白時按鈕停用；Free 使用者不顯示（`useIsPro()`）
+- 產生 1–2 句描述，直接填入 Description 欄位，隨表單儲存
+- 欄位原本有內容時直接覆蓋，欄位下方顯示「Description replaced by AI. ↶ Undo」；使用者再自己改欄位後 Undo 消失
+- 原計畫的卡片（「Use as description」／「Discard」）與差異見 §0.1
 
 ### 6.3 程式碼解說（`EXPLAIN_CODE`）
 
@@ -373,7 +394,7 @@ Luna、`effort: "none"`（沒有 reasoning tokens）：
 
 Free 試用每人每月最多 5 次，最壞約 $0.015，可忽略。
 
-**現況（只有自動標籤、沒有每日上限）**：每小時 20 次的限制下，一位 Pro 使用者理論上一天可呼叫 480 次，以每次約 $0.0005 計，最壞約 $0.24／天、**$7.2／月**，接近月費。實際上不會有人整天每小時按 20 次，但這個上限只靠速率限制撐著；加入第二個（更貴的）AI 功能前，一定要先完成 §10 第 3 步的每日上限。
+**現況（自動標籤與摘要、沒有每日上限）**：兩個功能共用每小時 20 次，一位 Pro 使用者理論上一天可呼叫 480 次；全部是摘要（每次約 $0.0007）時最壞約 $0.34／天、**約 $10／月**，超過月費。實際上不會有人整天每小時按 20 次，但這個上限只靠速率限制撐著。使用者決定先做摘要、**下一個工作立刻完成 §10 第 3 步的每日上限**；程式碼解說與 Prompt 優化更貴，在那之前不要加入。
 
 ### 7.2 降低成本的做法
 
@@ -399,7 +420,8 @@ FROM "AiUsage" WHERE "createdAt" > now() - interval '7 days' GROUP BY feature;
 
 1. **金鑰只在伺服器端**：`OPENAI_API_KEY` 不加 `NEXT_PUBLIC_` 前綴，只有 server action 引入 `src/lib/openai.ts`（未使用 `server-only`，見 §3.1）；Vercel 上設為 Sensitive（與 `RESEND_API_KEY`、Upstash `KV_*` 相同處理）。本機用 `.env`，`.env._production` 只是參考副本
 2. **授權**：AI action 只接受 `itemId`，伺服器端以 `userId` 讀取 item（沿用 repository 函式，`deletedAt: null`），**不接受前端傳來的內容**——否則任何人都能拿這個端點當免費的 OpenAI proxy。
-   **例外：自動標籤**（使用者決定，§0.1）。新增 dialog 的 item 還沒有 id，`generateAutoTags` 接受表單上的 title／content。代送內容的量以四點限制：要登入、要是 Pro、只送 title（≤ 200 字元）與 content 前 2,000 字元、每小時 20 次；`instructions` 固定為標籤用途，輸出只取得標籤陣列。後續功能不要沿用這個例外
+   **例外：自動標籤**（使用者決定，§0.1）。新增 dialog 的 item 還沒有 id，`generateAutoTags` 接受表單上的 title／content。代送內容的量以四點限制：要登入、要是 Pro、只送 title（≤ 200 字元）與 content 前 2,000 字元、每小時 20 次；`instructions` 固定為標籤用途，輸出只取得標籤陣列。
+   **第二個例外：摘要**（使用者決定，§11 第 11 項）。理由相同（不需要先儲存），`generateDescription` 接受表單上的 type／title／content／language／url／檔名，限制也相同：要登入、要是 Pro、各欄位有長度上限、content 只送前 4,000 字元、與自動標籤共用每小時 20 次；`instructions` 固定為描述用途，輸出只取 1–2 句、最多 2,000 字元。程式碼解說與 Prompt 優化不要再沿用這個例外
 3. **Prompt injection**：使用者內容可能包含「忽略以上指示」。緩解方式：
    - 系統指示放在 `instructions`，使用者內容放在 `input`，並用明確的分隔標記包住（自動標籤用 `<item>…</item>`），指示中說明標記內是資料、不是指令
    - 解析時驗證輸出形狀（§3.3：標籤只能是字串陣列，其他形狀一律丟棄）
@@ -428,7 +450,7 @@ FROM "AiUsage" WHERE "createdAt" > now() - interval '7 days' GROUP BY feature;
 | 2 | `src/lib/openai.ts`（lazy client、`AI_MODEL`、`aiErrorMessage`）、`rate-limit.ts` 的 `ai` 限制；以一次實際呼叫確認 Luna 接受 `effort: "none"` | **完成**（`beb1694`）。`text.verbosity` 尚未驗證 |
 | 3 | `src/lib/ai-usage.ts`：`checkAiAccess`（Pro 滾動 24 小時、Free UTC 當月）、佔額度／更新／釋放（§5.2）；`plan.ts` 的 `getAiLimit`、`AI_DAILY_LIMIT`、`AI_FREE_TRIAL_LIMIT` 取代 `canUseAi`；自動標籤改用 `checkAiAccess`，並開放 Free 試用（`PlanProvider` 需要改為提供剩餘次數，而不只是 `isPro`）。附單元測試 | 未開始，**下一步**；做第二個 AI 功能前完成 |
 | 4 | 自動標籤：`src/lib/ai-tags.ts` + `generateAutoTags` action + Tags 欄位下方的建議 badge | **完成**（`beb1694`），差異見 §0.1 |
-| 5 | 摘要、Prompt 優化（§4.1 的 `itemId` 模式、§3.3 的 `json_object` 模式） | 未開始 |
+| 5 | 摘要、Prompt 優化（§4.1 的 `itemId` 模式、§3.3 的 `json_object` 模式） | 摘要**完成**（接受表單上的值，差異見 §0.1）；Prompt 優化未開始，須在第 3 步之後 |
 | 6 | 程式碼解說（route handler 串流） | 未開始 |
 | 7 | Settings 顯示 AI 用量；`project-overview.md` §6 與首頁 pricing 的 Free 欄位補上「5 AI requests / month」，§6 的成本護欄（模型改為 `gpt-5.6-luna`、每日上限改為 50 次）與 §7 技術棧的 `gpt-5-nano` 改為 `gpt-5.6-luna`，並確認首頁 AI 文案與實際功能一致 | 未開始 |
 
@@ -455,6 +477,15 @@ FROM "AiUsage" WHERE "createdAt" > now() - interval '7 days' GROUP BY feature;
 | 8 | 用量上限 | **先只用 Upstash 每小時 20 次**（原計畫每分鐘 10 次），不記錄 `AiUsage`；每日 50 次延後到 §10 第 3 步 | §0.1、§5.1 |
 | 9 | 輸出格式 | **`json_object` 自行解析**（spec 實測 structured output 對 Luna 耗費過多 tokens），所有功能適用 | §3.3 |
 | 10 | 自動標籤的截斷長度 | **2,000 字元**（原計畫 8,000） | §5.3 |
+
+實作摘要（AI Description）時，使用者決定：
+
+| # | 問題 | 決定 | 反映在 |
+| --- | --- | --- | --- |
+| 11 | 摘要是否不必先儲存、新增時也能用 | **是**，第 3 項的第二個例外；風險控制同自動標籤 | §0.1、§8 第 2 點 |
+| 12 | 是否先完成每日上限再做摘要 | **先做摘要**，下一個工作立刻補每日上限（§10 第 3 步） | §7.1、§10 |
+| 13 | 已有描述時 | **直接覆蓋並提供 Undo**；Undo 因技術限制放在欄位下方而非 toast | §0.1、§6.2 |
+| 14 | 按鈕的位置與文字 | **Description 標題列右側的「Generate」**（原為輸入框內的純圖示，容易被看成 Title 的按鈕） | §0.1、§6.2 |
 
 ## 參考資料
 

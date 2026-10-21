@@ -19,25 +19,41 @@ interface SectionProps {
   icon?: ReactNode;
   /** 標題對應的表單欄位 id；有的話標題渲染成 <label> */
   htmlFor?: string;
+  /** 標題列右側的動作（例如 Description 的 AI Generate 按鈕） */
+  action?: ReactNode;
   children: ReactNode;
 }
 
-export function Section({ title, icon, htmlFor, children }: SectionProps) {
+export function Section({
+  title,
+  icon,
+  htmlFor,
+  action,
+  children,
+}: SectionProps) {
   const className =
     "flex items-center gap-1.5 text-sm font-medium text-muted-foreground [&_svg]:size-3.5";
+  const heading = htmlFor ? (
+    <label htmlFor={htmlFor} className={className}>
+      {icon}
+      {title}
+    </label>
+  ) : (
+    <h3 className={className}>
+      {icon}
+      {title}
+    </h3>
+  );
 
   return (
     <section className="space-y-2">
-      {htmlFor ? (
-        <label htmlFor={htmlFor} className={className}>
-          {icon}
-          {title}
-        </label>
+      {action ? (
+        <div className="flex items-center justify-between gap-2">
+          {heading}
+          {action}
+        </div>
       ) : (
-        <h3 className={className}>
-          {icon}
-          {title}
-        </h3>
+        heading
       )}
       {children}
     </section>

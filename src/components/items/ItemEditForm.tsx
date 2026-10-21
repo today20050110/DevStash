@@ -129,6 +129,7 @@ export function ItemEditForm({
           errors={errors}
           typeSlug={item.type.slug}
           setValue={setValue}
+          fileName={item.file?.name}
         />
 
         <CollectionSelect
