@@ -68,9 +68,13 @@ export function BillingSettings({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             Current plan
-            <Badge variant={isPro ? "default" : "secondary"}>
-              {isPro ? "Pro" : "Free"}
-            </Badge>
+            {isPro ? (
+              <Badge className="border-primary/30 bg-primary/15 text-foreground">
+                Pro
+              </Badge>
+            ) : (
+              <Badge variant="secondary">Free</Badge>
+            )}
           </CardTitle>
           <CardDescription>
             {isPro
