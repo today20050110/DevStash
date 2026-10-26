@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { GitHubSignInButton } from "@/components/auth/GitHubSignInButton";
 import { RegisterForm } from "@/components/auth/RegisterForm";
 import {
   Card,
@@ -29,8 +30,18 @@ export default async function RegisterPage() {
           Start stashing your snippets and notes
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="grid gap-4">
         <RegisterForm />
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <span className="h-px flex-1 bg-border" />
+          or
+          <span className="h-px flex-1 bg-border" />
+        </div>
+        {/* GitHub 首次登入即建立帳號；同 email 已用密碼註冊時會被拒絕，與登入頁相同 */}
+        <GitHubSignInButton
+          callbackUrl={DEFAULT_REDIRECT}
+          label="Sign up with GitHub"
+        />
       </CardContent>
       <CardFooter className="justify-center text-sm text-muted-foreground">
         Already have an account?

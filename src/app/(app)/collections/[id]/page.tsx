@@ -6,6 +6,7 @@ import { Folder, Star } from "lucide-react";
 
 import { SIGN_IN_PATH } from "@/auth.config";
 import { CollectionActions } from "@/components/collections/CollectionActions";
+import { EmptyState } from "@/components/dashboard/EmptyState";
 import { ItemGrid } from "@/components/items/ItemGrid";
 import { ListPagination } from "@/components/pagination/ListPagination";
 import { getCurrentUserId } from "@/lib/current-user";
@@ -65,34 +66,39 @@ export default async function CollectionPage({
   return (
     // 以頁面本身為容器，ItemGrid 依它決定欄數
     <div className="@container space-y-8">
-      <div className="flex flex-wrap items-start gap-3">
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-          <Folder className="size-5" />
-        </div>
-        <div className="min-w-0 flex-1 space-y-1">
-          <h1 className="flex items-center gap-2 text-3xl font-bold break-words">
-            {collection.name}
-            {collection.isFavorite && (
-              <Star
-                className="size-5 shrink-0 fill-yellow-400 text-yellow-400"
-                aria-label="Favorite"
-              />
+      {/* 手機上按鈕換到下一列，標題與描述才能用滿整個寬度 */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+            <Folder className="size-5" />
+          </div>
+          <div className="min-w-0 flex-1 space-y-1">
+            <h1 className="flex items-center gap-2 text-3xl font-bold">
+              <span className="min-w-0 break-words">{collection.name}</span>
+              {collection.isFavorite && (
+                <Star
+                  className="size-5 shrink-0 fill-yellow-400 text-yellow-400"
+                  aria-label="Favorite"
+                />
+              )}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {total} {total === 1 ? "item" : "items"}
+            </p>
+            {collection.description && (
+              <p className="text-muted-foreground">{collection.description}</p>
             )}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {total} {total === 1 ? "item" : "items"}
-          </p>
-          {collection.description && (
-            <p className="text-muted-foreground">{collection.description}</p>
-          )}
+          </div>
         </div>
         <CollectionActions collection={collection} />
       </div>
 
       {items.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          No items in this collection yet.
-        </p>
+        <EmptyState
+          icon={<Folder />}
+          title="No items in this collection yet"
+          hint="Pick this collection when you create or edit an item."
+        />
       ) : (
         <ItemGrid items={items} />
       )}

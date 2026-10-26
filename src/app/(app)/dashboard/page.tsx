@@ -6,6 +6,7 @@ import { Pin } from "lucide-react";
 import { CollectionCard } from "@/components/dashboard/CollectionCard";
 import { ItemCard } from "@/components/dashboard/ItemCard";
 import { StatsCards } from "@/components/dashboard/StatsCards";
+import { ITEM_GRID_CLASS } from "@/components/items/ItemGrid";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCollectionCounts, getRecentCollections } from "@/lib/db/collections";
 import { getItemCounts, getPinnedItems, getRecentItems } from "@/lib/db/items";
@@ -67,7 +68,8 @@ export default async function DashboardPage() {
     await getDashboardData();
 
   return (
-    <div className="space-y-10">
+    // @container：Pinned 與 Recent Items 的欄數依頁面寬度，與型別頁的 ItemGrid 相同
+    <div className="@container space-y-10">
       <div className="space-y-1">
         <h1 className="text-3xl font-bold">Dashboard</h1>
         <p className="text-muted-foreground">Your developer knowledge hub</p>
@@ -102,7 +104,7 @@ export default async function DashboardPage() {
             <Pin className="size-4 text-muted-foreground" />
             Pinned
           </h2>
-          <div className="space-y-3">
+          <div className={ITEM_GRID_CLASS}>
             {pinnedItems.map((item) => (
               <ItemCard key={item.id} item={item} />
             ))}
@@ -113,7 +115,7 @@ export default async function DashboardPage() {
       <section className="space-y-4">
         <h2 className="text-xl font-semibold">Recent Items</h2>
         {recentItems.length > 0 ? (
-          <div className="space-y-3">
+          <div className={ITEM_GRID_CLASS}>
             {recentItems.map((item) => (
               <ItemCard key={item.id} item={item} />
             ))}

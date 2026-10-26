@@ -18,9 +18,9 @@ export default async function UpgradePage() {
   if (!user) {
     redirect(`${SIGN_IN_PATH}?callbackUrl=/upgrade`);
   }
-  // 已是 Pro 的人改方案走 Settings 的 Customer Portal
+  // 已是 Pro 的人改方案走 Settings 的 Customer Portal；帶參數讓 Settings 說明為什麼被導過去
   if (user.isPro) {
-    redirect("/settings#billing");
+    redirect("/settings?alreadyPro=1#billing");
   }
 
   return (

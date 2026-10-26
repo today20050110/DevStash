@@ -30,9 +30,12 @@ interface BillingSettingsProps {
   aiRequestCount: number;
   /** 從 Stripe Checkout 回來（/settings?upgraded=true）；由頁面讀 searchParams 傳入 */
   upgraded: boolean;
+  /** Pro 使用者開 /upgrade 被導來這裡（/settings?alreadyPro=1） */
+  alreadyPro: boolean;
 }
 
 const UPGRADED_TOAST_ID = "upgraded";
+const ALREADY_PRO_TOAST_ID = "already-pro";
 
 /** Pro 使用者的 Customer Portal 按鈕 */
 function ManageBillingButton() {
@@ -55,7 +58,19 @@ export function BillingSettings({
   collectionCount,
   aiRequestCount,
   upgraded,
+  alreadyPro,
 }: BillingSettingsProps) {
+  useEffect(() => {
+    if (!alreadyPro) {
+      return;
+    }
+    toast.info("You're already on DevStash Pro", {
+      id: ALREADY_PRO_TOAST_ID,
+      description: "Use Manage Billing to change or cancel your plan.",
+    });
+    window.history.replaceState({}, "", "/settings#billing");
+  }, [alreadyPro]);
+
   useEffect(() => {
     if (!upgraded) {
       return;

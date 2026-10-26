@@ -75,7 +75,12 @@ async function getSettingsData(checkoutSessionId: string | undefined) {
 export default async function SettingsPage({
   searchParams,
 }: PageProps<"/settings">) {
-  const { passwordChanged, upgraded, session_id: sessionId } = await searchParams;
+  const {
+    passwordChanged,
+    upgraded,
+    alreadyPro,
+    session_id: sessionId,
+  } = await searchParams;
   const isUpgradeReturn = firstParam(upgraded) === "true";
   const { profile, usage, isPro, aiRequestCount } = await getSettingsData(
     isUpgradeReturn ? firstParam(sessionId) : undefined,
@@ -112,6 +117,7 @@ export default async function SettingsPage({
         collectionCount={usage.collectionCount}
         aiRequestCount={aiRequestCount}
         upgraded={isUpgradeReturn}
+        alreadyPro={firstParam(alreadyPro) === "1"}
       />
 
       <section className="space-y-4">

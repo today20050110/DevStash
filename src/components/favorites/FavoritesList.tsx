@@ -74,7 +74,7 @@ export function FavoritesList({
       <FavoritesSection
         title="Items"
         count={sortedItems.length}
-        emptyMessage="No favorite items"
+        emptyMessage="No favorite items. Star an item to add it here."
       >
         {sortedItems.map((item) => (
           <li key={item.id}>
@@ -85,7 +85,7 @@ export function FavoritesList({
       <FavoritesSection
         title="Collections"
         count={sortedCollections.length}
-        emptyMessage="No favorite collections"
+        emptyMessage="No favorite collections. Star a collection to add it here."
       >
         {sortedCollections.map((collection) => (
           <li key={collection.id}>

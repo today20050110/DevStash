@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
+import { Folder } from "lucide-react";
 
 import { SIGN_IN_PATH } from "@/auth.config";
 import { CollectionCard } from "@/components/dashboard/CollectionCard";
+import { EmptyState } from "@/components/dashboard/EmptyState";
 import { ListPagination } from "@/components/pagination/ListPagination";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCollectionsPage } from "@/lib/db/collections";
@@ -44,9 +46,11 @@ export default async function CollectionsPage({
       </div>
 
       {collections.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          No collections yet. Create one with New Collection.
-        </p>
+        <EmptyState
+          icon={<Folder />}
+          title="No collections yet"
+          hint="Use New Collection in the top bar to group related items."
+        />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {collections.map((collection) => (

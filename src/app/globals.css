@@ -125,6 +125,8 @@
     }
   html {
     @apply font-sans;
+    /* 預留捲軸空間：內容長短不同的頁面切換時，top bar 的按鈕不會左右移動 */
+    scrollbar-gutter: stable;
     }
 }
 /* MarkdownEditor 的 Preview：react-markdown 輸出不帶 class 的原生元素，在此集中設定樣式 */

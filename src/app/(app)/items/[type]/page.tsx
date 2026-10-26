@@ -4,6 +4,8 @@ import { connection } from "next/server";
 import { cache } from "react";
 
 import { SIGN_IN_PATH } from "@/auth.config";
+import { EmptyState } from "@/components/dashboard/EmptyState";
+import { TypeIcon } from "@/components/dashboard/TypeIcon";
 import { TypeIconTile } from "@/components/dashboard/TypeIconTile";
 import { FileList } from "@/components/items/FileList";
 import { ItemGrid } from "@/components/items/ItemGrid";
@@ -78,7 +80,11 @@ export default async function ItemsByTypePage({
       </div>
 
       {items.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No items yet.</p>
+        <EmptyState
+          icon={<TypeIcon name={itemType.icon} />}
+          title={`No ${itemType.name.toLowerCase()} yet`}
+          hint="Use New Item in the top bar to add one."
+        />
       ) : getUploadCategory(itemType.slug) === "file" ? (
         // 版面是整頁的決定，沿用上傳規則的型別對照；dashboard 維持一般卡片
         <FileList items={items} />

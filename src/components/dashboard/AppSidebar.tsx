@@ -2,6 +2,7 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { Folder, Layers, Star, Tag } from "lucide-react";
 
+import { SidebarNavLink } from "@/components/dashboard/SidebarNavLink";
 import { TypeIcon } from "@/components/dashboard/TypeIcon";
 import { UserMenu } from "@/components/dashboard/UserMenu";
 import { Badge } from "@/components/ui/badge";
@@ -82,18 +83,23 @@ function ProBadge() {
   );
 }
 
-function ItemTypeMenuItem({ type }: { type: ItemTypeWithCount }) {
+function ItemTypeMenuItem({
+  type,
+  isPro,
+}: {
+  type: ItemTypeWithCount;
+  isPro: boolean;
+}) {
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton asChild>
-        <Link href={`/items/${type.slug}`}>
-          {/* Colour comes from the data, so it cannot be a static utility class. */}
-          <TypeIcon name={type.icon} style={{ color: type.color }} />
-          {/* 名稱明確 truncate：badge 會成為最後一個 span，蓋掉按鈕的 span:last-child 規則 */}
-          <span className="truncate">{type.name}</span>
-          {type.isProOnly && <ProBadge />}
-        </Link>
-      </SidebarMenuButton>
+      <SidebarNavLink href={`/items/${type.slug}`}>
+        {/* Colour comes from the data, so it cannot be a static utility class. */}
+        <TypeIcon name={type.icon} style={{ color: type.color }} />
+        {/* 名稱明確 truncate：badge 會成為最後一個 span，蓋掉按鈕的 span:last-child 規則 */}
+        <span className="truncate">{type.name}</span>
+        {/* Pro 使用者已可使用，不再標示 */}
+        {type.isProOnly && !isPro && <ProBadge />}
+      </SidebarNavLink>
       <SidebarMenuBadge>{type.itemCount}</SidebarMenuBadge>
     </SidebarMenuItem>
   );
@@ -106,12 +112,10 @@ function FavoriteCollectionMenuItem({
 }) {
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton asChild>
-        <Link href={`/collections/${collection.id}`}>
-          <Folder />
-          <span>{collection.name}</span>
-        </Link>
-      </SidebarMenuButton>
+      <SidebarNavLink href={`/collections/${collection.id}`}>
+        <Folder />
+        <span>{collection.name}</span>
+      </SidebarNavLink>
       <SidebarMenuBadge>
         <Star className="size-3.5 fill-yellow-400 text-yellow-400" />
       </SidebarMenuBadge>
@@ -129,17 +133,15 @@ function RecentCollectionMenuItem({
 
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton asChild>
-        <Link href={`/collections/${collection.id}`}>
-          <Folder />
-          <span
-            aria-hidden
-            className="size-2 shrink-0 rounded-full bg-muted-foreground"
-            style={{ backgroundColor: dominantType?.color }}
-          />
-          <span>{collection.name}</span>
-        </Link>
-      </SidebarMenuButton>
+      <SidebarNavLink href={`/collections/${collection.id}`}>
+        <Folder />
+        <span
+          aria-hidden
+          className="size-2 shrink-0 rounded-full bg-muted-foreground"
+          style={{ backgroundColor: dominantType?.color }}
+        />
+        <span>{collection.name}</span>
+      </SidebarNavLink>
       <SidebarMenuBadge>{collection.itemCount}</SidebarMenuBadge>
     </SidebarMenuItem>
   );
@@ -171,20 +173,16 @@ export async function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <Link href="/favorites">
-                    <Star />
-                    <span>Favorites</span>
-                  </Link>
-                </SidebarMenuButton>
+                <SidebarNavLink href="/favorites">
+                  <Star />
+                  <span>Favorites</span>
+                </SidebarNavLink>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <Link href="/tags">
-                    <Tag />
-                    <span>Tags</span>
-                  </Link>
-                </SidebarMenuButton>
+                <SidebarNavLink href="/tags">
+                  <Tag />
+                  <span>Tags</span>
+                </SidebarNavLink>
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
@@ -196,7 +194,11 @@ export async function AppSidebar() {
             <SidebarGroupContent>
               <SidebarMenu>
                 {itemTypes.map((type) => (
-                  <ItemTypeMenuItem key={type.id} type={type} />
+                  <ItemTypeMenuItem
+                    key={type.id}
+                    type={type}
+                    isPro={user?.isPro ?? false}
+                  />
                 ))}
               </SidebarMenu>
             </SidebarGroupContent>
@@ -236,14 +238,13 @@ export async function AppSidebar() {
                     />
                   ))}
                   <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
+                    <SidebarNavLink
+                      href="/collections"
+                      exact
                       className="text-sidebar-foreground/70"
                     >
-                      <Link href="/collections">
-                        <span>View all collections</span>
-                      </Link>
-                    </SidebarMenuButton>
+                      <span>View all collections</span>
+                    </SidebarNavLink>
                   </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>
