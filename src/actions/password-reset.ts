@@ -4,9 +4,10 @@ import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { z } from "zod";
 
-import { SIGN_IN_PATH } from "@/auth.config";
+import { GENERIC_ERROR_MESSAGE } from "@/lib/action-errors";
 import { emailSchema, resetPasswordSchema } from "@/lib/auth-schemas";
 import {
+  passwordResetSignInPath,
   RESET_LINK_ERRORS,
   type ResetPasswordResult,
   requestPasswordReset,
@@ -34,7 +35,6 @@ export interface ResetPasswordState {
 
 const RESET_REQUESTED =
   "If an account with a password exists for this email, a reset link has been sent.";
-const GENERIC_ERROR = "Something went wrong, please try again";
 
 export async function requestPasswordResetAction(
   _prevState: ForgotPasswordState,
@@ -103,7 +103,7 @@ export async function resetPasswordAction(
     result = await resetPassword(email, token, password);
   } catch (error) {
     console.error("Failed to reset password", error);
-    return { success: false, error: GENERIC_ERROR };
+    return { success: false, error: GENERIC_ERROR_MESSAGE };
   }
   if (result !== "reset") {
     return {
@@ -114,6 +114,5 @@ export async function resetPasswordAction(
   }
 
   // redirect 會丟出例外，放在 try/catch 之外
-  const params = new URLSearchParams({ reset: "1", email });
-  redirect(`${SIGN_IN_PATH}?${params}`);
+  redirect(passwordResetSignInPath(email));
 }

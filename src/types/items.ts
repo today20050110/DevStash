@@ -1,4 +1,5 @@
 import type { ItemKind } from "@/generated/prisma/enums";
+import type { ActionResult } from "@/types/action";
 
 export interface ItemTypeSummary {
   name: string;
@@ -86,8 +87,4 @@ export interface CreatableItemType extends ItemTypeDetail {
 }
 
 /** toggleItemPin 的回應；data 為寫入後的狀態，未釘選時 pinnedAt 為 null */
-export interface PinResult {
-  success: boolean;
-  data?: { pinnedAt: Date | null };
-  error?: string;
-}
+export type PinResult = ActionResult<{ pinnedAt: Date | null }>;

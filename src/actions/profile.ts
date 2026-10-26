@@ -5,17 +5,23 @@ import { z } from "zod";
 
 import { signIn, signOut } from "@/auth";
 import { SIGN_IN_PATH } from "@/auth.config";
+import {
+  GENERIC_ERROR_MESSAGE,
+  NOT_SIGNED_IN_MESSAGE,
+} from "@/lib/action-errors";
 import { changePasswordSchema, emailSchema } from "@/lib/auth-schemas";
 import { getCurrentUser } from "@/lib/current-user";
 import { deleteUsersAndContent } from "@/lib/db/user-deletion";
 import { hashPassword, verifyPassword } from "@/lib/password";
-import { resetIdentifier } from "@/lib/password-reset";
+import {
+  passwordResetSignInPath,
+  resetIdentifier,
+} from "@/lib/password-reset";
 import { prisma } from "@/lib/prisma";
 import { checkRateLimit, rateLimitMessage } from "@/lib/rate-limit";
+import type { ActionResult } from "@/types/action";
 
-export interface ChangePasswordState {
-  success: boolean;
-  error?: string;
+export interface ChangePasswordState extends ActionResult {
   fieldErrors?: {
     currentPassword?: string;
     newPassword?: string;
@@ -23,13 +29,7 @@ export interface ChangePasswordState {
   };
 }
 
-export interface DeleteAccountState {
-  success: boolean;
-  error?: string;
-}
-
-const NOT_SIGNED_IN = "You are no longer signed in. Please sign in again.";
-const GENERIC_ERROR = "Something went wrong, please try again";
+export type DeleteAccountState = ActionResult;
 
 export async function changePasswordAction(
   _prevState: ChangePasswordState,
@@ -53,7 +53,7 @@ export async function changePasswordAction(
   try {
     const currentUser = await getCurrentUser();
     if (!currentUser) {
-      return { success: false, error: NOT_SIGNED_IN };
+      return { success: false, error: NOT_SIGNED_IN_MESSAGE };
     }
     // 以帳號為鍵：拿到已登入瀏覽器的人不能用這個表單無限次猜目前的密碼
     const limit = await checkRateLimit("changePassword", currentUser.id);
@@ -98,13 +98,13 @@ export async function changePasswordAction(
     reissued = await reissueSession(email, newPassword);
   } catch (error) {
     console.error("Failed to change password", error);
-    return { success: false, error: GENERIC_ERROR };
+    return { success: false, error: GENERIC_ERROR_MESSAGE };
   }
 
   // redirect 以例外結束，放在 try/catch 之外
   if (!reissued) {
     // 這台裝置實際上已經登出：直接到登入頁，沿用重設密碼成功的提示
-    redirect(`${SIGN_IN_PATH}?${new URLSearchParams({ reset: "1", email })}`);
+    redirect(passwordResetSignInPath(email));
   }
   // 不能直接回傳訊息：action 設定 cookie 後，Next.js 會在同一個請求內重新渲染目前頁面，
   // 而 auth() 讀的是原始請求的舊 token（版本已不符），會被 layout 導回登入頁。
@@ -131,7 +131,7 @@ export async function deleteAccountAction(
   try {
     const user = await getCurrentUser();
     if (!user) {
-      return { success: false, error: NOT_SIGNED_IN };
+      return { success: false, error: NOT_SIGNED_IN_MESSAGE };
     }
     // 輸入自己的 email 才能刪除，防止誤按；大小寫與前後空白不影響比對
     const confirmed = emailSchema.safeParse(formData.get("confirmEmail"));
@@ -155,7 +155,7 @@ export async function deleteAccountAction(
     );
   } catch (error) {
     console.error("Failed to delete account", error);
-    return { success: false, error: GENERIC_ERROR };
+    return { success: false, error: GENERIC_ERROR_MESSAGE };
   }
 
   // signOut 以 redirect 結束，放在 try/catch 之外

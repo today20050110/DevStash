@@ -2,13 +2,8 @@
 
 import { z } from "zod";
 
-import {
-  GENERIC_ERROR_MESSAGE,
-  NOT_SIGNED_IN_MESSAGE,
-  validationFailure,
-} from "@/lib/action-errors";
+import { GENERIC_ERROR_MESSAGE, validationFailure } from "@/lib/action-errors";
 import { collectionSchema } from "@/lib/collection-schemas";
-import { getCurrentUserId } from "@/lib/current-user";
 import {
   createCollection as createCollectionInDb,
   setCollectionFavorite as setCollectionFavoriteInDb,
@@ -18,22 +13,19 @@ import {
 import { getUserIsPro } from "@/lib/db/users";
 import { collectionLimitMessage, getCollectionLimit } from "@/lib/plan";
 import { checkRateLimit, rateLimitMessage } from "@/lib/rate-limit";
+import { withSignedInUser } from "@/lib/signed-in-action";
+import type { ActionResult } from "@/types/action";
 import type { FavoriteResult } from "@/types/favorites";
 
 export type CollectionField = "name" | "description";
 
 /** 新增與編輯共用的回應；表單依 fieldErrors 在欄位下方顯示錯誤 */
-export interface CollectionResult {
-  success: boolean;
-  data?: { id: string; name: string };
-  error?: string;
+export interface CollectionResult
+  extends ActionResult<{ id: string; name: string }> {
   fieldErrors?: Partial<Record<CollectionField, string>>;
 }
 
-export interface DeleteCollectionResult {
-  success: boolean;
-  error?: string;
-}
+export type DeleteCollectionResult = ActionResult;
 
 const COLLECTION_NOT_FOUND = "Collection not found";
 
@@ -51,11 +43,7 @@ export async function createCollection(
     return validationFailure(parsed.error);
   }
 
-  try {
-    const userId = await getCurrentUserId();
-    if (!userId) {
-      return { success: false, error: NOT_SIGNED_IN_MESSAGE };
-    }
+  return withSignedInUser("Failed to create collection", async (userId) => {
     const limit = await checkRateLimit("createCollection", userId);
     if (!limit.success) {
       return { success: false, error: rateLimitMessage(limit.reset) };
@@ -71,10 +59,7 @@ export async function createCollection(
       return { success: false, error: collectionLimitMessage(result.limit) };
     }
     return { success: true, data: result.collection };
-  } catch (error) {
-    console.error("Failed to create collection", error);
-    return { success: false, error: GENERIC_ERROR_MESSAGE };
-  }
+  });
 }
 
 /**
@@ -94,11 +79,7 @@ export async function updateCollection(
     return validationFailure(parsed.error);
   }
 
-  try {
-    const userId = await getCurrentUserId();
-    if (!userId) {
-      return { success: false, error: NOT_SIGNED_IN_MESSAGE };
-    }
+  return withSignedInUser("Failed to update collection", async (userId) => {
     const updated = await updateCollectionInDb(
       userId,
       parsedId.data,
@@ -108,10 +89,7 @@ export async function updateCollection(
       return { success: false, error: COLLECTION_NOT_FOUND };
     }
     return { success: true, data: updated };
-  } catch (error) {
-    console.error("Failed to update collection", error);
-    return { success: false, error: GENERIC_ERROR_MESSAGE };
-  }
+  });
 }
 
 const isFavoriteSchema = z.boolean();
@@ -133,24 +111,20 @@ export async function setCollectionFavorite(
     return { success: false, error: GENERIC_ERROR_MESSAGE };
   }
 
-  try {
-    const userId = await getCurrentUserId();
-    if (!userId) {
-      return { success: false, error: NOT_SIGNED_IN_MESSAGE };
-    }
-    const updated = await setCollectionFavoriteInDb(
-      userId,
-      parsedId.data,
-      parsedValue.data,
-    );
-    if (!updated) {
-      return { success: false, error: COLLECTION_NOT_FOUND };
-    }
-    return { success: true, data: { isFavorite: parsedValue.data } };
-  } catch (error) {
-    console.error("Failed to update collection favorite", error);
-    return { success: false, error: GENERIC_ERROR_MESSAGE };
-  }
+  return withSignedInUser(
+    "Failed to update collection favorite",
+    async (userId) => {
+      const updated = await setCollectionFavoriteInDb(
+        userId,
+        parsedId.data,
+        parsedValue.data,
+      );
+      if (!updated) {
+        return { success: false, error: COLLECTION_NOT_FOUND };
+      }
+      return { success: true, data: { isFavorite: parsedValue.data } };
+    },
+  );
 }
 
 /**
@@ -165,17 +139,10 @@ export async function deleteCollection(
     return { success: false, error: COLLECTION_NOT_FOUND };
   }
 
-  try {
-    const userId = await getCurrentUserId();
-    if (!userId) {
-      return { success: false, error: NOT_SIGNED_IN_MESSAGE };
-    }
+  return withSignedInUser("Failed to delete collection", async (userId) => {
     if (!(await softDeleteCollection(userId, parsedId.data))) {
       return { success: false, error: COLLECTION_NOT_FOUND };
     }
     return { success: true };
-  } catch (error) {
-    console.error("Failed to delete collection", error);
-    return { success: false, error: GENERIC_ERROR_MESSAGE };
-  }
+  });
 }

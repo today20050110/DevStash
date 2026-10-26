@@ -5,10 +5,8 @@ import { z } from "zod";
 import {
   FIX_FIELDS_MESSAGE,
   GENERIC_ERROR_MESSAGE,
-  NOT_SIGNED_IN_MESSAGE,
   validationFailure,
 } from "@/lib/action-errors";
-import { getCurrentUserId } from "@/lib/current-user";
 import {
   createItem as createItemInDb,
   recordPendingDeletion,
@@ -31,7 +29,9 @@ import {
 } from "@/lib/plan";
 import { deleteObject } from "@/lib/r2";
 import { checkRateLimit, rateLimitMessage } from "@/lib/rate-limit";
+import { withSignedInUser } from "@/lib/signed-in-action";
 import { getFileCategory, verifyUploadedFile } from "@/lib/uploads";
+import type { ActionResult } from "@/types/action";
 import type { FavoriteResult } from "@/types/favorites";
 import type { ItemDetail, PinResult } from "@/types/items";
 
@@ -43,18 +43,13 @@ export type UpdateItemErrorField = UpdateItemField | "collectionIds";
 
 export type CreateItemField = UpdateItemErrorField | "itemTypeId" | "file";
 
-export interface UpdateItemResult {
-  success: boolean;
-  data?: ItemDetail;
-  error?: string;
+export interface UpdateItemResult extends ActionResult<ItemDetail> {
   /** Zod 的欄位錯誤，表單顯示在對應欄位下方 */
   fieldErrors?: Partial<Record<UpdateItemErrorField, string>>;
 }
 
-export interface CreateItemResult {
-  success: boolean;
-  data?: { id: string; title: string };
-  error?: string;
+export interface CreateItemResult
+  extends ActionResult<{ id: string; title: string }> {
   fieldErrors?: Partial<Record<CreateItemField, string>>;
 }
 
@@ -73,11 +68,7 @@ export async function createItem(data: unknown): Promise<CreateItemResult> {
     return validationFailure(parsed.error);
   }
 
-  try {
-    const userId = await getCurrentUserId();
-    if (!userId) {
-      return { success: false, error: NOT_SIGNED_IN_MESSAGE };
-    }
+  return withSignedInUser("Failed to create item", async (userId) => {
     const limit = await checkRateLimit("createItem", userId);
     if (!limit.success) {
       return { success: false, error: rateLimitMessage(limit.reset) };
@@ -142,17 +133,15 @@ export async function createItem(data: unknown): Promise<CreateItemResult> {
       };
     }
     return { success: true, data: result.item };
-  } catch (error) {
-    console.error("Failed to create item", error);
-    return { success: false, error: GENERIC_ERROR_MESSAGE };
-  }
+  });
 }
 
-function fieldError(field: CreateItemField, message: string): CreateItemResult {
+/** 單一欄位的錯誤；新增與編輯共用，Field 決定可用的欄位名稱 */
+function fieldError<Field extends string>(field: Field, message: string) {
   return {
     success: false,
     error: FIX_FIELDS_MESSAGE,
-    fieldErrors: { [field]: message },
+    fieldErrors: { [field]: message } as Partial<Record<Field, string>>,
   };
 }
 
@@ -185,46 +174,30 @@ export async function updateItem(
     return validationFailure(parsed.error);
   }
 
-  try {
-    // getCurrentUserId() 回查資料庫並比對 sessionVersion，重設密碼後的舊 token 會被擋下
-    const userId = await getCurrentUserId();
-    if (!userId) {
-      return { success: false, error: NOT_SIGNED_IN_MESSAGE };
-    }
+  return withSignedInUser("Failed to update item", async (userId) => {
     // 與新增相同的 content 上限，否則可以先建立再以編輯繞過
     const contentError = checkContentSize(
       parsed.data.content,
       await getUserIsPro(userId),
     );
     if (contentError) {
-      return {
-        success: false,
-        error: FIX_FIELDS_MESSAGE,
-        fieldErrors: { content: contentError },
-      };
+      return fieldError<UpdateItemErrorField>("content", contentError);
     }
     if (!(await ownsAllCollections(userId, parsed.data.collectionIds))) {
-      return {
-        success: false,
-        error: FIX_FIELDS_MESSAGE,
-        fieldErrors: { collectionIds: INVALID_COLLECTIONS },
-      };
+      return fieldError<UpdateItemErrorField>(
+        "collectionIds",
+        INVALID_COLLECTIONS,
+      );
     }
     const item = await updateItemInDb(userId, parsedId.data, parsed.data);
     if (!item) {
       return { success: false, error: ITEM_NOT_FOUND };
     }
     return { success: true, data: item };
-  } catch (error) {
-    console.error("Failed to update item", error);
-    return { success: false, error: GENERIC_ERROR_MESSAGE };
-  }
+  });
 }
 
-export interface DeleteItemResult {
-  success: boolean;
-  error?: string;
-}
+export type DeleteItemResult = ActionResult;
 
 /**
  * 軟刪除 item；不屬於目前使用者、不存在或已刪除時一律回「Item not found」。
@@ -237,11 +210,7 @@ export async function deleteItem(itemId: unknown): Promise<DeleteItemResult> {
     return { success: false, error: ITEM_NOT_FOUND };
   }
 
-  try {
-    const userId = await getCurrentUserId();
-    if (!userId) {
-      return { success: false, error: NOT_SIGNED_IN_MESSAGE };
-    }
+  return withSignedInUser("Failed to delete item", async (userId) => {
     const deleted = await softDeleteItem(userId, parsedId.data);
     if (!deleted) {
       return { success: false, error: ITEM_NOT_FOUND };
@@ -250,13 +219,11 @@ export async function deleteItem(itemId: unknown): Promise<DeleteItemResult> {
       await deleteStoredFile(deleted.storageKey);
     }
     return { success: true };
-  } catch (error) {
-    console.error("Failed to delete item", error);
-    return { success: false, error: GENERIC_ERROR_MESSAGE };
-  }
+  });
 }
 
-const isFavoriteSchema = z.boolean();
+/** 收藏與釘選的目標值 */
+const booleanSchema = z.boolean();
 
 /**
  * 設定 item 的收藏狀態（傳入目標值，不是翻轉）。
@@ -270,24 +237,17 @@ export async function setItemFavorite(
   if (!parsedId.success) {
     return { success: false, error: ITEM_NOT_FOUND };
   }
-  const parsedValue = isFavoriteSchema.safeParse(isFavorite);
+  const parsedValue = booleanSchema.safeParse(isFavorite);
   if (!parsedValue.success) {
     return { success: false, error: GENERIC_ERROR_MESSAGE };
   }
 
-  try {
-    const userId = await getCurrentUserId();
-    if (!userId) {
-      return { success: false, error: NOT_SIGNED_IN_MESSAGE };
-    }
+  return withSignedInUser("Failed to update item favorite", async (userId) => {
     if (!(await setItemFavoriteInDb(userId, parsedId.data, parsedValue.data))) {
       return { success: false, error: ITEM_NOT_FOUND };
     }
     return { success: true, data: { isFavorite: parsedValue.data } };
-  } catch (error) {
-    console.error("Failed to update item favorite", error);
-    return { success: false, error: GENERIC_ERROR_MESSAGE };
-  }
+  });
 }
 
 /**
@@ -302,25 +262,18 @@ export async function toggleItemPin(
   if (!parsedId.success) {
     return { success: false, error: ITEM_NOT_FOUND };
   }
-  const parsedValue = z.boolean().safeParse(isPinned);
+  const parsedValue = booleanSchema.safeParse(isPinned);
   if (!parsedValue.success) {
     return { success: false, error: GENERIC_ERROR_MESSAGE };
   }
 
-  try {
-    const userId = await getCurrentUserId();
-    if (!userId) {
-      return { success: false, error: NOT_SIGNED_IN_MESSAGE };
-    }
+  return withSignedInUser("Failed to update item pin", async (userId) => {
     const saved = await setItemPinned(userId, parsedId.data, parsedValue.data);
     if (!saved) {
       return { success: false, error: ITEM_NOT_FOUND };
     }
     return { success: true, data: saved };
-  } catch (error) {
-    console.error("Failed to update item pin", error);
-    return { success: false, error: GENERIC_ERROR_MESSAGE };
-  }
+  });
 }
 
 async function deleteStoredFile(storageKey: string): Promise<void> {

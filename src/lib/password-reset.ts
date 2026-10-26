@@ -1,3 +1,4 @@
+import { SIGN_IN_PATH } from "@/auth.config";
 import { sendPasswordResetEmail } from "@/lib/email";
 import { hashPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
@@ -19,6 +20,11 @@ export const RESET_LINK_ERRORS = {
   expired: "This reset link has expired. Request a new one.",
   invalid: "This reset link is invalid or has already been used.",
 } as const satisfies Record<Exclude<ResetTokenStatus, "valid">, string>;
+
+/** 重設或變更密碼後回登入頁：登入頁以 reset=1 顯示提示，並預填 email */
+export function passwordResetSignInPath(email: string): string {
+  return `${SIGN_IN_PATH}?${new URLSearchParams({ reset: "1", email })}`;
+}
 
 // 變更密碼與刪除帳號時用來清除尚未使用的重設 token
 export function resetIdentifier(email: string): string {

@@ -51,30 +51,12 @@ import {
   PRO_CONTENT_LIMIT_BYTES,
 } from "@/lib/plan";
 import { checkRateLimit, rateLimitMessage } from "@/lib/rate-limit";
+import type { ActionResult } from "@/types/action";
 
-export interface GenerateAutoTagsResult {
-  success: boolean;
-  data?: string[];
-  error?: string;
-}
-
-export interface GenerateDescriptionResult {
-  success: boolean;
-  data?: string;
-  error?: string;
-}
-
-export interface ExplainCodeResult {
-  success: boolean;
-  data?: string;
-  error?: string;
-}
-
-export interface OptimizePromptResult {
-  success: boolean;
-  data?: OptimizedPrompt;
-  error?: string;
-}
+export type GenerateAutoTagsResult = ActionResult<string[]>;
+export type GenerateDescriptionResult = ActionResult<string>;
+export type ExplainCodeResult = ActionResult<string>;
+export type OptimizePromptResult = ActionResult<OptimizedPrompt>;
 
 /**
  * 新增 dialog 的 item 還沒有 id，所以兩個 AI action 都接受表單上的值（使用者決定，見 docs/ai-integration-plan.md §8）。

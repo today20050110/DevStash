@@ -1,3 +1,5 @@
+import type { ActionResult } from "@/types/action";
+
 /** 列上的型別圖示與 badge 用 */
 export interface FavoriteType {
   name: string;
@@ -24,8 +26,4 @@ export interface FavoriteCollection {
 }
 
 /** setItemFavorite／setCollectionFavorite 的回應；data 為寫入後的狀態 */
-export interface FavoriteResult {
-  success: boolean;
-  data?: { isFavorite: boolean };
-  error?: string;
-}
+export type FavoriteResult = ActionResult<{ isFavorite: boolean }>;
