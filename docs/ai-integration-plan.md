@@ -3,7 +3,7 @@
 > 四個功能：自動標籤、摘要、程式碼解說、Prompt 優化。依據：`context/research/ai-integration-research.md`、`context/project-overview.md`（§3.3、§6、§10 第 10 步）、`prisma/schema.prisma`，以及現有程式碼（`src/actions/items.ts`、`src/lib/plan.ts`、`src/lib/rate-limit.ts`、`src/lib/server-action.ts`、`src/lib/action-errors.ts`）。
 > OpenAI 資訊查自官方文件（developers.openai.com，2026-10-22）與 npm 上的 `openai` 套件 v7.41.0。
 > 研究 prompt 指定 gpt-5-nano；依使用者決定（2026-10-22）改用 GPT-5.6 Luna，§11 記錄全部決定。
-> **實作狀態**：自動標籤（`beb1694`，依 `context/features/ai-auto-tag-spec.md`）、摘要（AI Description，`bcd1f65`）與每日上限（`AiUsage`，Pro 過去 24 小時 50 次）已完成，實作現況與它們和本計畫的差異見 §0.1；程式碼解說、Prompt 優化、Free 試用尚未實作。
+> **實作狀態**：自動標籤（`beb1694`，依 `context/features/ai-auto-tag-spec.md`）、摘要（AI Description，`bcd1f65`）、每日上限（`AiUsage`，Pro 過去 24 小時 50 次）、程式碼解說（`d796d97`）與 Prompt 優化已完成，實作現況與它們和本計畫的差異見 §0.1；Free 試用尚未實作。
 
 ## 0. 先修正研究 prompt 的前提
 
@@ -21,9 +21,9 @@
 - Upstash 速率限制（`checkRateLimit`），project-overview §3.4 已註明「日後 AI 用量上限也可以沿用」
 - 首頁行銷文案已寫 Pro 含「AI tags, summaries & explanations」、「Prompt optimization」
 
-## 0.1 實作現況（2026-10-26）
+## 0.1 實作現況（2026-10-27）
 
-### 已完成：自動標籤、摘要（AI Description）、程式碼解說
+### 已完成：自動標籤、摘要（AI Description）、程式碼解說、Prompt 優化
 
 | 檔案 | 內容 |
 | --- | --- |
@@ -43,7 +43,11 @@
 | `src/components/settings/BillingSettings.tsx` | Pro 使用者顯示「AI requests today: 12/50」（過去 24 小時的筆數） |
 | `src/lib/ai-explain.ts` | `explainCode()`、`buildExplainInput()`；純文字 Markdown 輸出（不用 `json_object`） |
 | `src/actions/ai.ts` 的 `explainCode` | `explainCode({ type, title, language, content })`，type 只接受 snippets／commands，記為 `EXPLAIN_CODE` |
-| `src/components/items/ExplainCodeButton.tsx`、`CodeEditor.tsx` | 程式碼編輯器標頭的 Explain 按鈕（Free 顯示 Crown + tooltip），產生後出現 Code／Explain 分頁 |
+| `src/components/items/ExplainCodeButton.tsx`、`CodeEditor.tsx` | 程式碼編輯器標頭的 Explain 按鈕，產生後出現 Code／Explain 分頁 |
+| `src/components/items/AiHeaderButton.tsx` | 編輯器標頭的 AI 圖示按鈕（Explain、Optimize 共用）：Pro 為 Sparkles／Loader2，Free 為 Crown + tooltip |
+| `src/lib/ai-optimize.ts` | `optimizePrompt()`、`buildOptimizeInput()`、`parseOptimizedPrompt()`；`json_object` 回傳 `{ improved, prompt, summary }` |
+| `src/actions/ai.ts` 的 `optimizePrompt` | `optimizePrompt({ title, content })`，content 超過 8,000 字元拒絕（不截斷），記為 `OPTIMIZE_PROMPT` |
+| `src/components/items/OptimizePromptButton.tsx`、`PromptContent.tsx` | Markdown 編輯器標頭的 Optimize 按鈕；建議顯示在原文下方，「Use this prompt」／「Discard」 |
 
 ### 自動標籤與本計畫的差異
 
@@ -89,6 +93,22 @@
 
 - **Copy 複製目前顯示的內容**：在 Explain 分頁時複製解說
 - **切到 Explain 時 Monaco 只隱藏不卸載**，切回 Code 不必重新載入；解說不存進資料庫，關閉 drawer 或進入編輯模式後消失
+
+### Prompt 優化與本計畫的差異
+
+依使用者的描述實作（「Optimize 按鈕放在標頭，比照 Explain」），接受後的處理照本計畫（§11 第 20–21 項）：
+
+| 項目 | 本計畫原本的設計（§6.4） | 實作 |
+| --- | --- | --- |
+| 入口 | drawer 的 AI 選單 | **Markdown 編輯器標頭的 Sparkles 按鈕**（Copy 旁），只在 drawer 的 prompt 顯示 |
+| 呈現 | 「原文／建議」上下兩欄 | 原文維持原位，**建議以卡片顯示在下方**，附改了什麼的說明 |
+| 按鈕 | 「Replace content」／「Discard」 | **「Use this prompt」／「Discard」** |
+| 接受後 | 進入編輯模式並填入新內容，按 Save 才儲存 | **相同**（`ItemEditForm` 的 `initialContent`）；Cancel 即放棄，建議也一併清除 |
+| 不需要修改時 | 未定義 | 模型回傳 `improved: false`，只以 toast 告知「This prompt already looks good」 |
+| 輸入 | 只接受 `itemId` | 送 drawer 上的值（title、content），與解說相同 |
+| 截斷 | 16,000 字元 | **不截斷**：結果會取代整段 prompt，超過 8,000 字元直接拒絕；回應被 `max_output_tokens` 截斷（`status: "incomplete"`）時丟錯 |
+
+- **模型可能改變輸出格式**：實測時模型替 code review prompt 加上「只回傳 JSON」的要求。指示要求保留作者意圖，但沒有禁止調整輸出格式；採用前使用者會看到完整內容並需按 Save
 
 ### 實作時發現、spec 與本計畫都沒寫到的事
 
@@ -471,11 +491,11 @@ FROM "AiUsage" WHERE "createdAt" > now() - interval '7 days' GROUP BY feature;
 
 | # | 步驟 | 狀態 |
 | --- | --- | --- |
-| 1 | Migration：`AiFeature` 加 `EXPLAIN_CODE`、`OPTIMIZE_PROMPT` | `EXPLAIN_CODE` **完成**（`ai_explain_code`）；`OPTIMIZE_PROMPT` 未開始 |
+| 1 | Migration：`AiFeature` 加 `EXPLAIN_CODE`、`OPTIMIZE_PROMPT` | **完成**：`EXPLAIN_CODE`（`ai_explain_code`）、`OPTIMIZE_PROMPT`（`ai_optimize_prompt`），分兩次加入 |
 | 2 | `src/lib/openai.ts`（lazy client、`AI_MODEL`、`aiErrorMessage`）、`rate-limit.ts` 的 `ai` 限制；以一次實際呼叫確認 Luna 接受 `effort: "none"` | **完成**（`beb1694`）。`text.verbosity` 尚未驗證 |
 | 3 | `src/lib/ai-usage.ts`：`checkAiAccess`（Pro 滾動 24 小時、Free UTC 當月）、佔額度／更新／釋放（§5.2）；`plan.ts` 的 `getAiLimit`、`AI_DAILY_LIMIT`、`AI_FREE_TRIAL_LIMIT` 取代 `canUseAi`；自動標籤改用 `checkAiAccess`，並開放 Free 試用（`PlanProvider` 需要改為提供剩餘次數，而不只是 `isPro`）。附單元測試 | Pro 每日上限**完成**（`src/lib/db/ai-usage.ts` + `checkAiGate`，Settings 顯示用量）；**Free 試用未做**（使用者決定延後） |
 | 4 | 自動標籤：`src/lib/ai-tags.ts` + `generateAutoTags` action + Tags 欄位下方的建議 badge | **完成**（`beb1694`），差異見 §0.1 |
-| 5 | 摘要、Prompt 優化（§4.1 的 `itemId` 模式、§3.3 的 `json_object` 模式） | 摘要**完成**（接受表單上的值，差異見 §0.1）；Prompt 優化未開始，須在第 3 步之後 |
+| 5 | 摘要、Prompt 優化（§4.1 的 `itemId` 模式、§3.3 的 `json_object` 模式） | 摘要、Prompt 優化**完成**（都接受畫面上的值，差異見 §0.1） |
 | 6 | 程式碼解說（route handler 串流） | **完成**，改為 server action、一次回傳（差異見 §0.1） |
 | 7 | Settings 顯示 AI 用量；`project-overview.md` §6 與首頁 pricing 的 Free 欄位補上「5 AI requests / month」，§6 的成本護欄（模型改為 `gpt-5.6-luna`、每日上限改為 50 次）與 §7 技術棧的 `gpt-5-nano` 改為 `gpt-5.6-luna`，並確認首頁 AI 文案與實際功能一致 | 部分完成：Settings 顯示 Pro 的 AI 用量；`project-overview.md` §6 的成本護欄與 §7 的模型已更新。Free 欄位的試用文案等 Free 試用實作時再改；首頁 AI 文案尚未核對 |
 
@@ -526,6 +546,13 @@ FROM "AiUsage" WHERE "createdAt" > now() - interval '7 days' GROUP BY feature;
 | --- | --- | --- | --- |
 | 18 | spec 指定 gpt-5-nano | **所有 AI 功能維持 GPT-5.6 Luna** | §1 |
 | 19 | 與本計畫衝突處（串流、入口、Free 的顯示） | **照 spec**：server action、編輯器標頭按鈕與分頁、Free 顯示 Crown | §0.1 |
+
+實作 Prompt 優化時，使用者決定：
+
+| # | 問題 | 決定 | 反映在 |
+| --- | --- | --- | --- |
+| 20 | 入口 | **Markdown 編輯器標頭的按鈕**，比照 Explain | §0.1 |
+| 21 | 採用建議後 | **進入編輯模式並填入新內容，按 Save 才儲存**（照 §6.4），不做直接儲存 + Undo | §0.1、§6.4 |
 
 ## 參考資料
 

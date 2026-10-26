@@ -21,6 +21,14 @@ import {
   hasDescribableContent,
 } from "@/lib/ai-inputs";
 import {
+  OPTIMIZE_CONTENT_LIMIT,
+  OPTIMIZE_EMPTY_MESSAGE,
+  OPTIMIZE_FAILED_MESSAGE,
+  OPTIMIZE_TOO_LONG_MESSAGE,
+  optimizePrompt as optimizePromptText,
+  type OptimizedPrompt,
+} from "@/lib/ai-optimize";
+import {
   AUTO_TAG_FAILED_MESSAGE,
   AUTO_TAG_EMPTY_MESSAGE,
   generateTagSuggestions,
@@ -62,6 +70,12 @@ export interface ExplainCodeResult {
   error?: string;
 }
 
+export interface OptimizePromptResult {
+  success: boolean;
+  data?: OptimizedPrompt;
+  error?: string;
+}
+
 /**
  * 新增 dialog 的 item 還沒有 id，所以兩個 AI action 都接受表單上的值（使用者決定，見 docs/ai-integration-plan.md §8）。
  * 模型只看 content 的開頭；這裡的上限只是擋住過大的請求，與 Pro 的 content 上限相同
@@ -95,10 +109,28 @@ const explainSchema = z.object({
   }),
 });
 
-/** Zod 驗證失敗時：「內容是空的」原樣回傳，其他格式錯誤（不是使用者造成的）用一般訊息 */
-function validationError(error: z.ZodError, emptyMessage: string): string {
-  return error.issues[0]?.message === emptyMessage
-    ? emptyMessage
+const optimizeSchema = z.object({
+  title: titleField,
+  // 不截斷（結果會取代整段 prompt），超過上限直接拒絕
+  content: z
+    .string()
+    .refine((value) => value.trim() !== "", { error: OPTIMIZE_EMPTY_MESSAGE })
+    .refine((value) => value.trim().length <= OPTIMIZE_CONTENT_LIMIT, {
+      error: OPTIMIZE_TOO_LONG_MESSAGE,
+    }),
+});
+
+/**
+ * Zod 驗證失敗時：使用者造成的錯誤（例如內容是空的）原樣回傳，
+ * 其他格式錯誤（不是使用者造成的）用一般訊息
+ */
+function validationError(
+  error: z.ZodError,
+  ...userMessages: string[]
+): string {
+  const message = error.issues[0]?.message;
+  return message && userMessages.includes(message)
+    ? message
     : GENERIC_ERROR_MESSAGE;
 }
 
@@ -216,5 +248,28 @@ export async function explainCode(data: unknown): Promise<ExplainCodeResult> {
   }
   return runAiFeature("EXPLAIN_CODE", EXPLAIN_FAILED_MESSAGE, () =>
     explainCodeText(parsed.data),
+  );
+}
+
+/**
+ * 檢視 drawer 上的 prompt，需要時回傳改寫後的版本與改了什麼；improved 為 false 表示不需要修改。
+ * 只回傳建議，不寫入資料庫；使用者採用後進入編輯模式，按 Save 才儲存
+ */
+export async function optimizePrompt(
+  data: unknown,
+): Promise<OptimizePromptResult> {
+  const parsed = optimizeSchema.safeParse(data);
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: validationError(
+        parsed.error,
+        OPTIMIZE_EMPTY_MESSAGE,
+        OPTIMIZE_TOO_LONG_MESSAGE,
+      ),
+    };
+  }
+  return runAiFeature("OPTIMIZE_PROMPT", OPTIMIZE_FAILED_MESSAGE, () =>
+    optimizePromptText(parsed.data),
   );
 }

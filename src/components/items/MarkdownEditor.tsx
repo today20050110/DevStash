@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { Check, Copy } from "lucide-react";
 
@@ -34,6 +34,8 @@ interface MarkdownEditorProps {
   invalid?: boolean;
   /** 錯誤訊息的 id，接到 textarea 的 aria-describedby */
   describedBy?: string;
+  /** 標頭 Copy 左側的動作（例如 drawer 中 prompt 的 AI Optimize 按鈕） */
+  headerAction?: ReactNode;
 }
 
 /**
@@ -46,6 +48,7 @@ export function MarkdownEditor({
   id,
   invalid = false,
   describedBy,
+  headerAction,
 }: MarkdownEditorProps) {
   const readOnly = !onChange;
   const [tab, setTab] = useState<Tab>(readOnly ? "preview" : "write");
@@ -95,6 +98,7 @@ export function MarkdownEditor({
             ))}
           </div>
         )}
+        {headerAction}
         <Button
           type="button"
           variant="ghost"

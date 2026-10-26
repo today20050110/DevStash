@@ -28,17 +28,22 @@ import type { ItemDetail } from "@/types/items";
 
 interface ItemEditFormProps {
   item: ItemDetail;
+  /** 取代 item 的 content 作為初始值（採用 AI 優化的 prompt 時），按 Save 才儲存 */
+  initialContent?: string;
   /** 可加入的 collections */
   collections: CollectionOption[];
   onCancel: () => void;
   onSaved: (item: ItemDetail) => void;
 }
 
-function initialValues(item: ItemDetail): ItemFormValues {
+function initialValues(
+  item: ItemDetail,
+  initialContent?: string,
+): ItemFormValues {
   return {
     title: item.title,
     description: item.description ?? "",
-    content: item.content ?? "",
+    content: initialContent ?? item.content ?? "",
     language: item.language ?? "",
     url: item.url ?? "",
     tags: item.tags.join(", "),
@@ -48,13 +53,16 @@ function initialValues(item: ItemDetail): ItemFormValues {
 /** 受控輸入 + local state；伺服器端的 Zod 驗證才是最終依據，這裡只擋空白標題 */
 export function ItemEditForm({
   item,
+  initialContent,
   collections,
   onCancel,
   onSaved,
 }: ItemEditFormProps) {
   const router = useRouter();
   const fields = getItemTypeFields(item.type);
-  const [values, setValues] = useState(() => initialValues(item));
+  const [values, setValues] = useState(() =>
+    initialValues(item, initialContent),
+  );
   const [collectionIds, setCollectionIds] = useState(() =>
     item.collections.map(({ id }) => id),
   );

@@ -54,6 +54,7 @@ enum AiFeature {
   TITLE_SUGGEST
   SUMMARIZE
   EXPLAIN_CODE
+  OPTIMIZE_PROMPT
 }
 
 // ---------------------------------------------------------------- Auth

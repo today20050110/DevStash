@@ -5,6 +5,7 @@ import {
   explainCode,
   generateAutoTags,
   generateDescription,
+  optimizePrompt,
 } from "@/actions/ai";
 import {
   GENERIC_ERROR_MESSAGE,
@@ -20,6 +21,13 @@ import {
   EXPLAIN_FAILED_MESSAGE,
   explainCode as explainCodeText,
 } from "@/lib/ai-explain";
+import {
+  OPTIMIZE_CONTENT_LIMIT,
+  OPTIMIZE_EMPTY_MESSAGE,
+  OPTIMIZE_FAILED_MESSAGE,
+  OPTIMIZE_TOO_LONG_MESSAGE,
+  optimizePrompt as optimizePromptText,
+} from "@/lib/ai-optimize";
 import {
   AUTO_TAG_EMPTY_MESSAGE,
   AUTO_TAG_FAILED_MESSAGE,
@@ -58,6 +66,10 @@ vi.mock("@/lib/ai-explain", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/ai-explain")>()),
   explainCode: vi.fn(),
 }));
+vi.mock("@/lib/ai-optimize", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/ai-optimize")>()),
+  optimizePrompt: vi.fn(),
+}));
 vi.mock("@/lib/ai-tags", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/ai-tags")>()),
   generateTagSuggestions: vi.fn(),
@@ -90,6 +102,14 @@ beforeEach(() => {
   vi.mocked(explainCodeText).mockResolvedValue({
     value: "Debounces a value.",
     usage: { inputTokens: 300, outputTokens: 250 },
+  });
+  vi.mocked(optimizePromptText).mockResolvedValue({
+    value: {
+      improved: true,
+      prompt: "Summarize the article in 3 bullet points.",
+      summary: "Added an output format.",
+    },
+    usage: { inputTokens: 400, outputTokens: 120 },
   });
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -377,6 +397,88 @@ describe("explainCode", () => {
     await expect(explainCode(explainInput)).resolves.toEqual({
       success: false,
       error: EXPLAIN_FAILED_MESSAGE,
+    });
+    expect(releaseAiUsage).toHaveBeenCalledWith("user-1", "usage-1");
+  });
+});
+
+describe("optimizePrompt", () => {
+  const promptInput = { title: "Summarizer", content: "Summarize this article." };
+
+  it("Pro 使用者取得改寫結果，記為 OPTIMIZE_PROMPT 並寫回 token 數", async () => {
+    await expect(optimizePrompt(promptInput)).resolves.toEqual({
+      success: true,
+      data: {
+        improved: true,
+        prompt: "Summarize the article in 3 bullet points.",
+        summary: "Added an output format.",
+      },
+    });
+    expect(reserveAiUsage).toHaveBeenCalledWith(
+      "user-1",
+      "OPTIMIZE_PROMPT",
+      AI_DAILY_LIMIT,
+    );
+    expect(optimizePromptText).toHaveBeenCalledWith(promptInput);
+    expect(completeAiUsage).toHaveBeenCalledWith("user-1", "usage-1", {
+      inputTokens: 400,
+      outputTokens: 120,
+    });
+  });
+
+  it("不需要修改的結果原樣回傳，仍計入額度", async () => {
+    vi.mocked(optimizePromptText).mockResolvedValue({
+      value: { improved: false, prompt: "", summary: "Already clear." },
+      usage: { inputTokens: 300, outputTokens: 20 },
+    });
+    const result = await optimizePrompt(promptInput);
+    expect(result.data?.improved).toBe(false);
+    expect(completeAiUsage).toHaveBeenCalled();
+  });
+
+  it("prompt 空白時不呼叫 AI", async () => {
+    await expect(
+      optimizePrompt({ title: "x", content: " \n" }),
+    ).resolves.toEqual({ success: false, error: OPTIMIZE_EMPTY_MESSAGE });
+    expect(getCurrentUserId).not.toHaveBeenCalled();
+  });
+
+  it("超過長度上限時拒絕，不截斷", async () => {
+    await expect(
+      optimizePrompt({ content: "x".repeat(OPTIMIZE_CONTENT_LIMIT + 1) }),
+    ).resolves.toEqual({ success: false, error: OPTIMIZE_TOO_LONG_MESSAGE });
+    expect(optimizePromptText).not.toHaveBeenCalled();
+  });
+
+  it("剛好在上限內（前後空白不算）可以優化", async () => {
+    const result = await optimizePrompt({
+      content: ` ${"x".repeat(OPTIMIZE_CONTENT_LIMIT)} `,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("格式不對的輸入回傳一般錯誤", async () => {
+    await expect(optimizePrompt({ title: "x" })).resolves.toEqual({
+      success: false,
+      error: GENERIC_ERROR_MESSAGE,
+    });
+  });
+
+  it("Free 使用者被擋下，不計入速率限制", async () => {
+    vi.mocked(getUserIsPro).mockResolvedValue(false);
+    await expect(optimizePrompt(promptInput)).resolves.toEqual({
+      success: false,
+      error: AI_PRO_MESSAGE,
+    });
+    expect(checkRateLimit).not.toHaveBeenCalled();
+    expect(optimizePromptText).not.toHaveBeenCalled();
+  });
+
+  it("AI 失敗時回傳優化專屬的訊息並釋放額度", async () => {
+    vi.mocked(optimizePromptText).mockRejectedValue(new Error("cut off"));
+    await expect(optimizePrompt(promptInput)).resolves.toEqual({
+      success: false,
+      error: OPTIMIZE_FAILED_MESSAGE,
     });
     expect(releaseAiUsage).toHaveBeenCalledWith("user-1", "usage-1");
   });

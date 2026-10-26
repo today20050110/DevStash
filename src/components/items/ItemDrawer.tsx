@@ -78,42 +78,51 @@ interface ItemDrawerPanelProps {
   onClose: () => void;
 }
 
-/** 檢視與編輯模式的切換；編輯模式下操作列換成 Save／Cancel */
+/**
+ * 檢視與編輯模式的切換；編輯模式下操作列換成 Save／Cancel。
+ * 採用 AI 優化的 prompt 時以新內容進入編輯模式，使用者按 Save 才儲存、Cancel 即放棄
+ */
 function ItemDrawerPanel({
   item,
   collections,
   onItemChange,
   onClose,
 }: ItemDrawerPanelProps) {
-  const [isEditing, setIsEditing] = useState(false);
+  // null 為檢視模式；content 有值時以它取代 item 的內容作為表單初始值
+  const [editing, setEditing] = useState<{ content?: string } | null>(null);
 
   function handleSaved(updated: ItemDetail) {
     onItemChange(updated);
-    setIsEditing(false);
+    setEditing(null);
   }
 
   return (
     <>
       <ItemDrawerHeader item={item} />
-      {isEditing ? (
+      {editing ? (
         <ItemEditForm
           item={item}
+          initialContent={editing.content}
           collections={collections}
-          onCancel={() => setIsEditing(false)}
+          onCancel={() => setEditing(null)}
           onSaved={handleSaved}
         />
       ) : (
         <>
           <ItemDrawerActions
             item={item}
-            onEdit={() => setIsEditing(true)}
+            onEdit={() => setEditing({})}
             onDeleted={onClose}
             onFavoriteChange={(isFavorite) =>
               onItemChange({ ...item, isFavorite })
             }
             onPinChange={(pinnedAt) => onItemChange({ ...item, pinnedAt })}
           />
-          <ItemDrawerBody item={item} onNavigate={onClose} />
+          <ItemDrawerBody
+            item={item}
+            onNavigate={onClose}
+            onUseOptimizedPrompt={(content) => setEditing({ content })}
+          />
         </>
       )}
     </>

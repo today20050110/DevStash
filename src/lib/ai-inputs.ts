@@ -37,3 +37,12 @@ export function isExplainableType(
 ): slug is ExplainCodeInput["type"] {
   return (EXPLAINABLE_TYPE_SLUGS as readonly string[]).includes(slug);
 }
+
+/** 可以用 AI 優化的型別（依 slug） */
+export const OPTIMIZABLE_TYPE_SLUG = "prompts";
+
+/** 優化 prompt 時 drawer 上的 item；與解說相同，送目前的值 */
+export interface OptimizePromptInput {
+  title: string;
+  content: string;
+}

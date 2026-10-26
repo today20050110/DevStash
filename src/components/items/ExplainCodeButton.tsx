@@ -1,19 +1,11 @@
 "use client";
 
 import { useTransition } from "react";
-import { Crown, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 import { explainCode } from "@/actions/ai";
-import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { AiHeaderButton } from "@/components/items/AiHeaderButton";
 import type { ExplainCodeInput } from "@/lib/ai-inputs";
-import { AI_PRO_MESSAGE } from "@/lib/plan";
 import {
   callServerAction,
   SERVER_UNREACHABLE_MESSAGE,
@@ -26,38 +18,13 @@ interface ExplainCodeButtonProps {
   onExplained: (explanation: string) => void;
 }
 
-/**
- * CodeEditor 標頭的 AI 解說按鈕（Copy 旁）。Pro 每次點擊都重新產生；
- * Free 顯示 Crown 與說明需要 Pro 的 tooltip，不呼叫 action（伺服器端仍會擋）
- */
+/** CodeEditor 標頭的 AI 解說按鈕（Copy 旁），每次點擊都重新產生 */
 export function ExplainCodeButton({
   input,
   isPro,
   onExplained,
 }: ExplainCodeButtonProps) {
   const [pending, startTransition] = useTransition();
-
-  if (!isPro) {
-    return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-xs"
-              className="relative text-muted-foreground pointer-coarse:hit-area"
-              aria-disabled
-              aria-label={`Explain code. ${AI_PRO_MESSAGE}`}
-            >
-              <Crown />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{AI_PRO_MESSAGE}</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
-  }
 
   function explain() {
     startTransition(async () => {
@@ -75,17 +42,12 @@ export function ExplainCodeButton({
   }
 
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon-xs"
-      className="relative pointer-coarse:hit-area"
+    <AiHeaderButton
+      isPro={isPro}
+      label="Explain code with AI"
+      pendingLabel="Explaining code"
+      pending={pending}
       onClick={explain}
-      disabled={pending}
-      aria-label={pending ? "Explaining code" : "Explain code with AI"}
-      title="Explain code with AI"
-    >
-      {pending ? <Loader2 className="animate-spin" /> : <Sparkles />}
-    </Button>
+    />
   );
 }

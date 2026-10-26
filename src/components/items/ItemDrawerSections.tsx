@@ -4,10 +4,11 @@ import { CalendarDays, Download, FileIcon, Folder, Tag } from "lucide-react";
 import { useIsPro } from "@/components/billing/PlanProvider";
 import { CodeEditor } from "@/components/items/CodeEditor";
 import { MarkdownEditor } from "@/components/items/MarkdownEditor";
+import { PromptContent } from "@/components/items/PromptContent";
 import { TagLink } from "@/components/items/TagLink";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { isExplainableType } from "@/lib/ai-inputs";
+import { isExplainableType, OPTIMIZABLE_TYPE_SLUG } from "@/lib/ai-inputs";
 import { getEditorLanguage } from "@/lib/code-language";
 import { isImageMimeType } from "@/lib/file-types";
 import { formatFileSize, formatLongDate } from "@/lib/format";
@@ -62,13 +63,18 @@ export function Section({
   );
 }
 
-/** 檢視模式的內容區；onNavigate 在點了換頁的連結（標籤）時關閉 drawer */
+/**
+ * 檢視模式的內容區；onNavigate 在點了換頁的連結（標籤）時關閉 drawer，
+ * onUseOptimizedPrompt 在採用 AI 優化的 prompt 時以新內容進入編輯模式
+ */
 export function ItemDrawerBody({
   item,
   onNavigate,
+  onUseOptimizedPrompt,
 }: {
   item: ItemDetail;
   onNavigate: () => void;
+  onUseOptimizedPrompt: (content: string) => void;
 }) {
   return (
     <div className="flex-1 space-y-6 overflow-y-auto p-4">
@@ -78,7 +84,10 @@ export function ItemDrawerBody({
         </Section>
       )}
 
-      <ItemDrawerContent item={item} />
+      <ItemDrawerContent
+        item={item}
+        onUseOptimizedPrompt={onUseOptimizedPrompt}
+      />
 
       {item.tags.length > 0 && (
         <Section title="Tags" icon={<Tag />}>
@@ -97,9 +106,16 @@ export function ItemDrawerBody({
 }
 
 /**
- * snippets／commands 以唯讀的程式碼編輯器顯示（附 AI 解說），其他 TEXT 以等寬純文字、URL 以連結呈現
+ * snippets／commands 以唯讀的程式碼編輯器顯示（附 AI 解說），notes／prompts 以 Markdown
+ * （prompts 附 AI 優化），其他 TEXT 以等寬純文字、URL 以連結呈現
  */
-function ItemDrawerContent({ item }: { item: ItemDetail }) {
+function ItemDrawerContent({
+  item,
+  onUseOptimizedPrompt,
+}: {
+  item: ItemDetail;
+  onUseOptimizedPrompt: (content: string) => void;
+}) {
   const isPro = useIsPro();
 
   if (item.type.kind === "FILE") {
@@ -134,7 +150,15 @@ function ItemDrawerContent({ item }: { item: ItemDetail }) {
   if (fields.markdown) {
     return (
       <Section title="Content">
-        <MarkdownEditor value={item.content} />
+        {item.type.slug === OPTIMIZABLE_TYPE_SLUG ? (
+          <PromptContent
+            input={{ title: item.title, content: item.content }}
+            isPro={isPro}
+            onUseOptimized={onUseOptimizedPrompt}
+          />
+        ) : (
+          <MarkdownEditor value={item.content} />
+        )}
       </Section>
     );
   }
