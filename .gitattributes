@@ -1,0 +1,5 @@
+# 統一以 LF 存放與 checkout，不受各機器的 core.autocrlf 影響
+* text=auto eol=lf
+
+*.png binary
+*.ico binary
