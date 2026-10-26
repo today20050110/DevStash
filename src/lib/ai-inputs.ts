@@ -20,3 +20,20 @@ export function hasDescribableContent(input: DescriptionInput): boolean {
     (value) => value.trim() !== "",
   );
 }
+
+/** 可以用 AI 解說的型別（依 slug）：真正的程式碼與終端機指令，其他型別本來就是給人讀的 */
+export const EXPLAINABLE_TYPE_SLUGS = ["snippets", "commands"] as const;
+
+/** 解說程式碼時 drawer 上的 item；item 已儲存，但沿用其他 AI 功能「送目前的值」的做法 */
+export interface ExplainCodeInput {
+  type: (typeof EXPLAINABLE_TYPE_SLUGS)[number];
+  title: string;
+  language: string;
+  content: string;
+}
+
+export function isExplainableType(
+  slug: string,
+): slug is ExplainCodeInput["type"] {
+  return (EXPLAINABLE_TYPE_SLUGS as readonly string[]).includes(slug);
+}

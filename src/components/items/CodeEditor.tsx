@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import dynamic from "next/dynamic";
 import type { OnMount } from "@monaco-editor/react";
 import { Check, Copy } from "lucide-react";
@@ -9,10 +9,12 @@ import {
   defineEditorThemes,
   MONACO_THEME_NAMES,
 } from "@/components/items/editor-themes";
+import { ExplainCodeButton } from "@/components/items/ExplainCodeButton";
 import { useEditorPreferences } from "@/components/settings/EditorPreferencesProvider";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
+import type { ExplainCodeInput } from "@/lib/ai-inputs";
 import { getEditorLineHeight } from "@/lib/editor-preferences";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +24,21 @@ const Editor = dynamic(() => import("@/components/items/MonacoEditor"), {
   ssr: false,
   loading: () => <Skeleton className="size-full rounded-none" />,
 });
+
+// 與 MarkdownEditor 相同：react-markdown 只在第一次顯示解說時才下載
+const MarkdownPreview = dynamic(
+  () => import("@/components/items/MarkdownPreview"),
+  {
+    loading: () => (
+      <div className="space-y-2" aria-hidden>
+        <Skeleton className="h-4 w-3/4" />
+        <Skeleton className="h-4 w-1/2" />
+      </div>
+    ),
+  },
+);
+
+type Tab = "code" | "explain";
 
 const MAX_HEIGHT = 400;
 /** 編輯模式的最低高度，與原本 Textarea 的 min-h-40 相同 */
@@ -40,6 +57,10 @@ interface CodeEditorProps {
   /** 螢幕閱讀器用的名稱，Monaco 的輸入框無法以 <label htmlFor> 對應 */
   ariaLabel: string;
   invalid?: boolean;
+  /** 有的話標頭顯示 AI 解說按鈕；只有 drawer 的唯讀檢視傳入（新增／編輯表單不提供） */
+  explain?: ExplainCodeInput;
+  /** Free 使用者的解說按鈕改顯示 Crown 與需要 Pro 的提示 */
+  isPro?: boolean;
 }
 
 /**
@@ -54,6 +75,8 @@ export function CodeEditor({
   onChange,
   ariaLabel,
   invalid = false,
+  explain,
+  isPro = false,
 }: CodeEditorProps) {
   const readOnly = !onChange;
   const { preferences } = useEditorPreferences();
@@ -63,6 +86,22 @@ export function CodeEditor({
     clampHeight(estimateHeight(value, lineHeight), minHeight),
   );
   const { copied, copy } = useCopyToClipboard();
+  // 解說不存進資料庫；產生後才出現 Code／Explain 分頁
+  const [explanation, setExplanation] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>("code");
+  const tabsId = useId();
+  // Explain 分頁顯示中的解說；null 時顯示程式碼
+  const shownExplanation = tab === "explain" ? explanation : null;
+  const copyLabel = copied
+    ? "Copied"
+    : shownExplanation !== null
+      ? "Copy explanation"
+      : "Copy code";
+
+  function handleExplained(text: string) {
+    setExplanation(text);
+    setTab("explain");
+  }
 
   const handleMount: OnMount = (editor) => {
     setHeight(clampHeight(editor.getContentHeight(), minHeight));
@@ -87,20 +126,68 @@ export function CodeEditor({
         <span className="ml-auto font-mono text-xs text-muted-foreground">
           {languageLabel}
         </span>
+        {explanation !== null && (
+          <div role="tablist" aria-label="Content view" className="flex">
+            {(["code", "explain"] as const).map((name) => (
+              <button
+                key={name}
+                type="button"
+                role="tab"
+                id={`${tabsId}-${name}-tab`}
+                aria-selected={tab === name}
+                aria-controls={`${tabsId}-${name}`}
+                onClick={() => setTab(name)}
+                className={cn(
+                  "rounded-md px-2 py-0.5 text-xs capitalize text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50",
+                  tab === name && "bg-muted text-foreground",
+                )}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+        )}
+        {explain && (
+          <ExplainCodeButton
+            input={explain}
+            isPro={isPro}
+            onExplained={handleExplained}
+          />
+        )}
         <Button
           type="button"
           variant="ghost"
           size="icon-xs"
           className="relative pointer-coarse:hit-area"
-          onClick={() => copy(value)}
-          aria-label={copied ? "Copied" : "Copy code"}
-          title={copied ? "Copied" : "Copy code"}
+          // 複製目前顯示的內容：Explain 分頁複製解說
+          onClick={() => copy(shownExplanation ?? value)}
+          aria-label={copyLabel}
+          title={copyLabel}
         >
           {copied ? <Check /> : <Copy />}
         </Button>
       </div>
-      {/* 高度由內容決定，無法寫成固定的 Tailwind class；載入中的骨架也沿用同一高度 */}
-      <div style={{ height }}>
+      {shownExplanation !== null && (
+        <div
+          id={`${tabsId}-explain`}
+          role="tabpanel"
+          aria-labelledby={`${tabsId}-explain-tab`}
+          className="scrollbar-subtle max-h-[400px] overflow-auto px-4 py-3"
+        >
+          <MarkdownPreview content={shownExplanation} />
+        </div>
+      )}
+      {/* 高度由內容決定，無法寫成固定的 Tailwind class；載入中的骨架也沿用同一高度。
+          切到 Explain 時只隱藏不卸載，切回來不必重新載入 Monaco */}
+      <div
+        id={explanation !== null ? `${tabsId}-code` : undefined}
+        role={explanation !== null ? "tabpanel" : undefined}
+        aria-labelledby={
+          explanation !== null ? `${tabsId}-code-tab` : undefined
+        }
+        hidden={shownExplanation !== null}
+        style={{ height }}
+      >
         <Editor
           height="100%"
           language={language}

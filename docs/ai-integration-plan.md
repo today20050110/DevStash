@@ -21,9 +21,9 @@
 - Upstash 速率限制（`checkRateLimit`），project-overview §3.4 已註明「日後 AI 用量上限也可以沿用」
 - 首頁行銷文案已寫 Pro 含「AI tags, summaries & explanations」、「Prompt optimization」
 
-## 0.1 實作現況（2026-10-22）
+## 0.1 實作現況（2026-10-26）
 
-### 已完成：自動標籤、摘要（AI Description）
+### 已完成：自動標籤、摘要（AI Description）、程式碼解說
 
 | 檔案 | 內容 |
 | --- | --- |
@@ -41,6 +41,9 @@
 | `src/lib/plan.ts` | `AI_DAILY_LIMIT = 50`、`AI_USAGE_WINDOW_MS`（24 小時）、`aiDailyLimitMessage()`（「Try again in about 4 hours」，以相對時間表示，避免伺服器 UTC 與使用者時區不同） |
 | `src/actions/ai.ts` 的 `runAiFeature` | 檢查 → 佔額度 → 呼叫 → 成功寫回 tokens／失敗釋放，兩個 action 共用 |
 | `src/components/settings/BillingSettings.tsx` | Pro 使用者顯示「AI requests today: 12/50」（過去 24 小時的筆數） |
+| `src/lib/ai-explain.ts` | `explainCode()`、`buildExplainInput()`；純文字 Markdown 輸出（不用 `json_object`） |
+| `src/actions/ai.ts` 的 `explainCode` | `explainCode({ type, title, language, content })`，type 只接受 snippets／commands，記為 `EXPLAIN_CODE` |
+| `src/components/items/ExplainCodeButton.tsx`、`CodeEditor.tsx` | 程式碼編輯器標頭的 Explain 按鈕（Free 顯示 Crown + tooltip），產生後出現 Code／Explain 分頁 |
 
 ### 自動標籤與本計畫的差異
 
@@ -70,6 +73,22 @@
 
 - **Undo 不放在 toast**：sonner 的 toast 在畫面右下角，被 drawer 蓋住；就算在最上層，Radix 的 Dialog／Sheet 也會擋住外面的點擊，點了還會關閉它們。之後的 AI 功能若要提供「還原」，一律放在 dialog 內
 - **按鈕放在標題列、帶文字**：原本是疊在輸入框右上角的純圖示按鈕，緊貼 Title 欄位下方，看起來像 Title 的按鈕。`Section` 因此多了 `action` 欄位，標題列右側可以放一個動作
+
+### 程式碼解說與本計畫的差異
+
+依 `context/features/ai-explain-spec.md` 實作，模型由使用者決定維持 Luna（spec 寫 gpt-5-nano），其他照 spec（§11 第 18–19 項）：
+
+| 項目 | 本計畫原本的設計（§4.2、§6.3） | 實作 |
+| --- | --- | --- |
+| 傳輸 | route handler 串流，有「Stop」按鈕 | **server action、一次回傳**，按鈕內顯示 Loader2；沒有 Stop |
+| 入口與顯示 | drawer 的 AI 選單，展開一個區塊 | **程式碼編輯器標頭的 Sparkles 按鈕**（Copy 旁），結果與程式碼在同一個容器，以 Code／Explain 分頁切換 |
+| Free 使用者 | 試用 | **Pro 限定**，但與其他 AI 按鈕不同：Free 看得到按鈕，顯示 Crown 與「AI features require a Pro subscription」的 tooltip |
+| 輸入 | 只接受 `itemId` | **送 drawer 上的值**（type、title、language、content），沿用前兩個功能的做法；只在 drawer 的檢視模式提供，新增／編輯表單沒有 |
+| 截斷長度 | §5.3 | **8,000 字元** |
+| Migration | `EXPLAIN_CODE`、`OPTIMIZE_PROMPT` 一起加 | 只加 `EXPLAIN_CODE`（`ai_explain_code`），`OPTIMIZE_PROMPT` 等做 Prompt 優化時再加 |
+
+- **Copy 複製目前顯示的內容**：在 Explain 分頁時複製解說
+- **切到 Explain 時 Monaco 只隱藏不卸載**，切回 Code 不必重新載入；解說不存進資料庫，關閉 drawer 或進入編輯模式後消失
 
 ### 實作時發現、spec 與本計畫都沒寫到的事
 
@@ -452,12 +471,12 @@ FROM "AiUsage" WHERE "createdAt" > now() - interval '7 days' GROUP BY feature;
 
 | # | 步驟 | 狀態 |
 | --- | --- | --- |
-| 1 | Migration：`AiFeature` 加 `EXPLAIN_CODE`、`OPTIMIZE_PROMPT` | 未開始 |
+| 1 | Migration：`AiFeature` 加 `EXPLAIN_CODE`、`OPTIMIZE_PROMPT` | `EXPLAIN_CODE` **完成**（`ai_explain_code`）；`OPTIMIZE_PROMPT` 未開始 |
 | 2 | `src/lib/openai.ts`（lazy client、`AI_MODEL`、`aiErrorMessage`）、`rate-limit.ts` 的 `ai` 限制；以一次實際呼叫確認 Luna 接受 `effort: "none"` | **完成**（`beb1694`）。`text.verbosity` 尚未驗證 |
 | 3 | `src/lib/ai-usage.ts`：`checkAiAccess`（Pro 滾動 24 小時、Free UTC 當月）、佔額度／更新／釋放（§5.2）；`plan.ts` 的 `getAiLimit`、`AI_DAILY_LIMIT`、`AI_FREE_TRIAL_LIMIT` 取代 `canUseAi`；自動標籤改用 `checkAiAccess`，並開放 Free 試用（`PlanProvider` 需要改為提供剩餘次數，而不只是 `isPro`）。附單元測試 | Pro 每日上限**完成**（`src/lib/db/ai-usage.ts` + `checkAiGate`，Settings 顯示用量）；**Free 試用未做**（使用者決定延後） |
 | 4 | 自動標籤：`src/lib/ai-tags.ts` + `generateAutoTags` action + Tags 欄位下方的建議 badge | **完成**（`beb1694`），差異見 §0.1 |
 | 5 | 摘要、Prompt 優化（§4.1 的 `itemId` 模式、§3.3 的 `json_object` 模式） | 摘要**完成**（接受表單上的值，差異見 §0.1）；Prompt 優化未開始，須在第 3 步之後 |
-| 6 | 程式碼解說（route handler 串流） | 未開始 |
+| 6 | 程式碼解說（route handler 串流） | **完成**，改為 server action、一次回傳（差異見 §0.1） |
 | 7 | Settings 顯示 AI 用量；`project-overview.md` §6 與首頁 pricing 的 Free 欄位補上「5 AI requests / month」，§6 的成本護欄（模型改為 `gpt-5.6-luna`、每日上限改為 50 次）與 §7 技術棧的 `gpt-5-nano` 改為 `gpt-5.6-luna`，並確認首頁 AI 文案與實際功能一致 | 部分完成：Settings 顯示 Pro 的 AI 用量；`project-overview.md` §6 的成本護欄與 §7 的模型已更新。Free 欄位的試用文案等 Free 試用實作時再改；首頁 AI 文案尚未核對 |
 
 每一步都獨立可上線。測試照 coding-standards：mock `openai` 與 `@/lib/prisma`，測流程（未登入、非 Pro、額度用完、截斷、拒答、逾時），不打真的 API。
@@ -500,6 +519,13 @@ FROM "AiUsage" WHERE "createdAt" > now() - interval '7 days' GROUP BY feature;
 | 15 | Free 每月 5 次試用是否一起做 | **不做**，維持 Pro 限定 | §5.1、§10 第 3 步 |
 | 16 | 「每日」怎麼算 | **過去 24 小時的滾動窗口**，訊息以相對時間寫出多久後可再用 | §5.2 |
 | 17 | Settings 是否顯示今日用量 | **顯示**，Billing 區塊對 Pro 顯示「AI requests today: 12/50」 | §0.1 |
+
+實作程式碼解說時，使用者決定：
+
+| # | 問題 | 決定 | 反映在 |
+| --- | --- | --- | --- |
+| 18 | spec 指定 gpt-5-nano | **所有 AI 功能維持 GPT-5.6 Luna** | §1 |
+| 19 | 與本計畫衝突處（串流、入口、Free 的顯示） | **照 spec**：server action、編輯器標頭按鈕與分頁、Free 顯示 Crown | §0.1 |
 
 ## 參考資料
 

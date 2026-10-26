@@ -11,7 +11,15 @@ import {
   DESCRIPTION_FAILED_MESSAGE,
   generateDescription as generateDescriptionText,
 } from "@/lib/ai-description";
-import { hasDescribableContent } from "@/lib/ai-inputs";
+import {
+  EXPLAIN_EMPTY_MESSAGE,
+  EXPLAIN_FAILED_MESSAGE,
+  explainCode as explainCodeText,
+} from "@/lib/ai-explain";
+import {
+  EXPLAINABLE_TYPE_SLUGS,
+  hasDescribableContent,
+} from "@/lib/ai-inputs";
 import {
   AUTO_TAG_FAILED_MESSAGE,
   AUTO_TAG_EMPTY_MESSAGE,
@@ -48,6 +56,12 @@ export interface GenerateDescriptionResult {
   error?: string;
 }
 
+export interface ExplainCodeResult {
+  success: boolean;
+  data?: string;
+  error?: string;
+}
+
 /**
  * 新增 dialog 的 item 還沒有 id，所以兩個 AI action 都接受表單上的值（使用者決定，見 docs/ai-integration-plan.md §8）。
  * 模型只看 content 的開頭；這裡的上限只是擋住過大的請求，與 Pro 的 content 上限相同
@@ -71,6 +85,15 @@ const descriptionSchema = z
     fileName: z.string().max(255).default(""),
   })
   .refine(hasDescribableContent, { error: DESCRIPTION_EMPTY_MESSAGE });
+
+const explainSchema = z.object({
+  type: z.enum(EXPLAINABLE_TYPE_SLUGS),
+  title: titleField,
+  language: z.string().max(50).default(""),
+  content: contentField.refine((value) => value.trim() !== "", {
+    error: EXPLAIN_EMPTY_MESSAGE,
+  }),
+});
 
 /** Zod 驗證失敗時：「內容是空的」原樣回傳，其他格式錯誤（不是使用者造成的）用一般訊息 */
 function validationError(error: z.ZodError, emptyMessage: string): string {
@@ -176,5 +199,22 @@ export async function generateDescription(
   }
   return runAiFeature("SUMMARIZE", DESCRIPTION_FAILED_MESSAGE, () =>
     generateDescriptionText(parsed.data),
+  );
+}
+
+/**
+ * 解說 drawer 上的 snippet／command，回傳約 200–300 字的 Markdown。
+ * 流程與其他 AI action 相同；不存進資料庫，每次點擊都重新產生
+ */
+export async function explainCode(data: unknown): Promise<ExplainCodeResult> {
+  const parsed = explainSchema.safeParse(data);
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: validationError(parsed.error, EXPLAIN_EMPTY_MESSAGE),
+    };
+  }
+  return runAiFeature("EXPLAIN_CODE", EXPLAIN_FAILED_MESSAGE, () =>
+    explainCodeText(parsed.data),
   );
 }

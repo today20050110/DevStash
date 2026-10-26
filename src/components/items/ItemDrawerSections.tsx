@@ -1,11 +1,13 @@
 import type { ReactNode } from "react";
 import { CalendarDays, Download, FileIcon, Folder, Tag } from "lucide-react";
 
+import { useIsPro } from "@/components/billing/PlanProvider";
 import { CodeEditor } from "@/components/items/CodeEditor";
 import { MarkdownEditor } from "@/components/items/MarkdownEditor";
 import { TagLink } from "@/components/items/TagLink";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { isExplainableType } from "@/lib/ai-inputs";
 import { getEditorLanguage } from "@/lib/code-language";
 import { isImageMimeType } from "@/lib/file-types";
 import { formatFileSize, formatLongDate } from "@/lib/format";
@@ -94,8 +96,12 @@ export function ItemDrawerBody({
   );
 }
 
-/** snippets／commands 以唯讀的程式碼編輯器顯示，其他 TEXT 以等寬純文字、URL 以連結呈現 */
+/**
+ * snippets／commands 以唯讀的程式碼編輯器顯示（附 AI 解說），其他 TEXT 以等寬純文字、URL 以連結呈現
+ */
 function ItemDrawerContent({ item }: { item: ItemDetail }) {
+  const isPro = useIsPro();
+
   if (item.type.kind === "FILE") {
     return item.file ? <FileSection itemId={item.id} file={item.file} /> : null;
   }
@@ -141,6 +147,17 @@ function ItemDrawerContent({ item }: { item: ItemDetail }) {
           language={language}
           languageLabel={item.language ?? language}
           ariaLabel="Content"
+          explain={
+            isExplainableType(item.type.slug)
+              ? {
+                  type: item.type.slug,
+                  title: item.title,
+                  language: item.language ?? "",
+                  content: item.content,
+                }
+              : undefined
+          }
+          isPro={isPro}
         />
       </Section>
     );

@@ -1,7 +1,11 @@
 import OpenAI from "openai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { generateAutoTags, generateDescription } from "@/actions/ai";
+import {
+  explainCode,
+  generateAutoTags,
+  generateDescription,
+} from "@/actions/ai";
 import {
   GENERIC_ERROR_MESSAGE,
   NOT_SIGNED_IN_MESSAGE,
@@ -11,6 +15,11 @@ import {
   DESCRIPTION_FAILED_MESSAGE,
   generateDescription as generateDescriptionText,
 } from "@/lib/ai-description";
+import {
+  EXPLAIN_EMPTY_MESSAGE,
+  EXPLAIN_FAILED_MESSAGE,
+  explainCode as explainCodeText,
+} from "@/lib/ai-explain";
 import {
   AUTO_TAG_EMPTY_MESSAGE,
   AUTO_TAG_FAILED_MESSAGE,
@@ -45,6 +54,10 @@ vi.mock("@/lib/ai-description", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/ai-description")>()),
   generateDescription: vi.fn(),
 }));
+vi.mock("@/lib/ai-explain", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/ai-explain")>()),
+  explainCode: vi.fn(),
+}));
 vi.mock("@/lib/ai-tags", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/ai-tags")>()),
   generateTagSuggestions: vi.fn(),
@@ -73,6 +86,10 @@ beforeEach(() => {
   vi.mocked(generateDescriptionText).mockResolvedValue({
     value: "A debounce hook.",
     usage: { inputTokens: 200, outputTokens: 30 },
+  });
+  vi.mocked(explainCodeText).mockResolvedValue({
+    value: "Debounces a value.",
+    usage: { inputTokens: 300, outputTokens: 250 },
   });
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -278,5 +295,89 @@ describe("generateDescription", () => {
       success: false,
       error: DESCRIPTION_FAILED_MESSAGE,
     });
+  });
+});
+
+describe("explainCode", () => {
+  const explainInput = {
+    type: "commands",
+    title: "Reset branch",
+    language: "bash",
+    content: "git reset --hard origin/master",
+  };
+
+  it("Pro 使用者取得解說，記為 EXPLAIN_CODE 並寫回 token 數", async () => {
+    await expect(explainCode(explainInput)).resolves.toEqual({
+      success: true,
+      data: "Debounces a value.",
+    });
+    expect(checkRateLimit).toHaveBeenCalledWith("ai", "user-1");
+    expect(reserveAiUsage).toHaveBeenCalledWith(
+      "user-1",
+      "EXPLAIN_CODE",
+      AI_DAILY_LIMIT,
+    );
+    expect(explainCodeText).toHaveBeenCalledWith(explainInput);
+    expect(completeAiUsage).toHaveBeenCalledWith("user-1", "usage-1", {
+      inputTokens: 300,
+      outputTokens: 250,
+    });
+  });
+
+  it("缺少的 title 與語言補成空字串", async () => {
+    await explainCode({ type: "snippets", content: "const a = 1;" });
+    expect(explainCodeText).toHaveBeenCalledWith({
+      type: "snippets",
+      title: "",
+      language: "",
+      content: "const a = 1;",
+    });
+  });
+
+  it("content 空白時不呼叫 AI", async () => {
+    await expect(
+      explainCode({ ...explainInput, content: "  \n" }),
+    ).resolves.toEqual({ success: false, error: EXPLAIN_EMPTY_MESSAGE });
+    expect(getCurrentUserId).not.toHaveBeenCalled();
+    expect(explainCodeText).not.toHaveBeenCalled();
+  });
+
+  it("snippet、command 以外的型別回傳一般錯誤", async () => {
+    await expect(
+      explainCode({ ...explainInput, type: "notes" }),
+    ).resolves.toEqual({ success: false, error: GENERIC_ERROR_MESSAGE });
+    expect(explainCodeText).not.toHaveBeenCalled();
+  });
+
+  it("Free 使用者被擋下，不計入速率限制", async () => {
+    vi.mocked(getUserIsPro).mockResolvedValue(false);
+    await expect(explainCode(explainInput)).resolves.toEqual({
+      success: false,
+      error: AI_PRO_MESSAGE,
+    });
+    expect(checkRateLimit).not.toHaveBeenCalled();
+    expect(explainCodeText).not.toHaveBeenCalled();
+  });
+
+  it("超過速率限制時不呼叫 AI", async () => {
+    vi.mocked(checkRateLimit).mockResolvedValue({
+      success: false,
+      remaining: 0,
+      reset: Date.now() + 60_000,
+    });
+    await expect(explainCode(explainInput)).resolves.toEqual({
+      success: false,
+      error: "Too many attempts",
+    });
+    expect(explainCodeText).not.toHaveBeenCalled();
+  });
+
+  it("AI 失敗時回傳解說專屬的訊息並釋放額度", async () => {
+    vi.mocked(explainCodeText).mockRejectedValue(new Error("boom"));
+    await expect(explainCode(explainInput)).resolves.toEqual({
+      success: false,
+      error: EXPLAIN_FAILED_MESSAGE,
+    });
+    expect(releaseAiUsage).toHaveBeenCalledWith("user-1", "usage-1");
   });
 });

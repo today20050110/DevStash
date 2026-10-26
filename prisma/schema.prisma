@@ -53,6 +53,7 @@ enum AiFeature {
   AUTO_TAG
   TITLE_SUGGEST
   SUMMARIZE
+  EXPLAIN_CODE
 }
 
 // ---------------------------------------------------------------- Auth
